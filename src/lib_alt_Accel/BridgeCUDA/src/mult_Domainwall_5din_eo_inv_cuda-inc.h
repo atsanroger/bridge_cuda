@@ -319,10 +319,10 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel(
   const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
   const int GridSize = blockDim.x * gridDim.x;
 
-  const double* e_con     = const_e;
-  const double* f_con     = const_f;
-  const double* dpinv_con = const_dpinv;
-  const double* dm_con    = const_dm; 
+  const real_t* e_con     = ConstantMemoryTraits<real_t>::e();
+  const real_t* f_con     = ConstantMemoryTraits<real_t>::f();
+  const real_t* dpinv_con = ConstantMemoryTraits<real_t>::dpinv();
+  const real_t* dm_con    = ConstantMemoryTraits<real_t>::dm(); 
   
   for( int idx = ist; idx < Nst_pad * NVC; idx += GridSize){
 
@@ -330,150 +330,182 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel(
     int idx_in  = idx % NWP;
     int ivc     = idx2_wp % NVC;
     int idx_out = idx2_wp / NVC;
-    int site    = idx_in  + NWP * idx_out;
+    // int site    = idx_in  + NWP * idx_out; // Removed as we use base_idx
+
+    const int base_site_idx = idx_in + NWP * (ivc + Nin5 * idx_out);
+    const int stride_id = NWP * NVC;
+    const int stride_is = NWP * NVCD;
 
     real_t vt[ND], yt[ND], xt[ND];
 
-    int is = 0;
-    for(int id = 0; id < ND; ++id){
-      int ivcd = ivc + NVC * id;
-      vt[id] = wp[IDX2(Nin5, (ivcd + NVCD*is), site)];
-    }
-    for(int id = 0; id < ND; ++id){
-      int ivcd = ivc + NVC * id;
-      vp[IDX2(Nin5, (ivcd + NVCD*is), site)] = vt[id];
-    }
-    for(int id = 0; id < ND; ++id){
-      yt[id] = e_con[0] * vt[id];
-    }
+    if (sizeof(real_t) == 4) {
+      int cur_idx_base = base_site_idx; // is=0
+      vt[0] = wp[cur_idx_base + stride_id * 0];
+      vt[1] = wp[cur_idx_base + stride_id * 1];
+      vt[2] = wp[cur_idx_base + stride_id * 2];
+      vt[3] = wp[cur_idx_base + stride_id * 3];
 
-    for (int is = 1; is < Ns-1; ++is) {
+      vp[cur_idx_base + stride_id * 0] = vt[0];
+      vp[cur_idx_base + stride_id * 1] = vt[1];
+      vp[cur_idx_base + stride_id * 2] = vt[2];
+      vp[cur_idx_base + stride_id * 3] = vt[3];
 
+      real_t e0 = e_con[0];
+      yt[0] = e0 * vt[0]; yt[1] = e0 * vt[1]; yt[2] = e0 * vt[2]; yt[3] = e0 * vt[3];
+    } else {
       for(int id = 0; id < ND; ++id){
-        xt[id] = vt[id];
+        int cur_idx = base_site_idx + stride_id * id;
+        vt[id] = wp[cur_idx];
+        vp[cur_idx] = vt[id];
+        yt[id] = e_con[0] * vt[id];
       }
-
-      for(int id = 0; id < ND; ++id){
-        int ivcd = ivc + NVC * id;
-        vt[id] = wp[IDX2(Nin5, (ivcd + NVCD*is), site)];
-      }
-
-      real_t a = real_t(0.5) * dm_con[is] * dpinv_con[is-1];
-
-      vt[0] += a * (xt[0] + xt[2]);
-      vt[1] += a * (xt[1] + xt[3]);
-      vt[2] += a * (xt[2] + xt[0]);
-      vt[3] += a * (xt[3] + xt[1]);
-
-      for(int id = 0; id < ND; ++id){
-        int ivcd = ivc + NVC * id;
-	      vp[IDX2(Nin5, (ivcd + NVCD*is), site)] = vt[id];
-      }
-
-      for(int id = 0; id < ND; ++id){
-        yt[id] += e_con[is] * vt[id];
-      }
-
     }
 
-    is = Ns-1;
-
-    for(int id = 0; id < ND; ++id){
-      xt[id] = vt[id];
+    if (sizeof(real_t) == 4) {
+      for (is = 1; is < Ns-1; ++is) {
+        real_t a = real_t(0.5) * dm_con[is] * dpinv_con[is-1];
+        real_t eis = e_con[is];
+        xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[3];
+        int is_offset = stride_is * is;
+        vt[0] = wp[base_site_idx + stride_id * 0 + is_offset];
+        vt[1] = wp[base_site_idx + stride_id * 1 + is_offset];
+        vt[2] = wp[base_site_idx + stride_id * 2 + is_offset];
+        vt[3] = wp[base_site_idx + stride_id * 3 + is_offset];
+        vt[0] += a * (xt[0] + xt[2]); vt[1] += a * (xt[1] + xt[3]); vt[2] += a * (xt[2] + xt[0]); vt[3] += a * (xt[3] + xt[1]);
+        vp[base_site_idx + stride_id * 0 + is_offset] = vt[0];
+        vp[base_site_idx + stride_id * 1 + is_offset] = vt[1];
+        vp[base_site_idx + stride_id * 2 + is_offset] = vt[2];
+        vp[base_site_idx + stride_id * 3 + is_offset] = vt[3];
+        yt[0] += eis * vt[0]; yt[1] += eis * vt[1]; yt[2] += eis * vt[2]; yt[3] += eis * vt[3];
+      }
+    } else {
+      for (is = 1; is < Ns-1; ++is) {
+        real_t a = real_t(0.5) * dm_con[is] * dpinv_con[is-1];
+        real_t eis = e_con[is];
+        for(int id=0; id<ND; ++id) xt[id] = vt[id];
+        for(int id = 0; id < ND; ++id) vt[id] = wp[base_site_idx + stride_id * id + stride_is * is];
+        vt[0] += a * (xt[0] + xt[2]); vt[1] += a * (xt[1] + xt[3]); vt[2] += a * (xt[2] + xt[0]); vt[3] += a * (xt[3] + xt[1]);
+        for(int id = 0; id < ND; ++id){
+          int cur_idx = base_site_idx + stride_id * id + stride_is * is;
+          vp[cur_idx] = vt[id];
+          yt[id] += eis * vt[id];
+        }
+      }
     }
 
-    for(int id = 0; id < ND; ++id){
-      int ivcd = ivc + NVC * id;
-      vt[id] = wp[IDX2(Nin5, (ivcd + NVCD*is), site)];
-    }
-
-    real_t a = real_t(0.5) * dm_con[is] * dpinv_con[is-1];
-
-    vt[0] += a * (xt[0] + xt[2]);
-    vt[1] += a * (xt[1] + xt[3]);
-    vt[2] += a * (xt[2] + xt[0]);
-    vt[3] += a * (xt[3] + xt[1]);
-
-    vt[0] += -0.5 * (yt[0] - yt[2]);
-    vt[1] += -0.5 * (yt[1] - yt[3]);
-    vt[2] += -0.5 * (yt[2] - yt[0]);
-    vt[3] += -0.5 * (yt[3] - yt[1]);
-
-    for(int id = 0; id < ND; ++id){
-      int ivcd = ivc + NVC * id;
-      vp[IDX2(Nin5, (ivcd + NVCD*is), site)] = vt[id];
+    if (sizeof(real_t) == 4) {
+      is = Ns-1;
+      xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[3];
+      int last_is_offset = stride_is * is;
+      vt[0] = wp[base_site_idx + stride_id * 0 + last_is_offset];
+      vt[1] = wp[base_site_idx + stride_id * 1 + last_is_offset];
+      vt[2] = wp[base_site_idx + stride_id * 2 + last_is_offset];
+      vt[3] = wp[base_site_idx + stride_id * 3 + last_is_offset];
+      real_t a_last = real_t(0.5) * dm_con[is] * dpinv_con[is-1];
+      vt[0] += a_last * (xt[0] + xt[2]) - real_t(0.5) * (yt[0] - yt[2]);
+      vt[1] += a_last * (xt[1] + xt[3]) - real_t(0.5) * (yt[1] - yt[3]);
+      vt[2] += a_last * (xt[2] + xt[0]) - real_t(0.5) * (yt[2] - yt[0]);
+      vt[3] += a_last * (xt[3] + xt[1]) - real_t(0.5) * (yt[3] - yt[1]);
+      vp[base_site_idx + stride_id * 0 + last_is_offset] = vt[0];
+      vp[base_site_idx + stride_id * 1 + last_is_offset] = vt[1];
+      vp[base_site_idx + stride_id * 2 + last_is_offset] = vt[2];
+      vp[base_site_idx + stride_id * 3 + last_is_offset] = vt[3];
+    } else {
+      is = Ns-1;
+      for(int id=0; id<ND; ++id) xt[id] = vt[id];
+      for(int id = 0; id < ND; ++id) vt[id] = wp[base_site_idx + stride_id * id + stride_is * is];
+      real_t a_last = real_t(0.5) * dm_con[is] * dpinv_con[is-1];
+      vt[0] += a_last * (xt[0] + xt[2]) - real_t(0.5) * (yt[0] - yt[2]);
+      vt[1] += a_last * (xt[1] + xt[3]) - real_t(0.5) * (yt[1] - yt[3]);
+      vt[2] += a_last * (xt[2] + xt[0]) - real_t(0.5) * (yt[2] - yt[0]);
+      vt[3] += a_last * (xt[3] + xt[1]) - real_t(0.5) * (yt[3] - yt[1]);
+      for(int id = 0; id < ND; ++id) vp[base_site_idx + stride_id * id + stride_is * is] = vt[id];
     }
     // L_inv completed
 
-    is = Ns-1;
-
-    a = dpinv_con[Ns-1];
-    real_t f1 = 0.5 *  (1.0 + alpha);
-    real_t f2 = 0.5 * (-1.0 + alpha);
-    real_t vt1, vt2, vt3, vt4;
-
-    vt1 = vp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)];
-    vt2 = vp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)];
-    vt3 = vp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)];
-    vt4 = vp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)];
-    vt[0] = a * (f1 * vt1 + f2 * vt3); 
-    vt[1] = a * (f1 * vt2 + f2 * vt4); 
-    vt[2] = a * (f1 * vt3 + f2 * vt1); 
-    vt[3] = a * (f1 * vt4 + f2 * vt2); 
-
-    for(int id = 0; id < ND; ++id){
-      int ivcd = ivc + NVC * id;
-      vp[IDX2(Nin5, (ivcd + NVCD*is), site)] = vt[id];
+    if (sizeof(real_t) == 4) {
+      is = Ns-1;
+      real_t aa = dpinv_con[Ns-1];
+      real_t f1 = real_t(0.5) * (real_t(1.0) + alpha);
+      real_t f2 = real_t(0.5) * (real_t(-1.0) + alpha);
+      int last_is_offset = stride_is * is;
+      vt[0] = aa * (f1 * vp[base_site_idx + stride_is * is + NWP * ID1] + f2 * vp[base_site_idx + stride_is * is + NWP * ID3]); 
+      vt[1] = aa * (f1 * vp[base_site_idx + stride_is * is + NWP * ID2] + f2 * vp[base_site_idx + stride_is * is + NWP * ID4]); 
+      vt[2] = aa * (f1 * vp[base_site_idx + stride_is * is + NWP * ID3] + f2 * vp[base_site_idx + stride_is * is + NWP * ID1]); 
+      vt[3] = aa * (f1 * vp[base_site_idx + stride_is * is + NWP * ID4] + f2 * vp[base_site_idx + stride_is * is + NWP * ID2]); 
+      vp[base_site_idx + last_is_offset + stride_id * 0] = vt[0];
+      vp[base_site_idx + last_is_offset + stride_id * 1] = vt[1];
+      vp[base_site_idx + last_is_offset + stride_id * 2] = vt[2];
+      vp[base_site_idx + last_is_offset + stride_id * 3] = vt[3];
+      yt[0] = real_t(0.5) * (vt[0] + vt[2]); yt[1] = real_t(0.5) * (vt[1] + vt[3]); yt[2] = real_t(0.5) * (vt[2] + vt[0]); yt[3] = real_t(0.5) * (vt[3] + vt[1]);
+    } else {
+      is = Ns-1;
+      real_t aa = dpinv_con[Ns-1];
+      real_t f1 = real_t(0.5) * (real_t(1.0) + alpha);
+      real_t f2 = real_t(0.5) * (real_t(-1.0) + alpha);
+      real_t vt_tmp[ND];
+      vt_tmp[0] = aa * (f1 * vp[base_site_idx + stride_is * is + NWP * ID1] + f2 * vp[base_site_idx + stride_is * is + NWP * ID3]); 
+      vt_tmp[1] = aa * (f1 * vp[base_site_idx + stride_is * is + NWP * ID2] + f2 * vp[base_site_idx + stride_is * is + NWP * ID4]); 
+      vt_tmp[2] = aa * (f1 * vp[base_site_idx + stride_is * is + NWP * ID3] + f2 * vp[base_site_idx + stride_is * is + NWP * ID1]); 
+      vt_tmp[3] = aa * (f1 * vp[base_site_idx + stride_is * is + NWP * ID4] + f2 * vp[base_site_idx + stride_is * is + NWP * ID2]); 
+      for(int id = 0; id < ND; ++id){
+        vt[id] = vt_tmp[id];
+        vp[base_site_idx + stride_id * id + stride_is * is] = vt[id];
+      }
+      yt[0] = real_t(0.5) * (vt[0] + vt[2]); yt[1] = real_t(0.5) * (vt[1] + vt[3]); yt[2] = real_t(0.5) * (vt[2] + vt[0]); yt[3] = real_t(0.5) * (vt[3] + vt[1]);
     }
-      
-    yt[0] = 0.5 * (vt[0] + vt[2]);
-    yt[1] = 0.5 * (vt[1] + vt[3]);
-    yt[2] = 0.5 * (vt[2] + vt[0]);
-    yt[3] = 0.5 * (vt[3] + vt[1]);
 
-    for (int is = Ns-2; is >= 0; --is) {
-
-      for(int id = 0; id < ND; ++id){
-        xt[id] = vt[id];
+    if (sizeof(real_t) == 4) {
+      for (is = Ns-2; is >= 0; --is) {
+        real_t a = real_t(0.5) * dm_con[is];
+        real_t f_is = f_con[is];
+        real_t aa_is = dpinv_con[is];
+        xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[3];
+        int is_offset = stride_is * is;
+        vt[0] = vp[base_site_idx + stride_id * 0 + is_offset];
+        vt[1] = vp[base_site_idx + stride_id * 1 + is_offset];
+        vt[2] = vp[base_site_idx + stride_id * 2 + is_offset];
+        vt[3] = vp[base_site_idx + stride_id * 3 + is_offset];
+        vt[0] += a * (xt[0] - xt[2]) - f_is * yt[0];
+        vt[1] += a * (xt[1] - xt[3]) - f_is * yt[1];
+        vt[2] += a * (xt[2] - xt[0]) - f_is * yt[2];
+        vt[3] += a * (xt[3] - xt[1]) - f_is * yt[3];
+        vt[0] *= aa_is; vt[1] *= aa_is; vt[2] *= aa_is; vt[3] *= aa_is;
+        if(is == 0){
+          real_t ff1 = real_t(0.5) * (real_t(1.0) + alpha);
+          real_t ff2 = real_t(0.5) * (real_t(1.0) - alpha);
+          vp[base_site_idx + is_offset + NWP * ID1] = ff1 * vt[0] + ff2 * vt[2];
+          vp[base_site_idx + is_offset + NWP * ID2] = ff1 * vt[1] + ff2 * vt[3];
+          vp[base_site_idx + is_offset + NWP * ID3] = ff1 * vt[2] + ff2 * vt[0];
+          vp[base_site_idx + is_offset + NWP * ID4] = ff1 * vt[3] + ff2 * vt[1];
+        }else{
+          vp[base_site_idx + is_offset + stride_id * 0] = vt[0];
+          vp[base_site_idx + is_offset + stride_id * 1] = vt[1];
+          vp[base_site_idx + is_offset + stride_id * 2] = vt[2];
+          vp[base_site_idx + is_offset + stride_id * 3] = vt[3];
+        }
       }
-
-      for(int id = 0; id < ND; ++id){
-        int ivcd = ivc + NVC * id;
-        vt[id] = vp[IDX2(Nin5, (ivcd + NVCD*is), site)];
-      }
-
-      real_t a = real_t(0.5) * dm_con[is];
-
-      vt[0] += a * (xt[0] - xt[2]);
-      vt[1] += a * (xt[1] - xt[3]);
-      vt[2] += a * (xt[2] - xt[0]);
-      vt[3] += a * (xt[3] - xt[1]);
-
-      for(int id = 0; id < ND; ++id){
-        vt[id] += - f_con[is] * yt[id];
-      }
-
-      real_t aa = dpinv_con[is];
-
-      for(int id = 0; id < ND; ++id){
-        vt[id] *= aa;
-      }
-
-      if(is == 0){
-        real_t f1 = 0.5 * (1.0 + alpha);
-        real_t f2 = 0.5 * (1.0 - alpha);
-        vt1 = f1 * vt[0] + f2 * vt[2];
-        vt2 = f1 * vt[1] + f2 * vt[3];
-        vt3 = f1 * vt[2] + f2 * vt[0];
-        vt4 = f1 * vt[3] + f2 * vt[1];
-        vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = vt1;
-        vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt2;
-        vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt3;
-        vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt4;
-      }else{
-        for(int id = 0; id < ND; ++id){
-          int ivcd = ivc + NVC * id;
-          vp[IDX2(Nin5, (ivcd + NVCD * is), site)] = vt[id];
+    } else {
+      for (is = Ns-2; is >= 0; --is) {
+        real_t a = real_t(0.5) * dm_con[is];
+        real_t f_is = f_con[is];
+        real_t aa_is = dpinv_con[is];
+        for(int id=0; id<ND; ++id) xt[id] = vt[id];
+        for(int id = 0; id < ND; ++id) vt[id] = vp[base_site_idx + stride_id * id + stride_is * is];
+        vt[0] += a * (xt[0] - xt[2]) - f_is * yt[0];
+        vt[1] += a * (xt[1] - xt[3]) - f_is * yt[1];
+        vt[2] += a * (xt[2] - xt[0]) - f_is * yt[2];
+        vt[3] += a * (xt[3] - xt[1]) - f_is * yt[3];
+        for(int id=0; id<ND; ++id) vt[id] *= aa_is;
+        if(is == 0){
+          real_t ff1 = real_t(0.5) * (real_t(1.0) + alpha);
+          real_t ff2 = real_t(0.5) * (real_t(1.0) - alpha);
+          vp[base_site_idx + stride_is * is + NWP * ID1] = ff1 * vt[0] + ff2 * vt[2];
+          vp[base_site_idx + stride_is * is + NWP * ID2] = ff1 * vt[1] + ff2 * vt[3];
+          vp[base_site_idx + stride_is * is + NWP * ID3] = ff1 * vt[2] + ff2 * vt[0];
+          vp[base_site_idx + stride_is * is + NWP * ID4] = ff1 * vt[3] + ff2 * vt[1];
+        }else{
+          for(int id = 0; id < ND; ++id) vp[base_site_idx + stride_id * id + stride_is * is] = vt[id];
         }
       }
     }
@@ -515,152 +547,173 @@ __global__ void mult_domainwall_5din_ee_LUdaginv_dirac_kernel(
   const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
   const int GridSize = blockDim.x * gridDim.x;
 
-  const double* e_con     = const_e;
-  const double* f_con     = const_f;
-  const double* dpinv_con = const_dpinv;
-  const double* dm_con    = const_dm; 
+  const real_t* e_con     = ConstantMemoryTraits<real_t>::e();
+  const real_t* f_con     = ConstantMemoryTraits<real_t>::f();
+  const real_t* dpinv_con = ConstantMemoryTraits<real_t>::dpinv();
+  const real_t* dm_con    = ConstantMemoryTraits<real_t>::dm(); 
   
   for( int idx = ist; idx < Nst_pad * NVC; idx += GridSize){
-
-    real_t vt[ND], yt[ND], xt[ND];
 
     int idx2_wp = idx / NWP;
     int idx_in  = idx % NWP;
     int ivc     = idx2_wp % NVC;
     int idx_out = idx2_wp / NVC;
-    int site    = idx_in + NWP * idx_out;
+    // int site    = idx_in + NWP * idx_out;
+
+    const int base_site_idx = idx_in + NWP * (ivc + Nin5 * idx_out);
+    const int stride_id = NWP * NVC;
+    const int stride_is = NWP * NVCD;
+
+    real_t vt[ND], yt[ND], xt[ND];
 
     int is = 0;
 
-    real_t a = dpinv_con[0];
-    real_t f1 = 0.5 * (1.0 + alpha);
-    real_t f2 = 0.5 * (1.0 - alpha);
-    {
-      real_t vt1, vt2, vt3, vt4;
-      vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)];
-      vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)];
-      vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)];
-      vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)];
-      vt[0] = a * (f1 * vt1 + f2 * vt3);
-      vt[1] = a * (f1 * vt2 + f2 * vt4);
-      vt[2] = a * (f1 * vt3 + f2 * vt1);
-      vt[3] = a * (f1 * vt4 + f2 * vt2);
+    if (sizeof(real_t) == 4) {
+      real_t a0 = dpinv_con[0];
+      real_t f1_0 = real_t(0.5) * (real_t(1.0) + alpha);
+      real_t f2_0 = real_t(0.5) * (real_t(1.0) - alpha);
+      vt[0] = a0 * (f1_0 * wp[base_site_idx + stride_is * is + NWP * ID1] + f2_0 * wp[base_site_idx + stride_is * is + NWP * ID3]);
+      vt[1] = a0 * (f1_0 * wp[base_site_idx + stride_is * is + NWP * ID2] + f2_0 * wp[base_site_idx + stride_is * is + NWP * ID4]);
+      vt[2] = a0 * (f1_0 * wp[base_site_idx + stride_is * is + NWP * ID3] + f2_0 * wp[base_site_idx + stride_is * is + NWP * ID1]);
+      vt[3] = a0 * (f1_0 * wp[base_site_idx + stride_is * is + NWP * ID4] + f2_0 * wp[base_site_idx + stride_is * is + NWP * ID2]);
+    
+      real_t f0 = f_con[0];
+      int is_offset_0 = stride_is * is;
+      vp[base_site_idx + stride_id * 0 + is_offset_0] = vt[0];
+      vp[base_site_idx + stride_id * 1 + is_offset_0] = vt[1];
+      vp[base_site_idx + stride_id * 2 + is_offset_0] = vt[2];
+      vp[base_site_idx + stride_id * 3 + is_offset_0] = vt[3];
+      yt[0] = f0 * vt[0]; yt[1] = f0 * vt[1]; yt[2] = f0 * vt[2]; yt[3] = f0 * vt[3];
+    } else {
+      real_t a0 = dpinv_con[0];
+      real_t f1_0 = real_t(0.5) * (real_t(1.0) + alpha);
+      real_t f2_0 = real_t(0.5) * (real_t(1.0) - alpha);
+      real_t vt_tmp[ND];
+      vt_tmp[0] = a0 * (f1_0 * wp[base_site_idx + stride_is * is + NWP * ID1] + f2_0 * wp[base_site_idx + stride_is * is + NWP * ID3]);
+      vt_tmp[1] = a0 * (f1_0 * wp[base_site_idx + stride_is * is + NWP * ID2] + f2_0 * wp[base_site_idx + stride_is * is + NWP * ID4]);
+      vt_tmp[2] = a0 * (f1_0 * wp[base_site_idx + stride_is * is + NWP * ID3] + f2_0 * wp[base_site_idx + stride_is * is + NWP * ID1]);
+      vt_tmp[3] = a0 * (f1_0 * wp[base_site_idx + stride_is * is + NWP * ID4] + f2_0 * wp[base_site_idx + stride_is * is + NWP * ID2]);
+      for(int id=0; id<ND; ++id) vt[id] = vt_tmp[id];
+      real_t f0 = f_con[0];
+      for(int id=0; id<ND; ++id){
+        int cur_idx = base_site_idx + stride_id * id + stride_is * is;
+        vp[cur_idx] = vt[id];
+        yt[id] = f0 * vt[id];
       }
-  
-    for(int id = 0; id < ND; ++id){
-      int ivcd = ivc + NVC * id;
-      vp[IDX2(Nin5, (ivcd + NVCD*is), site)] = vt[id];
-      yt[id] = f_con[0] * vt[id];
     }
 
-    for (int is = 1; is < Ns-1; ++is) {
-
-      for(int id = 0; id < ND; ++id){
-        int ivcd = ivc + NVC * id;
-        xt[id] = vt[id];
-        vt[id] = wp[IDX2(Nin5, (ivcd + NVCD*is), site)];
+    if (sizeof(real_t) == 4) {
+      for (is = 1; is < Ns-1; ++is) {
+        real_t a = real_t(0.5) * dm_con[is - 1];
+        real_t aa = dpinv_con[is];
+        real_t f_is = f_con[is];
+        xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[3];
+        int is_offset = stride_is * is;
+        vt[0] = wp[base_site_idx + stride_id * 0 + is_offset];
+        vt[1] = wp[base_site_idx + stride_id * 1 + is_offset];
+        vt[2] = wp[base_site_idx + stride_id * 2 + is_offset];
+        vt[3] = wp[base_site_idx + stride_id * 3 + is_offset];
+        vt[0] += a * (xt[0] - xt[2]); vt[1] += a * (xt[1] - xt[3]); vt[2] += a * (xt[2] - xt[0]); vt[3] += a * (xt[3] - xt[1]);
+        vt[0] *= aa; vt[1] *= aa; vt[2] *= aa; vt[3] *= aa;
+        vp[base_site_idx + stride_id * 0 + is_offset] = vt[0];
+        vp[base_site_idx + stride_id * 1 + is_offset] = vt[1];
+        vp[base_site_idx + stride_id * 2 + is_offset] = vt[2];
+        vp[base_site_idx + stride_id * 3 + is_offset] = vt[3];
+        yt[0] += f_is * vt[0]; yt[1] += f_is * vt[1]; yt[2] += f_is * vt[2]; yt[3] += f_is * vt[3];
       }
-
-      real_t a = real_t(0.5) * dm_con[is - 1];
-
-      vt[0] += a * (xt[0] - xt[2]);
-      vt[1] += a * (xt[1] - xt[3]);
-      vt[2] += a * (xt[2] - xt[0]);
-      vt[3] += a * (xt[3] - xt[1]);
-
-      real_t aa = dpinv_con[is];
-
-      for(int id = 0; id < ND; ++id){
-        int ivcd = ivc + NVC * id;
-        vt[id] *= aa;
-        vp[IDX2(Nin5, (ivcd + NVCD*is), site)] = vt[id];
-        yt[id] += f_con[is] * vt[id];
+    } else {
+      for (is = 1; is < Ns-1; ++is) {
+        real_t a = real_t(0.5) * dm_con[is - 1];
+        real_t aa = dpinv_con[is];
+        real_t f_is = f_con[is];
+        for(int id=0; id<ND; ++id) xt[id] = vt[id];
+        for(int id = 0; id < ND; ++id) vt[id] = wp[base_site_idx + stride_id * id + stride_is * is];
+        vt[0] += a * (xt[0] - xt[2]); vt[1] += a * (xt[1] - xt[3]); vt[2] += a * (xt[2] - xt[0]); vt[3] += a * (xt[3] - xt[1]);
+        for(int id = 0; id < ND; ++id){
+          int cur_idx = base_site_idx + stride_id * id + stride_is * is;
+          vt[id] *= aa;
+          vp[cur_idx] = vt[id];
+          yt[id] += f_is * vt[id];
+        }
       }
-
     }
 
-    is = Ns-1;
-
-    for(int id = 0; id < ND; ++id){
-      xt[id] = vt[id];
+    if (sizeof(real_t) == 4) {
+      is = Ns-1;
+      xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[3];
+      int last_is_offset = stride_is * is;
+      vt[0] = wp[base_site_idx + stride_id * 0 + last_is_offset];
+      vt[1] = wp[base_site_idx + stride_id * 1 + last_is_offset];
+      vt[2] = wp[base_site_idx + stride_id * 2 + last_is_offset];
+      vt[3] = wp[base_site_idx + stride_id * 3 + last_is_offset];
+      real_t a_last = real_t(0.5) * dm_con[is - 1];
+      vt[0] += a_last * (xt[0] - xt[2]) - real_t(0.5) * (yt[0] + yt[2]);
+      vt[1] += a_last * (xt[1] - xt[3]) - real_t(0.5) * (yt[1] + yt[3]);
+      vt[2] += a_last * (xt[2] - xt[0]) - real_t(0.5) * (yt[2] + yt[0]);
+      vt[3] += a_last * (xt[3] - xt[1]) - real_t(0.5) * (yt[3] + yt[1]);
+      real_t aa_last = dpinv_con[is];
+      vt[0] *= aa_last; vt[1] *= aa_last; vt[2] *= aa_last; vt[3] *= aa_last;
+      real_t ff1 = real_t(0.5) * (real_t(1.0) + alpha);
+      real_t ff2 = real_t(0.5) * (real_t(-1.0) + alpha);
+      vp[base_site_idx + stride_is * is + NWP * ID1] = ff1 * vt[0] + ff2 * vt[2];
+      vp[base_site_idx + stride_is * is + NWP * ID2] = ff1 * vt[1] + ff2 * vt[3];
+      vp[base_site_idx + stride_is * is + NWP * ID3] = ff1 * vt[2] + ff2 * vt[0];
+      vp[base_site_idx + stride_is * is + NWP * ID4] = ff1 * vt[3] + ff2 * vt[1];
+    } else {
+      is = Ns-1;
+      for(int id=0; id<ND; ++id) xt[id] = vt[id];
+      for(int id = 0; id < ND; ++id) vt[id] = wp[base_site_idx + stride_id * id + stride_is * is];
+      real_t a_last = real_t(0.5) * dm_con[is - 1];
+      vt[0] += a_last * (xt[0] - xt[2]) - real_t(0.5) * (yt[0] + yt[2]);
+      vt[1] += a_last * (xt[1] - xt[3]) - real_t(0.5) * (yt[1] + yt[3]);
+      vt[2] += a_last * (xt[2] - xt[0]) - real_t(0.5) * (yt[2] + yt[0]);
+      vt[3] += a_last * (xt[3] - xt[1]) - real_t(0.5) * (yt[3] + yt[1]);
+      real_t aa_last = dpinv_con[is];
+      for(int id=0; id<ND; ++id) vt[id] *= aa_last;
+      real_t ff1 = real_t(0.5) * (real_t(1.0) + alpha);
+      real_t ff2 = real_t(0.5) * (real_t(-1.0) + alpha);
+      vp[base_site_idx + stride_is * is + NWP * ID1] = ff1 * vt[0] + ff2 * vt[2];
+      vp[base_site_idx + stride_is * is + NWP * ID2] = ff1 * vt[1] + ff2 * vt[3];
+      vp[base_site_idx + stride_is * is + NWP * ID3] = ff1 * vt[2] + ff2 * vt[0];
+      vp[base_site_idx + stride_is * is + NWP * ID4] = ff1 * vt[3] + ff2 * vt[1];
     }
 
-    for(int id = 0; id < ND; ++id){
-      int ivcd = ivc + NVC * id;
-      vt[id] = wp[IDX2(Nin5, (ivcd + NVCD*is), site)];
-    }
-
-    a = real_t(0.5) * dm_con[is - 1];
-
-    vt[0] += a * (xt[0] - xt[2]);
-    vt[1] += a * (xt[1] - xt[3]);
-    vt[2] += a * (xt[2] - xt[0]);
-    vt[3] += a * (xt[3] - xt[1]);
-
-    vt[0] += -0.5 * (yt[0] + yt[2]);
-    vt[1] += -0.5 * (yt[1] + yt[3]);
-    vt[2] += -0.5 * (yt[2] + yt[0]);
-    vt[3] += -0.5 * (yt[3] + yt[1]);
-
-    real_t aa = dpinv_con[is];
-
-    for(int id = 0; id < ND; ++id){
-      vt[id] *= aa;
-    }
-
-    real_t ff1 = 0.5 * ( 1.0 + alpha);
-    real_t ff2 = 0.5 * (-1.0 + alpha);
-    {
-    real_t vt1, vt2, vt3, vt4;
-    vt1 = ff1 * vt[0] + ff2 * vt[2];
-    vt2 = ff1 * vt[1] + ff2 * vt[3];
-    vt3 = ff1 * vt[2] + ff2 * vt[0];
-    vt4 = ff1 * vt[3] + ff2 * vt[1];
-    vp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)] = vt1;
-    vp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)] = vt2;
-    vp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)] = vt3;
-    vp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)] = vt4;
-    }
     // Udag_inv completed
 
-    is = Ns-1;
-
-    for(int id = 0; id < ND; ++id){
-      int ivcd = ivc + NVC * id;
-      vt[id] = vp[IDX2(Nin5, (ivcd + NVCD*is), site)];
-      vp[IDX2(Nin5, (ivcd + NVCD*is), site)] = vt[id];
-    }
-
-    yt[0] = 0.5 * (vt[0] - vt[2]);
-    yt[1] = 0.5 * (vt[1] - vt[3]);
-    yt[2] = 0.5 * (vt[2] - vt[0]);
-    yt[3] = 0.5 * (vt[3] - vt[1]);
-
-    for (int is = Ns-2; is >= 0; --is) {
-
-      for(int id = 0; id < ND; ++id){
-        xt[id] = vt[id];
+    if (sizeof(real_t) == 4) {
+      is = Ns-1;
+      yt[0] = real_t(0.5) * (vt[0] - vt[2]); yt[1] = real_t(0.5) * (vt[1] - vt[3]); yt[2] = real_t(0.5) * (vt[2] - vt[0]); yt[3] = real_t(0.5) * (vt[3] - vt[1]);
+      for (is = Ns-2; is >= 0; --is) {
+        real_t a = real_t(0.5) * dm_con[is + 1] * dpinv_con[is];
+        real_t e_is = e_con[is];
+        xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[3];
+        int is_offset = stride_is * is;
+        vt[0] = vp[base_site_idx + stride_id * 0 + is_offset];
+        vt[1] = vp[base_site_idx + stride_id * 1 + is_offset];
+        vt[2] = vp[base_site_idx + stride_id * 2 + is_offset];
+        vt[3] = vp[base_site_idx + stride_id * 3 + is_offset];
+        vt[0] += a * (xt[0] + xt[2]) - e_is * yt[0];
+        vt[1] += a * (xt[1] + xt[3]) - e_is * yt[1];
+        vt[2] += a * (xt[2] + xt[0]) - e_is * yt[2];
+        vt[3] += a * (xt[3] + xt[1]) - e_is * yt[3];
+        vp[base_site_idx + stride_id * 0 + is_offset] = vt[0];
+        vp[base_site_idx + stride_id * 1 + is_offset] = vt[1];
+        vp[base_site_idx + stride_id * 2 + is_offset] = vt[2];
+        vp[base_site_idx + stride_id * 3 + is_offset] = vt[3];
       }
-
-      for(int id = 0; id < ND; ++id){
-        int ivcd = ivc + NVC * id;
-        vt[id] = vp[IDX2(Nin5, (ivcd + NVCD*is), site)];
-      }
-
-      real_t a = real_t(0.5) * dm_con[is + 1] * dpinv_con[is];
-
-      vt[0] += a * (xt[0] + xt[2]);
-      vt[1] += a * (xt[1] + xt[3]);
-      vt[2] += a * (xt[2] + xt[0]);
-      vt[3] += a * (xt[3] + xt[1]);
-
-      for(int id = 0; id < ND; ++id){
-        vt[id] += -e_con[is] * yt[id];
-      }
-      
-      for(int id = 0; id < ND; ++id){
-        int ivcd = ivc + NVC * id;
-        vp[IDX2(Nin5, (ivcd + NVCD*is), site)] = vt[id];
+    } else {
+      is = Ns-1;
+      yt[0] = real_t(0.5) * (vt[0] - vt[2]); yt[1] = real_t(0.5) * (vt[1] - vt[3]); yt[2] = real_t(0.5) * (vt[2] - vt[0]); yt[3] = real_t(0.5) * (vt[3] - vt[1]);
+      for (is = Ns-2; is >= 0; --is) {
+        real_t a = real_t(0.5) * dm_con[is + 1] * dpinv_con[is];
+        real_t e_is = e_con[is];
+        for(int id=0; id<ND; ++id) xt[id] = vt[id];
+        for(int id = 0; id < ND; ++id) vt[id] = vp[base_site_idx + stride_id * id + stride_is * is];
+        vt[0] += a * (xt[0] + xt[2]) - e_is * yt[0];
+        vt[1] += a * (xt[1] + xt[3]) - e_is * yt[1];
+        vt[2] += a * (xt[2] + xt[0]) - e_is * yt[2];
+        vt[3] += a * (xt[3] + xt[1]) - e_is * yt[3];
+        for(int id = 0; id < ND; ++id) vp[base_site_idx + stride_id * id + stride_is * is] = vt[id];
       }
     }
 

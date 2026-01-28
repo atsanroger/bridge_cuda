@@ -22,8 +22,8 @@ void mult_domainwall_5din_ee_5dir_dirac_kernel(
   const int Nin5     = NVCD * Ns;
   const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
   const int GridSize = blockDim.x * gridDim.x;
-  const double* b_con  = const_b;
-  const double* c_con  = const_c;
+  const real_t* b_con  = const_b;
+  const real_t* c_con  = const_c;
 
   for( int idx = ist; idx < Nst_pad * NVC; idx += GridSize){
 
@@ -262,8 +262,8 @@ void mult_domainwall_5din_ee_5dirdag_dirac_kernel(
   const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
   const int GridSize = blockDim.x * gridDim.x;
 
-  const double* b_con  = const_b;
-  const double* c_con  = const_c;
+  const real_t* b_con  = const_b;
+  const real_t* c_con  = const_c;
 
   for( int idx = ist; idx < Nst_pad * NVC; idx += GridSize){
 
@@ -398,8 +398,8 @@ void mult_domainwall_5din_eo_5dirdag_dirac_kernel(
   const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
   const int GridSize = blockDim.x * gridDim.x;
 
-  const double* b_con  = const_b;
-  const double* c_con  = const_c;
+  const real_t* b_con  = const_b;
+  const real_t* c_con  = const_c;
 
   for( int idx = ist; idx < Nst_pad * NVC; idx += GridSize){
 

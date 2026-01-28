@@ -21,8 +21,8 @@ void mult_domainwall_5din_5dir_dirac_kernel(
   const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
   const int GridSize = gridDim.x *blockDim.x;
 
-  const double *b_con = const_b;
-  const double *c_con = const_c;
+  const real_t *b_con = const_b;
+  const real_t *c_con = const_c;
 
   for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize){
 
@@ -99,7 +99,7 @@ void mult_domainwall_5din_5dir_dirac(
   int blockSize = VECTOR_LENGTH;
   int gridSize  = (Nst + blockSize - 1)/ blockSize;
   mult_domainwall_5din_5dir_dirac_kernel<<<gridSize, blockSize>>>(
-      vp_dev, yp_dev, wp_dev, mq, M0, Ns, b_dev, c_dev, Nst);
+      vp_dev, yp_dev, wp_dev, mq, M0, Ns, Nst);
 
   CHECK(cudaDeviceSynchronize());
 }

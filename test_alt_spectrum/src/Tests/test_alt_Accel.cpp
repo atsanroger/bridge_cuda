@@ -185,7 +185,7 @@ int Test_alt_Accel::test_Spectrum_Domainwall_5din()
   //result += test_dw.hadron_2ptFunction(test_file, "double");
   //test_dw.hadron_2ptFunction(test_file, "float");
   result += test_dw.hadron_2ptFunction(test_file, "float_eo");
-  // test_dw.hadron_2ptFunction(test_file, "double_eo");
+  result += test_dw.hadron_2ptFunction(test_file, "double_eo");
 
   // unchecked:
   //result += test_dw.hadron_2ptFunction("org");
