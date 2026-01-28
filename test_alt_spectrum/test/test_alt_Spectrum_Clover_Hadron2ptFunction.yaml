@@ -1,0 +1,77 @@
+# this is a sample parameter file
+
+Test_Spectrum:
+  ## gauge_config_status = {Continue,Cold_start,Hot_start}
+  gauge_config_status      : Continue
+  ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel}
+#  gauge_config_type_input  : Text
+  gauge_config_type_input  : Text_4x4x4x8
+  config_filename_input    : ./conf_04040408.txt
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level            : General
+#  expected_result          : 15.1719279986528  # standard 4x4x4x8
+#  expected_result          : 14.9034257596141  # 16x4x4x8 (-1,-1,-1,-1)
+#  expected_result          : 14.9316353963342  # 16x16x16x32 (-1,-1,-1,-1)
+#  expected_result          : 14.9440677811113  # 32x8x8x8 (-1,-1,-1,-1)
+  expected_result          : 15.1365579661128  # 32x8x8x12 (-1,-1,-1,-1)
+
+
+Corr2pt_4spinor:  
+  ## filename_output = {stdout, or "filename"}
+  filename_output : stdout
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level   : General
+
+Fopr:
+#  fermion_type       : Clover_dd
+  fermion_type       : Clover
+  ## gamma_matrix_type = {Chiral,Dirac}
+  gamma_matrix_type  : Dirac
+  hopping_parameter  : 0.12
+  clover_coefficient : 1.0
+  boundary_condition : [-1,-1,-1,-1]
+  block_size         : [8, 2, 2, 2]
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General
+
+Source:
+  ## source_type = {Local,Exponential,MomentumWall,Wall}
+  source_type     : Exponential
+  source_position : [0,0,0,0]
+  ## additional parameters for Exponential, exp(- slope * r^(power))
+  slope           : 0.25
+  power           : 2.0
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level   : General
+
+GaugeFixing:
+  ## gauge_fixing_type = {Coulomb,Landau,None}
+#  gauge_fixing_type             : Coulomb
+  gauge_fixing_type             : None
+  maximum_number_of_iteration   : 5000
+  number_of_naive_iteration     : 50
+  interval_of_measurement       : 10
+  iteration_to_reset            : 1000
+  convergence_criterion_squared : 1.0e-24
+  overrelaxation_parameter      : 1.6
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level                 : General
+
+Solver:
+  ## solver_type = {CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx}
+  solver_type                         : BiCGStab_Cmplx
+#  solver_type                         : BiCGStab
+#  solver_type                         : CGNR
+#  maximum_number_of_iteration         : 100
+  maximum_number_of_iteration         : 1000
+  maximum_number_of_restart           : 40
+  convergence_criterion_squared       : 1.0e-24
+#  convergence_criterion_squared       : 1.0e-14
+  use_initial_guess                   : false
+  ## additional parameters for BiCGStab series
+  Omega_tolerance                     : 0.7
+  ## additional parameters for each solver
+  number_of_orthonormal_vectors       : 2
+  tolerance_for_DynamicSelection_of_L : 0.1
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level                       : General

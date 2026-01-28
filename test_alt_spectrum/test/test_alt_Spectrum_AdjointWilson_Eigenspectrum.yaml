@@ -1,0 +1,47 @@
+# this is a sample parameter file
+
+Test_Spectrum:
+  ## gauge_config_status = {Continue,Cold_start,Hot_start}
+#  gauge_config_status      : Continue
+  gauge_config_status      : Cold_start
+  ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG
+,ILDG,ILDG_Parallel}
+#  gauge_config_type_input  : Text
+  gauge_config_type_input  : Text_4x4x4x8
+  config_filename_input    : ./conf_04040408.txt
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level            : General
+  expected_result          : 14.2250394502083  # standard 4x4x4x8
+
+Fopr:
+  fermion_type       : AdjointWilson
+  ## gamma_matrix_type = {Chiral,Dirac}
+  gamma_matrix_type  : Dirac
+  hopping_parameter  : 0.12
+#  boundary_condition : [-1,-1,-1,-1]
+  boundary_condition : [1,1,1,1]
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General
+
+GaugeFixing:
+  ## gauge_fixing_type = {Coulomb,Landau,None}
+  gauge_fixing_type             : None
+  maximum_number_of_iteration   : 5000
+  number_of_naive_iteration     : 50
+  interval_of_measurement       : 10
+  iteration_to_reset            : 1000
+  convergence_criterion_squared : 1.0e-24
+  overrelaxation_parameter      : 1.6
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level                 : General
+
+Eigensolver:
+  eigensolver_mode               : abs_ascending
+  number_of_wanted_eigenvectors  : 20
+  number_of_working_eigenvectors : 50
+  convergence_criterion_squared  : 1.0e-24
+  maximum_number_of_iteration    : 500
+  threshold_value                : 0.15
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+#  verbose_level                  : General
+  verbose_level                  : Detailed

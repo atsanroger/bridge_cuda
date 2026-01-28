@@ -1,0 +1,28 @@
+/*!
+        @file    fopr_Overlap_5d.cpp
+
+        @brief
+
+        @author  Hideo Matsufuru (matufuru)
+                 $LastChangedBy: matufuru $
+
+        @date    $LastChangedDate:: 2022-03-07 17:24:38 #$
+
+        @version $LastChangedRevision: 2359 $
+*/
+
+#include "Fopr/fopr_Overlap_5d.h"
+#include "Fopr/afopr_Overlap_5d-tmpl.h"
+
+#ifdef USE_FACTORY_AUTOREGISTER
+namespace {
+  bool init = Fopr_Overlap_5d::register_factory();
+}
+#endif
+
+template<>
+const std::string AFopr_Overlap_5d<Field>::class_name = "Fopr_Overlap_5d";
+
+template class AFopr_Overlap_5d<Field>;
+
+//============================================================END=====

@@ -1,0 +1,67 @@
+# this is a sample parameter file
+
+Gauge:
+  ## gauge_config_status = {Continue,Cold_start,Hot_start}
+  #gauge_config_status      : Hot_start
+  gauge_config_status      : Continue
+  ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel}
+#  gauge_config_type_input  : Text
+#  config_filename_input    : ./conf_04040408.txt
+  gauge_config_type_input  : Binary
+  config_filename_input    : /home/z43830r/Latt/config/RC32x64_B1900Kud01378100Ks01364000C1715-gM-001200.contents/msg01.rec02.ildg-binary-data
+
+Smearing:
+  ## projection_type = {Maximum_SU_N,Stout_SU3}
+  projection_type : Stout_SU3
+  ## smear_type = {APE,HYP}
+  smear_type    : None
+  rho_uniform   : 0.1
+  #smear_type    : HYP
+  #alpha1        : 0.95
+  #alpha2        : 0.76
+  #alpha3        : 0.38
+  number_of_smearing  : 0
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level : General
+
+TestType:
+#  solver_type :BiCGStab
+#  solver_type :Mixed
+  solver_type :MG
+
+
+MGSolver:
+  maximum_number_of_iteration : 1000
+  maximum_number_of_restart:     10
+  convergence_criterion_squared: 1e-28
+  verbose_level : Detailed
+  MultiGrid_Level1:  
+    sap_block : [8,4,4,4]
+#    setup_number_of_vectors: 32
+    setup_number_of_vectors: 16
+    setup_number_of_step  : 4 
+    maximum_number_of_iteration : 200
+    maximum_number_of_restart : 1
+    convergence_criterion_squared: 2.0e-3
+    smoother_number_of_iteration : 4
+    smoother_convergence_criterion_squared: 1.0e-3
+    verbose_level : Detailed
+
+
+Fopr:
+  ## fermion_type = {Clover, etc.}
+  fermion_type       : Clover
+  ## gamma_matrix_type = {Chiral,Dirac}
+  gamma_matrix_type  : Dirac
+  hopping_parameter  : 0.13781
+  clover_coefficient : 1.715
+#  hopping_parameter  : 0.12
+#  clover_coefficient : 1.761
+#  hopping_parameter  : 0.13
+#  clover_coefficient : 1.1
+#  hopping_parameter  : 0.135146
+#  clover_coefficient : 1.5792
+  ##boundary_condition : [-1,-1,-1,-1]
+  boundary_condition : [1,1,1,1]
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General

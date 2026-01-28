@@ -1,0 +1,43 @@
+# this is a sample parameter file
+
+Test_Eigensolver:
+  ## gauge_config_status = {Continue,Cold_start,Hot_start}
+  gauge_config_status      : Continue
+  ## gauge_config_type = {Text,Binary,Binary_Distributed,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel}
+  gauge_config_type_input  : Text_4x4x4x8
+  config_filename_input    : ./conf_04040408.txt
+  ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library
+  random_number_type       : Mseries
+  seed_for_random_number   : 1234567UL
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level            : General
+#  expected_result          : 0.23663281579985   # 16x4x4x8 (real part)
+  expected_result          : 0.03674579187863   # 16x4x4x8 (abs)
+
+Fopr:
+  fermion_type       : Wilson_CLE
+  ## gamma_matrix_type = {Chiral,Dirac}
+  gamma_matrix_type  : Dirac
+  hopping_parameter  : 0.12
+  chemical_potential : 0.1
+  clover_coefficient : 1.0
+  boundary_condition : [1,1,1,-1]
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General
+
+Eigensolver:
+  eigensolver_type               : IRLanczos
+  fermion_mult_mode              : DdagD
+# following are parameters of eigensolver
+  eigensolver_mode               : abs_ascending
+#  number_of_wanted_eigenvectors  : 20
+#  number_of_working_eigenvectors : 50
+  number_of_wanted_eigenvectors  : 30
+  number_of_working_eigenvectors : 30
+  convergence_criterion_squared  : 1.0e-28
+#  maximum_number_of_iteration    : 500
+  maximum_number_of_iteration    : 100
+  threshold_value                : 0.06
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+#  verbose_level                  : General
+  verbose_level                  : Detailed

@@ -1,0 +1,50 @@
+# this is a sample parameter file
+
+Gauge:
+  ## gauge_config_status = {Continue,Cold_start,Hot_start}
+  gauge_config_status      : Continue
+  ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel}
+  gauge_config_type_input  : Binary
+  config_filename_input    : /work/BRIDGE/matufuru/conf/RC32x64_B1900Kud01378100Ks01364000C1715-gM-001200
+
+TestType:
+#  solver_type :BiCGStab
+#  solver_type :Mixed
+  solver_type :MG
+
+MGSolver:
+  maximum_number_of_iteration : 1000
+  maximum_number_of_restart:     20
+  convergence_criterion_squared: 1e-28
+  verbose_level : Detailed
+  MultiGrid_Level1:  
+    sap_block : [8,4,4,4]
+    setup_number_of_vectors: 32
+    setup_number_of_step  : 4
+    maximum_number_of_iteration : 200
+    maximum_number_of_restart : 1
+    convergence_criterion_squared: 2.0e-3
+    smoother_number_of_iteration : 4
+    smoother_convergence_criterion_squared: 1.0e-3
+    verbose_level : Detailed
+
+Fopr:
+  ## fermion_type = {Clover,etc.}
+  fermion_type       : Clover
+  ## gamma_matrix_type = {Chiral,Dirac}
+  gamma_matrix_type  : Dirac
+  hopping_parameter  : 0.13781
+  clover_coefficient : 1.715
+#  hopping_parameter  : 0.135
+#  clover_coefficient : 1.5
+#  clover_coefficient : 1.761
+#  hopping_parameter  : 0.13
+#  clover_coefficient : 0.0
+#  hopping_parameter  : 0.135146
+#  clover_coefficient : 1.5792
+  ##boundary_condition : [-1,-1,-1,-1]
+  boundary_condition : [1,1,1,1]
+  block_size : [8,4,4,4]
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General
+

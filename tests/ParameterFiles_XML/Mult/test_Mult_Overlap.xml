@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <!-- # this is a sample parameter file -->
+    <Test_Mult_Overlap>
+        <!--   ## gauge_config_status = {Continue,Cold_start,Hot_start} -->
+        <gauge_config_status>Continue</gauge_config_status>
+        <!--   ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel} -->
+        <gauge_config_type_input>Text</gauge_config_type_input>
+        <config_filename_input>./conf_04040408.txt</config_filename_input>
+        <!--   ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library -->
+        <random_number_type>Mseries</random_number_type>
+        <seed_for_random_number>1234567UL</seed_for_random_number>
+        <number_of_mult>1</number_of_mult>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <expected_result>3.34317732744080e+02</expected_result>
+        <tolerance>1.0e-12</tolerance>
+    </Test_Mult_Overlap>
+    <Fopr_Wilson>
+        <!--   ## gamma_matrix_type = {Chiral,Dirac} -->
+        <gamma_matrix_type>Dirac</gamma_matrix_type>
+        <hopping_parameter>0.5 / (4.0 - 1.6)</hopping_parameter>
+        <boundary_condition type="sequence">
+            <x>1</x>
+            <y>1</y>
+            <z>1</z>
+            <t>1</t>
+        </boundary_condition>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr_Wilson>
+    <Fopr_Overlap>
+        <quark_mass>0.2</quark_mass>
+        <domain_wall_height>1.6</domain_wall_height>
+        <number_of_poles>16</number_of_poles>
+        <lower_bound>0.01</lower_bound>
+        <upper_bound>8.0</upper_bound>
+        <maximum_number_of_iteration>1000</maximum_number_of_iteration>
+        <convergence_criterion_squared>1.0e-24</convergence_criterion_squared>
+        <boundary_condition type="sequence">
+            <x>1</x>
+            <y>1</y>
+            <z>1</z>
+            <t>1</t>
+        </boundary_condition>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr_Overlap>
+    <Eigensolver>
+        <eigensolver_mode>abs_ascending</eigensolver_mode>
+        <number_of_wanted_eigenvectors>20</number_of_wanted_eigenvectors>
+        <number_of_working_eigenvectors>50</number_of_working_eigenvectors>
+        <convergence_criterion_squared>1.0e-24</convergence_criterion_squared>
+        <maximum_number_of_iteration>500</maximum_number_of_iteration>
+        <threshold_value>0.15</threshold_value>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <!-- # -->
+        <!-- #  eigensolver_mode               : abs_descending -->
+        <!-- #  number_of_wanted_eigenvectors  : 20 -->
+        <!-- #  number_of_working_eigenvectors : 20 -->
+        <!-- #  convergence_criterion_squared  : 1.0e-26 -->
+        <!-- #  maximum_number_of_iteration    : 500 -->
+        <!-- #  threshold_value                : 10.0 -->
+        <!-- #  ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <!-- #  verbose_level                  : General -->
+    </Eigensolver>
+</Parameters>

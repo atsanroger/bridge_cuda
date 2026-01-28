@@ -1,0 +1,97 @@
+
+Installation instructions for Bridge++
+=================================
+
+1) Configuration
+----------------
+
+bridge/
+  +----------Makefile
+        |
+        +----docs/
+        |
+        +----extra/
+        |
+        +----sample_*/
+        |
+        +----src/
+        |
+        +----tests/
+        |
+        +----test_alt_spectrum/
+        |
+        +----test_alt_multigrid/
+        |
+        +----(build/)
+
+2) Building
+-----------
+(1) cd to the code set top dir.
+
+(2) Change Makefile appropriately.
+    (default is g++ on the single node.)
+
+    If you are unfamiliar with Makefile, use a script to generate a Makefile
+    through an interactive menu:
+    $ ./makeconfig.sh
+
+(3) Run make.
+    $ make
+    or
+    $ gmake
+
+    "build/tests/bridge.elf" is created by make.
+    Test data file is copied from "tests/" to "build/".
+
+(4) Execute a program.
+    $ cd build/tests/; ./bridge.elf
+
+    Without any change of our source code, test manager runs on a 4x4x4x8 lattice.
+
+(5) Use a sample directory (optional).
+    $ cd sample_spectrum/
+    $ make
+    $ ./sample_Spectrum.elf
+
+(6) Use a test of alternative code (optional, only for A64FX).
+    $ in Makefile, turn on the switches for alt-code
+    $ make
+    $ cd test_alt_spectrum/src/
+    $ make
+    $ cd ../test/
+    $ prepare job script file (cf. examples)
+    $ submit the job script file
+
+(7) Use a test of multigrid solver (optional, only for A64FX).
+    $ in Makefile, turn on the switches for alt-code
+    $ make
+    $ cd test_alt_multigrid/
+    $ make
+    $ cd ../test/
+    $ prepare a job script file (cf. examples)
+    $ submit the job script file
+
+2') Building with an extra library (optional)
+-------------------------------------------
+(1) cd to extra/ dir.
+
+(2) Compile each extra library.
+
+(3) Set use_extra_library flag and its path in Makefile.
+
+(4) Run make.
+    $ make
+
+(5) Execute a program.
+    $ cd build/tests/; ./bridge.elf
+
+3) Building the documentation
+-----------------------------
+(1) cd to the code set top dir.
+    $ make doxygen
+    You can find doxygen files in "docs/html/".
+
+4) Reporting Bugs
+--------------------
+If you find a bug, please contact
+bridge-code@ml.post.kek.jp

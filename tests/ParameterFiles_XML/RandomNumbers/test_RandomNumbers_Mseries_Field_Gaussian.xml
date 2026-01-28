@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <Test_RandomNumbers>
+        <!--   ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library -->
+        <random_number_type>Mseries</random_number_type>
+        <!--   ## noise_type = {Gaussian,U1,Z2} -->
+        <noise_type>Gaussian</noise_type>
+        <int_seed>0</int_seed>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <expected_result>0.706765766288621</expected_result>
+    </Test_RandomNumbers>
+</Parameters>

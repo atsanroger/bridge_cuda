@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <!-- # this is a sample parameter file -->
+    <Test_Rational>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <expected_result>10.099999</expected_result>
+    </Test_Rational>
+    <Math_Rational>
+        <number_of_poles>16</number_of_poles>
+        <exponent_numerator>-1</exponent_numerator>
+        <exponent_denominator>2</exponent_denominator>
+        <lower_bound>1.0e-4</lower_bound>
+        <upper_bound>10.0</upper_bound>
+        <number_of_partitions>100</number_of_partitions>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Math_Rational>
+</Parameters>

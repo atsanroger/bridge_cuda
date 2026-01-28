@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <!-- # this is a sample parameter file -->
+    <Test_Rational>
+        <!--   ## gauge_config_status = {Continue,Cold_start,Hot_start} -->
+        <gauge_config_status>Continue</gauge_config_status>
+        <!--   ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel} -->
+        <gauge_config_type_input>Text</gauge_config_type_input>
+        <config_filename_input>./conf_04040408.txt</config_filename_input>
+        <!--   ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library -->
+        <random_number_type>Mseries</random_number_type>
+        <seed_for_random_number>1234567UL</seed_for_random_number>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <expected_result>4.99857614403625e-19</expected_result>
+    </Test_Rational>
+    <Fopr_Rational>
+        <number_of_poles>16</number_of_poles>
+        <exponent_numerator>-1</exponent_numerator>
+        <exponent_denominator>2</exponent_denominator>
+        <lower_bound>1.0e-2</lower_bound>
+        <upper_bound>3.16227766</upper_bound>
+        <maximum_number_of_iteration>1000</maximum_number_of_iteration>
+        <convergence_criterion_squared>1.e-24</convergence_criterion_squared>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr_Rational>
+    <Fopr_Clover>
+        <!--   ## gamma_matrix_type = {Chiral,Dirac} -->
+        <gamma_matrix_type>Dirac</gamma_matrix_type>
+        <hopping_parameter>0.12</hopping_parameter>
+        <clover_coefficient>1.0</clover_coefficient>
+        <boundary_condition type="sequence">
+            <x>1</x>
+            <y>1</y>
+            <z>1</z>
+            <t>-1</t>
+        </boundary_condition>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr_Clover>
+    <Source>
+        <!--   ## source_type = {Local,Exponential,MomentumWall,Random,Wall} -->
+        <source_type>Local</source_type>
+        <!--   ## source_position = [x,y,z,t], x = {0,...,Lx-1} -->
+        <source_position type="sequence">
+            <x>0</x>
+            <y>0</y>
+            <z>0</z>
+            <t>0</t>
+        </source_position>
+        <!--   ## additional parameters for Exponential, exp(- slope * r^(power)) -->
+        <slope>0.25</slope>
+        <power>2.0</power>
+        <!--   ## additional parameters for MomentumWall, source_momentum = [nx,ny,nz,nt], p = (2 \pi / L) n -->
+        <source_momentum type="sequence">
+            <x>1</x>
+            <y>1</y>
+            <z>1</z>
+            <t>0</t>
+        </source_momentum>
+        <!--   ## additional parameters for Random -->
+        <!--   ## noise_type = {Gaussian,U1,Z2} -->
+        <noise_type>Z2</noise_type>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Source>
+</Parameters>

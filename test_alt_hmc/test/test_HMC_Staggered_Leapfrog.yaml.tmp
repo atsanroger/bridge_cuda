@@ -1,0 +1,75 @@
+# this is a sample parameter file
+
+Test_HMC_Staggered:
+  ## gauge_config_type = {Text,Binary, ...}
+  config_type_test   : Text_4x4x4x8
+  config_file_test   : ./conf_04040408.txt
+  config_type_input  : Binary
+  config_file_input  : ./ConfU/conf_$$$$$$.bin
+  config_type_output : Binary
+  config_file_output : ./ConfU/conf_$$$$$$.bin
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General
+#  expected_result    : 0.632059361851  # 8x8x8x8
+  expected_result    : 0.63331547779   # 8x8x8x16
+
+Action_G:
+  action_type   :  Action_G_Rectangle
+  beta          :  2.3
+  c_plaq        :  3.648
+  c_rect        : -0.331
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level : General
+#  action_type   :  Action_G_Plaq
+#  beta          :  5.6
+#  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+#  verbose_level : General
+
+Action_F:
+  action_type        : Action_F_Standard
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General
+
+Fopr_Staggered:
+  fermion_type       : Staggered
+  quark_mass         : 0.01
+  boundary_condition : [1,1,1,-1]
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General
+
+Solver_MD:
+#  solver_type : BiCGStab_Cmplx
+  solver_type : CG
+#  maximum_number_of_iteration         : 100
+  maximum_number_of_iteration         : 8000
+  maximum_number_of_restart           : 40
+  convergence_criterion_squared       : 1.0e-28
+  use_initial_guess                   : false
+  Omega_tolerance                     : 0.60
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level                       : General
+
+Solver_H:
+#  solver_type : BiCGStab_Cmplx
+  solver_type : CG
+#  maximum_number_of_iteration         : 100
+  maximum_number_of_iteration         : 8000
+  maximum_number_of_restart           : 40
+  convergence_criterion_squared       : 1.0e-28
+  use_initial_guess                   : false
+  Omega_tolerance                     : 0.60
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level                       : General
+
+HMC_Leapfrog:
+  number_of_trajectory : 5
+#  number_of_trajectory : 1
+  step_size       : 0.005
+#  step_size       : 0.003125
+#  number_of_steps : 160
+  number_of_steps : 5
+  order_of_exp_iP : 8
+  ## Metropolis_test = {1,0} for Metropolis_test on/off
+  Metropolis_test : 1
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level   : General

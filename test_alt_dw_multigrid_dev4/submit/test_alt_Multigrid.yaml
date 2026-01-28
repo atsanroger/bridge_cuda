@@ -1,0 +1,82 @@
+# this is a sample parameter file
+
+Gauge:
+  ## gauge_config_status = {Continue,Cold_start,Hot_start}
+  #gauge_config_status      : Hot_start
+  gauge_config_status      : Continue
+#  gauge_config_type_input  : Text_4x4x4x8
+#  config_filename_input    : ./conf_04040408.txt
+  gauge_config_type_input  : Binary
+  config_filename_input    : ./conf_000010.bin
+  #config_filename_input    : /home/z43830r/Latt/config/RC32x64_B1900Kud01378100Ks01364000C1715-gM-001200.contents/msg01.rec02.ildg-binary-data
+
+Smearing:
+  ## projection_type = {Maximum_SU_N,Stout_SU3}
+  projection_type : Stout_SU3
+  ## smear_type = {APE,HYP}
+  smear_type    : None
+  rho_uniform   : 0.1
+  #smear_type    : HYP
+  #alpha1        : 0.95
+  #alpha2        : 0.76
+  #alpha3        : 0.38
+  number_of_smearing  : 0
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level : General
+
+TestType:
+  ## solver_type = {MG, Mixed_eo, BiCGStab}
+  solver_type : MG
+  #solver_type : Mixed_eo
+
+# temporal implementation by HM
+Fprop:
+  fprop_type : Multigrid
+  testvector_type : eigenvector
+  Eigen_params :
+    fopr_mode : D
+#    fopr_mode : D_prec
+    filename_base : testvector
+    eigensolver_type : IRArnoldi_block
+#    eigensolver_type : IRArnoldi
+    eigensolver_mode : abs_ascending
+#    number_of_wanted_eigenvectors : 20
+#    number_of_working_eigenvectors : 16
+    number_of_wanted_eigenvectors : 40
+    number_of_working_eigenvectors : 20
+    maximum_number_of_iteration : 200
+    convergence_criterion_squared : 1.e-26
+    threshold_value : 10.0
+    verbose_level : Detailed
+
+MGSolver:
+  maximum_number_of_iteration : 1000
+  maximum_number_of_restart:     1
+  convergence_criterion_squared: 1e-26
+  number_of_orthonormal_vectors: 5
+  verbose_level : Detailed
+  MultiGrid_Level1:  
+    sap_block : [4,4,4,4]
+    setup_number_of_vectors: 16
+    setup_number_of_step  : 4
+    maximum_number_of_iteration : 2
+    maximum_number_of_restart : 1
+    convergence_criterion_squared: 1.0e-2
+    smoother_number_of_iteration : 200
+    smoother_convergence_criterion_squared: 1.0e-3
+    verbose_level : Detailed
+
+Fopr:
+  fermion_type            : Domainwall_5din
+  kernel_type             : Wilson
+  ## gamma_matrix_type = {Chiral,Dirac}
+  gamma_matrix_type  : Dirac
+  quark_mass              : 0.01
+  quark_mass_PauliVillars : 1.0
+  domain_wall_height      : 1.0
+  extent_of_5th_dimension : 8
+  boundary_condition      : [1,1,1,-1]
+  coefficient_b           : 1.5
+  coefficient_c           : 0.5
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General

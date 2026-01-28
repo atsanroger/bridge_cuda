@@ -1,0 +1,70 @@
+/*!
+        @file    decompose_LU_Cmplx.h
+
+        @brief
+
+        @author  Satoru Ueda  (sueda)
+                 $LastChangedBy: aoyama $
+
+        @date    $LastChangedDate:: 2019-01-21 17:01:33 #$
+
+        @version $LastChangedRevision: 1928 $
+*/
+
+#ifndef DECOMPOSE_LU_CMPLX_INCLUDED
+#define DECOMPOSE_LU_CMPLX_INCLUDED
+
+#include <cfloat>
+#include <cmath>
+#include <valarray>
+
+#include "bridge_complex.h"
+
+#include "IO/bridgeIO.h"
+
+class Decompose_LU_Cmplx
+{
+ public:
+  Decompose_LU_Cmplx(size_t N) : N(N), N2(2 * N), size(N * N2), m_lu(size) {}
+
+  void set_matrix(const double *mat);
+
+  // solve Ax = b: vec -> A^{-1} vec
+  void solve(double *vec);
+
+  // M -> A^{-1}
+  void get_inverse(double *mat_inv);
+
+  // M -> A^{-1} * M
+  void mult_inverse(double *mat);
+
+  // return det(A)
+  dcomplex determinant();
+
+ private:
+  int N;
+  int N2;
+  int size;
+  std::valarray<double> m_lu;
+
+  inline size_t re(int i, int j)
+  {
+    return N2 * i + 2 * j;
+  }
+
+  inline size_t im(int i, int j)
+  {
+    return N2 * i + 2 * j + 1;
+  }
+
+  inline size_t re(int i)
+  {
+    return 2 * i;
+  }
+
+  inline size_t im(int i)
+  {
+    return 2 * i + 1;
+  }
+};
+#endif

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <Test_RandomNumbers>
+        <number_of_seeds>20</number_of_seeds>
+        <int_seed_base>200000</int_seed_base>
+        <number_of_samples>10000000</number_of_samples>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <expected_result>3.14168911999999966866</expected_result>
+    </Test_RandomNumbers>
+</Parameters>

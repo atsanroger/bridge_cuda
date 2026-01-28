@@ -1,0 +1,99 @@
+from pybridge import *
+
+setup(lattice_size=[4,4,4,8], grid_size=[], verbose_level="Detailed")
+
+nvol=Common.Nvol
+ndim=Common.Ndim
+
+u=Field_G(nvol, ndim)
+
+#--- Load gauge config
+
+gconf=GaugeConfig("Text")
+gconf.read_file(u, "conf_04040408.txt")
+
+#--- Gauge Fixing
+
+gfix=GaugeFixing("Coulomb",
+                 maximum_number_of_iteration=5000,
+                 number_of_naive_iteration=50,
+                 interval_of_measurement=10,
+                 iteration_to_reset=1000,
+                 convergence_criterion_squared=1.0e-24,
+                 overrelaxation_parameter=1.6,
+                 verbose_level="Detailed")
+
+u2=u.clone()
+gfix.fix(u2,u)
+u=u2
+
+#--- Propagator calculation
+#
+bc=[1,1,1,-1]
+ns=8
+
+fopr=Fopr_Domainwall(Fopr_Wilson(gamma_matrix_type="Dirac",
+                                 hopping_parameter=1.0/(8.0-2.0*1.6), #dummy
+                                 boundary_condition=bc),
+                     quark_mass=0.1,
+                     quark_mass_PauliVillars=1.0,
+                     domain_wall_height=1.6,
+                     extent_of_5th_dimension=ns,
+                     boundary_condition=bc)
+
+solver=Solver("CG",
+              fopr,
+              maximum_number_of_iteration=100,
+              maximum_number_of_restart=40,
+              convergence_criterion_squared=1.0e-28,
+              use_initial_guess="false"
+)
+
+fprop=Fprop_Domainwall_4d(fopr, solver)
+
+fprop.set_config(u)
+
+source=Source("Local",
+              source_position=[0,0,0,0]
+)
+
+
+nc=Common.Nc
+nd=Common.Nd
+
+pp=[0] * (nc*nd)
+
+print("Solving quark propagator:")
+print("  color spin   Nconv      diff           diff2")
+
+for ispin in range(nd):
+    for icolor in range(nc):
+        icd=icolor + nc * ispin
+        
+        b=Field_F(nvol)
+        source.set(b, icolor=icolor, ispin=ispin)
+    
+        x=b.clone()
+        nconv, diff = fprop.invert_D(x, b)
+
+        y=b.clone()
+        copy(y,b)
+
+        # fopr.set_mode("D")
+        # fopr.mult(y,x)
+        # axpy(y, -1.0, b)
+        # diff2=y.norm2()
+        diff2 = 0.0
+        
+        print("   {:2d}   {:2d}   {:6d}   {:12.4e}   {:12.4e}"
+              .format(icolor, ispin, nconv, diff, diff2))
+
+        pp[icd] = x
+
+print(pp)
+
+#--- 2pt correlator
+
+corr=Corr2pt_4spinor(GammaMatrixSet("Dirac"))
+
+corr.meson_all(pp, pp)
