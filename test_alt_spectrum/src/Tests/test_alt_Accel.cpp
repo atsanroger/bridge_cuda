@@ -67,9 +67,9 @@ int Test_alt_Accel::test_Spectrum_Wilson()
   string file_params = "test_alt_Spectrum_Wilson_Hadron2ptFunction.yaml";
 
   int result = 0;
-  //result += test_wilson.hadron_2ptFunction(file_params, "double");
+  result += test_wilson.hadron_2ptFunction(file_params, "double");
   //test_wilson.hadron_2ptFunction(file_params, "float");
-  result += test_wilson.hadron_2ptFunction(file_params, "double_eo");
+  //result += test_wilson.hadron_2ptFunction(file_params, "double_eo");
   //test_wilson.hadron_2ptFunction(file_params, "float_eo");
 
   //CLE test

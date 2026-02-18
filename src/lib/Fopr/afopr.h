@@ -91,6 +91,12 @@ class AFopr
     return std::string();
   }
 
+  //! sets the QDW flag for high-precision arithmetic.
+  virtual void set_use_QDW(bool flag) {}
+
+  //! gets the QDW flag for high-precision arithmetic.
+  virtual bool get_use_QDW() const { return false; }
+
   //! multiplies fermion operator to a given field.
   virtual void mult(AFIELD&, const AFIELD&)
   {

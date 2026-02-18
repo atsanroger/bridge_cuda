@@ -303,21 +303,39 @@ __global__ void axpy_kernel_opt(real_t *v, real_t a, real_t *w, int nin)
 }
 
 //====================================================================
+// QDW-enhanced axpy kernel: uses __fma_rn for better precision
+__global__ void axpy_kernel_qdw(real_t *v, real_t a, real_t *w, int nin)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+
+  for (int in = 0; in < nin; ++in)
+  {
+    int idx = IDX2(nin, in, site);
+    // Use FMA for higher precision: v[idx] = fma(a, w[idx], v[idx])
+    v[idx] = __fma_rn(a, w[idx], v[idx]);
+  }
+}
+
+//====================================================================
 void axpy(real_t *y, int nv1, real_t a,
-          real_t *x, int nv2, int nin, int nvol)
+          real_t *x, int nv2, int nin, int nvol, int use_qdw)
 {
   real_t *y_dev = (real_t *)dev_ptr(y);
   real_t *x_dev = (real_t *)dev_ptr(x);
 
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
-  size_t sharedMemSize = nth * NWP * sizeof(real_t);
 
-  // axpy_kernel<<<nbl,nth>>>(&y_dev[nv1], a, &x_dev[nv2], nin);
-  axpy_kernel_opt<<<nbl, nth, sharedMemSize>>>(&y_dev[nv1], a, &x_dev[nv2], nin);
+  if (use_qdw) {
+    axpy_kernel_qdw<<<nbl, nth>>>(&y_dev[nv1], a, &x_dev[nv2], nin);
+  } else {
+    size_t sharedMemSize = nth * NWP * sizeof(real_t);
+    axpy_kernel_opt<<<nbl, nth, sharedMemSize>>>(&y_dev[nv1], a, &x_dev[nv2], nin);
+  }
 
   cudaDeviceSynchronize();
 }
+
 
 //====================================================================
 __global__ void axpy_kernel(real_t *v, real_t ar, real_t ai,
@@ -338,8 +356,28 @@ __global__ void axpy_kernel(real_t *v, real_t ar, real_t ai,
 }
 
 //====================================================================
+// QDW-enhanced complex axpy kernel: uses __fma_rn
+__global__ void axpy_kernel_qdw(real_t *v, real_t ar, real_t ai,
+                                real_t *w, int nin)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+  const int nin2 = nin / 2;
+
+  for (int in2 = 0; in2 < nin2; ++in2)
+  {
+    int kr = 2 * in2;
+    int ki = 2 * in2 + 1;
+    real_t wr = w[IDX2(nin, kr, site)];
+    real_t wi = w[IDX2(nin, ki, site)];
+    // v_r += ar*wr - ai*wi, v_i += ai*wr + ar*wi
+    v[IDX2(nin, kr, site)] = __fma_rn(ar, wr, __fma_rn(-ai, wi, v[IDX2(nin, kr, site)]));
+    v[IDX2(nin, ki, site)] = __fma_rn(ai, wr, __fma_rn( ar, wi, v[IDX2(nin, ki, site)]));
+  }
+}
+
+//====================================================================
 void axpy(real_t *y, int nv1, real_t ar, real_t ai,
-          real_t *x, int nv2, int nin, int nvol)
+          real_t *x, int nv2, int nin, int nvol, int use_qdw)
 {
   real_t *y_dev = (real_t *)dev_ptr(y);
   real_t *x_dev = (real_t *)dev_ptr(x);
@@ -347,7 +385,11 @@ void axpy(real_t *y, int nv1, real_t ar, real_t ai,
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  axpy_kernel<<<nbl, nth>>>(&y_dev[nv1], ar, ai, &x_dev[nv2], nin);
+  if (use_qdw) {
+    axpy_kernel_qdw<<<nbl, nth>>>(&y_dev[nv1], ar, ai, &x_dev[nv2], nin);
+  } else {
+    axpy_kernel<<<nbl, nth>>>(&y_dev[nv1], ar, ai, &x_dev[nv2], nin);
+  }
 
   cudaDeviceSynchronize();
 }
@@ -615,7 +657,68 @@ __global__ void norm2_reduce_fused_kernel(real_t *red,
 }
 
 //====================================================================
-real_t norm2(real_t *x1, real_t *red1, int nin, int nvol, int nex)
+// QDW-enhanced norm2: Kahan compensated summation in thread-level accumulation
+__global__ void norm2_reduce_fused_kernel_qdw(real_t *red,
+                                              const real_t *__restrict__ v1,
+                                              int nin, int nvol, int nex)
+{
+  extern __shared__ real_t sdata[];
+
+  const int tid = threadIdx.x;
+  const int ist = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gridSize = blockDim.x * gridDim.x;
+
+  real_t sum  = 0.0;
+  real_t comp = 0.0;  // Kahan compensation
+
+  for (int idx = ist; idx < nvol; idx += gridSize)
+  {
+    for (int ex = 0; ex < nex; ++ex)
+    {
+      int ist2 = idx + nvol * ex;
+      for (int in = 0; in < nin; ++in)
+      {
+        real_t vt = v1[IDX2(nin, in, ist2)];
+        real_t prod = vt * vt;
+        real_t y = prod - comp;
+        real_t t = sum + y;
+        comp = (t - sum) - y;
+        sum = t;
+      }
+    }
+  }
+
+  sdata[tid] = sum;
+  __syncthreads();
+
+  for (unsigned int s = blockDim.x / 2; s >= WARP_LENGTH; s >>= 1)
+  {
+    if (tid < s)
+    {
+      sdata[tid] += sdata[tid + s];
+    }
+    __syncthreads();
+  }
+
+  if (tid < WARP_LENGTH)
+  {
+    sum = sdata[tid];
+
+#pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1)
+    {
+      sum += __shfl_down_sync(0xffffffff, sum, offset);
+    }
+
+    if (tid == 0)
+    {
+      red[blockIdx.x] = sum;
+    }
+  }
+}
+
+//====================================================================
+real_t norm2(real_t *x1, real_t *red1, int nin, int nvol, int nex, int use_qdw)
 {
   real_t *x1_dev = (real_t *)dev_ptr(x1);
   real_t *red1_dev = (real_t *)dev_ptr(red1);
@@ -623,21 +726,18 @@ real_t norm2(real_t *x1, real_t *red1, int nin, int nvol, int nex)
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  // norm2_kernel<<<nbl,nth>>>(red1_dev, x1_dev, nin, nvol, nex);
-  // cudaDeviceSynchronize();
-
   int nth2 = VECTOR_LENGTH;
-  //  int nth2 = 1;
   int nbl2 = 1;
-  // reduce_kernel<<<nbl2,nth2>>>(red1_dev, nvol);
 
   int threadsPerBlock = nth2;
   int blocksPerGrid = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
   size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
 
-  // reduce_kernel_multiblocks<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev, nvol);
-  // reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
-  norm2_reduce_fused_kernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
+  if (use_qdw) {
+    norm2_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
+  } else {
+    norm2_reduce_fused_kernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
+  }
   reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
 
   cudaDeviceSynchronize();
@@ -725,8 +825,69 @@ __global__ void dot_reduce_fused_kernel(real_t *red,
 }
 
 //====================================================================
+// QDW-enhanced dot: Kahan compensated summation
+__global__ void dot_reduce_fused_kernel_qdw(real_t *red,
+                                            const real_t *__restrict__ v1,
+                                            const real_t *__restrict__ v2,
+                                            int nin, int nvol, int nex)
+{
+  const int tid = threadIdx.x;
+  const int ist = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gridSize = blockDim.x * gridDim.x;
+
+  extern __shared__ real_t sdata[];
+
+  real_t at   = 0.0;
+  real_t comp = 0.0;  // Kahan compensation
+
+  for (int idx = ist; idx < nvol; idx += gridSize)
+  {
+    for (int ex = 0; ex < nex; ++ex)
+    {
+      int ist2 = idx + nvol * ex;
+      for (int in = 0; in < nin; ++in)
+      {
+        real_t prod = v1[IDX2(nin, in, ist2)] * v2[IDX2(nin, in, ist2)];
+        real_t y = prod - comp;
+        real_t t = at + y;
+        comp = (t - at) - y;
+        at = t;
+      }
+    }
+  }
+
+  sdata[tid] = at;
+  __syncthreads();
+
+  for (int s = blockDim.x / 2; s >= WARP_LENGTH; s >>= 1)
+  {
+    if (tid < s)
+    {
+      sdata[tid] += sdata[tid + s];
+    }
+    __syncthreads();
+  }
+
+  if (tid < WARP_LENGTH)
+  {
+    at = sdata[tid];
+
+#pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1)
+    {
+      at += __shfl_down_sync(0xffffffff, at, offset);
+    }
+
+    if (tid == 0)
+    {
+      red[blockIdx.x] = at;
+    }
+  }
+}
+
+//====================================================================
 real_t dot(real_t *x1, real_t *x2, real_t *red1,
-           int nin, int nvol, int nex)
+           int nin, int nvol, int nex, int use_qdw)
 {
   real_t *x1_dev = (real_t *)dev_ptr(x1);
   real_t *x2_dev = (real_t *)dev_ptr(x2);
@@ -735,9 +896,6 @@ real_t dot(real_t *x1, real_t *x2, real_t *red1,
 
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
-  // dot_kernel<<<nbl,nth>>>(red1_dev, x1_dev, x2_dev, nin, nvol, nex);
-
-  // cudaDeviceSynchronize();
 
   int nth2 = VECTOR_LENGTH;
   int nbl2 = 1;
@@ -746,11 +904,16 @@ real_t dot(real_t *x1, real_t *x2, real_t *red1,
   int blocksPerGrid = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
   size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
 
-  dot_reduce_fused_kernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev,
-                                                                             x1_dev, x2_dev,
-                                                                             nin, nvol, nex);
+  if (use_qdw) {
+    dot_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev,
+                                                                                   x1_dev, x2_dev,
+                                                                                   nin, nvol, nex);
+  } else {
+    dot_reduce_fused_kernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev,
+                                                                              x1_dev, x2_dev,
+                                                                              nin, nvol, nex);
+  }
 
-  // reduce_kernel_multiblocks<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev, nvol);
   reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
   cudaDeviceSynchronize();
 
@@ -872,8 +1035,96 @@ __global__ void dotc_reduce_fused_kernel(real_t *red1, real_t *red2,
   }
 }
 //====================================================================
+//====================================================================
+// QDW-enhanced dotc: Kahan compensated summation for complex dot product
+__global__ void dotc_reduce_fused_kernel_qdw(real_t *red1, real_t *red2,
+                                             const real_t *__restrict__ v1,
+                                             const real_t *__restrict__ v2,
+                                             int nin, int nvol, int nex)
+{
+  const int tid = threadIdx.x;
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gridSize = blockDim.x * gridDim.x;
+
+  extern __shared__ real_t sdata[];
+  real_t *sh_r = sdata;
+  real_t *sh_i = sdata + blockDim.x;
+
+  const int nin2 = nin / 2;
+
+  real_t ar = 0.0, ai = 0.0;
+  real_t comp_r = 0.0, comp_i = 0.0;  // Kahan compensation
+
+  for (int ist = idx; ist < nvol; ist += gridSize)
+  {
+    for (int ex = 0; ex < nex; ++ex)
+    {
+      int ist2 = ist + nvol * ex;
+
+      for (int in2 = 0; in2 < nin2; ++in2)
+      {
+        int kr = 2 * in2;
+        int ki = 2 * in2 + 1;
+
+        real_t v1r = v1[IDX2(nin, kr, ist2)];
+        real_t v1i = v1[IDX2(nin, ki, ist2)];
+        real_t v2r = v2[IDX2(nin, kr, ist2)];
+        real_t v2i = v2[IDX2(nin, ki, ist2)];
+
+        // Real part: v1r*v2r + v1i*v2i
+        real_t prod_r = v1r * v2r + v1i * v2i;
+        real_t yr = prod_r - comp_r;
+        real_t tr = ar + yr;
+        comp_r = (tr - ar) - yr;
+        ar = tr;
+
+        // Imag part: v1r*v2i - v1i*v2r
+        real_t prod_i = v1r * v2i - v1i * v2r;
+        real_t yi = prod_i - comp_i;
+        real_t ti = ai + yi;
+        comp_i = (ti - ai) - yi;
+        ai = ti;
+      }
+    }
+  }
+
+  sh_r[tid] = ar;
+  sh_i[tid] = ai;
+  __syncthreads();
+
+  for (int s = blockDim.x / 2; s >= WARP_LENGTH; s >>= 1)
+  {
+    if (tid < s)
+    {
+      sh_r[tid] += sh_r[tid + s];
+      sh_i[tid] += sh_i[tid + s];
+    }
+    __syncthreads();
+  }
+
+  if (tid < WARP_LENGTH)
+  {
+    ar = sh_r[tid];
+    ai = sh_i[tid];
+
+#pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1)
+    {
+      ar += __shfl_down_sync(0xffffffff, ar, offset);
+      ai += __shfl_down_sync(0xffffffff, ai, offset);
+    }
+
+    if (tid == 0)
+    {
+      red1[blockIdx.x] = ar;
+      red2[blockIdx.x] = ai;
+    }
+  }
+}
+
+//====================================================================
 void dotc(real_t *ar, real_t *ai, real_t *x1, real_t *x2,
-          real_t *red1, real_t *red2, int nin, int nvol, int nex)
+          real_t *red1, real_t *red2, int nin, int nvol, int nex, int use_qdw)
 {
   real_t *x1_dev = (real_t *)dev_ptr(x1);
   real_t *x2_dev = (real_t *)dev_ptr(x2);
@@ -884,24 +1135,21 @@ void dotc(real_t *ar, real_t *ai, real_t *x1, real_t *x2,
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  // dotc_kernel<<<nbl,nth>>>(red1_dev, red2_dev, x1_dev, x2_dev,
-  //                          nin, nvol, nex);
-  // cudaDeviceSynchronize();
-
   int nth2 = VECTOR_LENGTH;
-  //  int nth2 = 1;
   int nbl2 = 1;
-  // reduce_kernel<<<nbl2,nth2>>>(red1_dev, nvol);
-  // reduce_kernel<<<nbl2,nth2>>>(red2_dev, nvol);
   int threadsPerBlock  = nth2;
   int blocksPerGrid    = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
   size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
 
-  dotc_reduce_fused_kernel<<<blocksPerGrid, threadsPerBlock, 2 * sharedMemSize>>>(red1_dev, red2_dev,
-                                                                                  x1_dev, x2_dev, nin, nvol, nex);
-  // reduce_kernel_multiblocks<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev, nvol);
+  if (use_qdw) {
+    dotc_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, 2 * sharedMemSize>>>(red1_dev, red2_dev,
+                                                                                        x1_dev, x2_dev, nin, nvol, nex);
+  } else {
+    dotc_reduce_fused_kernel<<<blocksPerGrid, threadsPerBlock, 2 * sharedMemSize>>>(red1_dev, red2_dev,
+                                                                                    x1_dev, x2_dev, nin, nvol, nex);
+  }
+
   reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
-  // reduce_kernel_multiblocks<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red2_dev, nvol);
   reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red2_dev, blocksPerGrid);
   cudaDeviceSynchronize();
 

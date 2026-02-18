@@ -320,7 +320,8 @@ void AField<REALTYPE,ACCEL>::copy(const int ex,
 //====================================================================
 template<typename REALTYPE>
 void AField<REALTYPE,ACCEL>::axpy(const REALTYPE a,
-                                    const AField<REALTYPE,ACCEL>& w)
+                                    const AField<REALTYPE,ACCEL>& w,
+                                    const int use_qdw)
 {
   assert(check_size(w));
 
@@ -329,7 +330,7 @@ void AField<REALTYPE,ACCEL>::axpy(const REALTYPE a,
 
   if(ith == 0){
     int nvex = m_nsize_pad/m_nin;
-    BridgeACC::axpy(m_field, 0, a, w.m_field, 0, m_nin, nvex);
+    BridgeACC::axpy(m_field, 0, a, w.m_field, 0, m_nin, nvex, use_qdw);
   }
 #pragma omp barrier
 
@@ -339,7 +340,8 @@ void AField<REALTYPE,ACCEL>::axpy(const REALTYPE a,
 template<typename REALTYPE>
 void AField<REALTYPE,ACCEL>::axpy(const int ex, const REALTYPE a,
                                     const AField<REALTYPE,ACCEL>& w,
-                                    const int ex_w)
+                                    const int ex_w,
+                                    const int use_qdw)
 {
   assert( nin() == w.nin());
   assert(nvol() == w.nvol());
@@ -352,7 +354,7 @@ void AField<REALTYPE,ACCEL>::axpy(const int ex, const REALTYPE a,
   if(ith == 0){
     int size2 = m_nin * m_nvol_pad;
     BridgeACC::axpy(m_field, size2 * ex, a, w.m_field, size2 * ex_w,
-                    m_nin, m_nvol_pad);
+                    m_nin, m_nvol_pad, use_qdw);
   }
 #pragma omp barrier
 
@@ -632,7 +634,8 @@ void AField<REALTYPE,ACCEL>::scal(
 
 //====================================================================
 template<typename REALTYPE>
-REALTYPE AField<REALTYPE,ACCEL>::dot(const AField<REALTYPE,ACCEL>& w)
+REALTYPE AField<REALTYPE,ACCEL>::dot(const AField<REALTYPE,ACCEL>& w,
+                                       const int use_qdw)
 {
   assert(check_size(w));
 
@@ -647,7 +650,7 @@ REALTYPE AField<REALTYPE,ACCEL>::dot(const AField<REALTYPE,ACCEL>& w)
     a = BridgeACC::dot(m_field, w.m_field, m_nin, nvex);
 #else
     a = BridgeACC::dot(m_field, w.m_field,
-                       m_red1, m_nin, m_nvol_pad, m_nex);
+                       m_red1, m_nin, m_nvol_pad, m_nex, use_qdw);
 #endif
   }
 #pragma omp barrier
@@ -661,7 +664,8 @@ REALTYPE AField<REALTYPE,ACCEL>::dot(const AField<REALTYPE,ACCEL>& w)
 //====================================================================
 template<typename REALTYPE>
 void AField<REALTYPE,ACCEL>::dotc(REALTYPE& ar, REALTYPE& ai,
-                                  const AField<REALTYPE,ACCEL>& w) const
+                                  const AField<REALTYPE,ACCEL>& w,
+                                  const int use_qdw) const
 {
   assert(check_size(w));
 
@@ -677,7 +681,7 @@ void AField<REALTYPE,ACCEL>::dotc(REALTYPE& ar, REALTYPE& ai,
     BridgeACC::dotc(&ar2, &ai2, m_field, w.m_field, m_nin, nvex);
 #else
     BridgeACC::dotc(&ar2, &ai2, m_field, w.m_field,
-                    m_red1, m_red2, m_nin, m_nvol_pad, m_nex);
+                    m_red1, m_red2, m_nin, m_nvol_pad, m_nex, use_qdw);
 #endif
   }
 
@@ -692,7 +696,7 @@ void AField<REALTYPE,ACCEL>::dotc(REALTYPE& ar, REALTYPE& ai,
 
 //====================================================================
 template<typename REALTYPE>
-REALTYPE AField<REALTYPE,ACCEL>::norm2() const
+REALTYPE AField<REALTYPE,ACCEL>::norm2(const int use_qdw) const
 {
   int ith, nth;
   set_thread(ith, nth);
@@ -704,7 +708,7 @@ REALTYPE AField<REALTYPE,ACCEL>::norm2() const
     int nvex = m_nvol_pad * m_nex;
     a = BridgeACC::norm2(m_field, m_nin, nvex);
 #else
-    a = BridgeACC::norm2(m_field, m_red1, m_nin, m_nvol_pad, m_nex);
+    a = BridgeACC::norm2(m_field, m_red1, m_nin, m_nvol_pad, m_nex, use_qdw);
 #endif
   }
 #pragma omp barrier

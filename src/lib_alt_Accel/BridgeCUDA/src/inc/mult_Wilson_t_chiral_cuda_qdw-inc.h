@@ -12,17 +12,7 @@
       isn = ixyz + (Nx * Ny * Nz) * nn;
       isg = ixyz + (Nx * Ny * Nz) * it + Nst_pad * idir;
 
-      double4 vs0, vs1, vs2, vs3;
-      double4 vt1_c0, vt1_c1, vt1_c2;
-      double4 vt2_c0, vt2_c1, vt2_c2;
-      double2 u_val;
-      double4 tmp_prod;
-      double4 wt1_c0, wt2_c0, wt1_c1, wt2_c1, wt1_c2, wt2_c2;
-      double bc2;
-      double4 tmp_scaled;
-      double4 v2_c0_s0, v2_c0_s1, v2_c0_s2, v2_c0_s3; 
-      double4 v2_c1_s0, v2_c1_s1, v2_c1_s2, v2_c1_s3; 
-      double4 v2_c2_s0, v2_c2_s1, v2_c2_s2, v2_c2_s3;
+      // Variables already declared in xyz include.
 
       // vt1 = s0 + s2
       // vt2 = s1 + s3
@@ -79,10 +69,10 @@
       wt1_c2 = qdw_mult_uc(u_val, vt1_c0); wt2_c2 = qdw_mult_uc(u_val, vt2_c0);
       u_val.x = u_up[IDX2_G_R(2,1,isg)]; u_val.y = u_up[IDX2_G_I(2,1,isg)];
       tmp_prod = qdw_mult_uc(u_val, vt1_c1); QDW_ADD(wt1_c2, wt1_c2, tmp_prod);
-      tmp_prod = qdw_mult_uc(u_val, vt2_c1); QDW_ADD(wt2_c2, wt2_c1, tmp_prod);
+      tmp_prod = qdw_mult_uc(u_val, vt2_c1); QDW_ADD(wt2_c2, wt2_c2, tmp_prod);
       u_val.x = u_up[IDX2_G_R(2,2,isg)]; u_val.y = u_up[IDX2_G_I(2,2,isg)];
       tmp_prod = qdw_mult_uc(u_val, vt1_c2); QDW_ADD(wt1_c2, wt1_c2, tmp_prod);
-      tmp_prod = qdw_mult_uc(u_val, vt2_c2); QDW_ADD(wt2_c2, wt2_c1, tmp_prod);
+      tmp_prod = qdw_mult_uc(u_val, vt2_c2); QDW_ADD(wt2_c2, wt2_c2, tmp_prod);
 
       // Accumulate
       bc2 = 1.0;
@@ -182,10 +172,10 @@
       wt1_c2 = qdw_mult_uc(u_val, vt1_c0); wt2_c2 = qdw_mult_uc(u_val, vt2_c0);
       u_val.x = u_dn[IDX2_G_R(1,2,isg)]; u_val.y = -u_dn[IDX2_G_I(1,2,isg)];
       tmp_prod = qdw_mult_uc(u_val, vt1_c1); QDW_ADD(wt1_c2, wt1_c2, tmp_prod);
-      tmp_prod = qdw_mult_uc(u_val, vt2_c1); QDW_ADD(wt2_c2, wt2_c1, tmp_prod);
+      tmp_prod = qdw_mult_uc(u_val, vt2_c1); QDW_ADD(wt2_c2, wt2_c2, tmp_prod);
       u_val.x = u_dn[IDX2_G_R(2,2,isg)]; u_val.y = -u_dn[IDX2_G_I(2,2,isg)];
       tmp_prod = qdw_mult_uc(u_val, vt1_c2); QDW_ADD(wt1_c2, wt1_c2, tmp_prod);
-      tmp_prod = qdw_mult_uc(u_val, vt2_c2); QDW_ADD(wt2_c2, wt2_c1, tmp_prod);
+      tmp_prod = qdw_mult_uc(u_val, vt2_c2); QDW_ADD(wt2_c2, wt2_c2, tmp_prod);
       
       // Accumulate
       bc2 = 1.0;

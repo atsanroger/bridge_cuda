@@ -20,41 +20,27 @@
       // 1 - g4 = diag(0, 0, 2, 2).
       // s0 -> 0, s1 -> 0, s2 -> 2*s2, s3 -> 2*s3.
       
-      double4 vs0, vs1, vs2, vs3;
-      double4 vt1_c0, vt1_c1, vt1_c2;
-      double4 vt2_c0, vt2_c1, vt2_c2;
-      
-      // Helper: res = 2*a
-      #define PROJ_T_P(res, a) QDW_SCAL(res, 2.0, a)
-      
+      // Variables vs0..vs3, vt1/2_c0..c2, u_val, tmp_prod, wt1/2_c0..c2,
+      // bc2, tmp_scaled, v2_c*_s* are already declared in xyz include.
+
       // Color 0
       vs2 = ((double4*)v1)[IDX2_QDW(0, 2, isn)];
-      PROJ_T_P(vt1_c0, vs2); // s2 -> 2*s2
+      QDW_SCAL(vt1_c0, 2.0, vs2); // s2 -> 2*s2
       
       vs3 = ((double4*)v1)[IDX2_QDW(0, 3, isn)];
-      PROJ_T_P(vt2_c0, vs3); // s3 -> 2*s3
+      QDW_SCAL(vt2_c0, 2.0, vs3); // s3 -> 2*s3
       
       // Color 1
       vs2 = ((double4*)v1)[IDX2_QDW(1, 2, isn)];
-      PROJ_T_P(vt1_c1, vs2); 
+      QDW_SCAL(vt1_c1, 2.0, vs2); 
       vs3 = ((double4*)v1)[IDX2_QDW(1, 3, isn)];
-      PROJ_T_P(vt2_c1, vs3); 
+      QDW_SCAL(vt2_c1, 2.0, vs3); 
       
       // Color 2
       vs2 = ((double4*)v1)[IDX2_QDW(2, 2, isn)];
-      PROJ_T_P(vt1_c2, vs2);
+      QDW_SCAL(vt1_c2, 2.0, vs2);
       vs3 = ((double4*)v1)[IDX2_QDW(2, 3, isn)];
-      PROJ_T_P(vt2_c2, vs3);
-      
-      // Gauge Multiplication
-      double2 u_val;
-      double4 tmp_prod;
-      double4 wt1_c0, wt2_c0, wt1_c1, wt2_c1, wt1_c2, wt2_c2;
-      double bc2;
-      double4 tmp_scaled;
-      double4 v2_c0_s0, v2_c0_s1, v2_c0_s2, v2_c0_s3; 
-      double4 v2_c1_s0, v2_c1_s1, v2_c1_s2, v2_c1_s3; 
-      double4 v2_c2_s0, v2_c2_s1, v2_c2_s2, v2_c2_s3;
+      QDW_SCAL(vt2_c2, 2.0, vs3);
 
       // Color 0 Result
       u_val.x = u_up[IDX2_G_R(0,0,isg)]; u_val.y = u_up[IDX2_G_I(0,0,isg)];
@@ -84,10 +70,10 @@
       wt2_c2 = qdw_mult_uc(u_val, vt2_c0);
       u_val.x = u_up[IDX2_G_R(2,1,isg)]; u_val.y = u_up[IDX2_G_I(2,1,isg)];
       tmp_prod = qdw_mult_uc(u_val, vt1_c1); QDW_ADD(wt1_c2, wt1_c2, tmp_prod);
-      tmp_prod = qdw_mult_uc(u_val, vt2_c1); QDW_ADD(wt2_c2, wt2_c1, tmp_prod);
+      tmp_prod = qdw_mult_uc(u_val, vt2_c1); QDW_ADD(wt2_c2, wt2_c2, tmp_prod);
       u_val.x = u_up[IDX2_G_R(2,2,isg)]; u_val.y = u_up[IDX2_G_I(2,2,isg)];
       tmp_prod = qdw_mult_uc(u_val, vt1_c2); QDW_ADD(wt1_c2, wt1_c2, tmp_prod);
-      tmp_prod = qdw_mult_uc(u_val, vt2_c2); QDW_ADD(wt2_c2, wt2_c1, tmp_prod);
+      tmp_prod = qdw_mult_uc(u_val, vt2_c2); QDW_ADD(wt2_c2, wt2_c2, tmp_prod);
       
       // Accumulate T_P
       bc2 = 1.0;
@@ -160,10 +146,10 @@
       wt1_c2 = qdw_mult_uc(u_val, vt1_c0); wt2_c2 = qdw_mult_uc(u_val, vt2_c0);
       u_val.x = u_dn[IDX2_G_R(1,2,isg)]; u_val.y = -u_dn[IDX2_G_I(1,2,isg)];
       tmp_prod = qdw_mult_uc(u_val, vt1_c1); QDW_ADD(wt1_c2, wt1_c2, tmp_prod);
-      tmp_prod = qdw_mult_uc(u_val, vt2_c1); QDW_ADD(wt2_c2, wt2_c1, tmp_prod);
+      tmp_prod = qdw_mult_uc(u_val, vt2_c1); QDW_ADD(wt2_c2, wt2_c2, tmp_prod);
       u_val.x = u_dn[IDX2_G_R(2,2,isg)]; u_val.y = -u_dn[IDX2_G_I(2,2,isg)];
       tmp_prod = qdw_mult_uc(u_val, vt1_c2); QDW_ADD(wt1_c2, wt1_c2, tmp_prod);
-      tmp_prod = qdw_mult_uc(u_val, vt2_c2); QDW_ADD(wt2_c2, wt2_c1, tmp_prod);
+      tmp_prod = qdw_mult_uc(u_val, vt2_c2); QDW_ADD(wt2_c2, wt2_c2, tmp_prod);
       
       // Accumulate T_M
       bc2 = 1.0;

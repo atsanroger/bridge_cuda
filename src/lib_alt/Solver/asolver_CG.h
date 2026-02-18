@@ -49,6 +49,9 @@ class ASolver_CG : public ASolver<AFIELD>
   //! working vectors.
   AFIELD m_x, m_r, m_p, m_s;
 
+  bool m_use_QDW;
+  int m_use_qdw_int;
+
  public:
   //! constructor.
   ASolver_CG(AFopr<AFIELD> *fopr)

@@ -302,6 +302,15 @@ void mult_wilson_D_chiral(float* v2, float* u,
                           float* v1,
                           int *Nsize, int *bc, float kappa);
 
+// QDW Wrappers (float stubs)
+void mult_wilson_qdw_D_dirac(float* v2, float* u,
+                             float* v1,
+                             int *Nsize, int *bc, float kappa);
+
+void mult_wilson_qdw_D_chiral(float* v2, float* u,
+                              float* v1,
+                              int *Nsize, int *bc, float kappa);
+
 void mult_wilson_1_dirac(
                     float* buf_xp, float* buf_xm,
                     float* buf_yp, float* buf_ym,

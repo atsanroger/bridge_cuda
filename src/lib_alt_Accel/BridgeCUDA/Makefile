@@ -6,8 +6,7 @@
 ################################################################################
 SHELL := /bin/bash
 
-ARCH = -gencode=arch=compute_70,code=sm_70 \
-       -gencode=arch=compute_80,code=sm_80 \
+ARCH = -gencode=arch=compute_80,code=sm_80 \
        -gencode=arch=compute_86,code=sm_86 \
        -gencode=arch=compute_90,code=sm_90
 

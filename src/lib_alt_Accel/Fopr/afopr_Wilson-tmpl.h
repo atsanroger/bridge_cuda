@@ -185,8 +185,6 @@ void AFopr_Wilson<AFIELD>::set_parameters(const Parameters& params)
   //- fetch optimization flags
   m_use_QDW = false;
   m_use_QTW = false;
-  params.fetch_bool("use_QDW", m_use_QDW);
-  params.fetch_bool("use_QTW", m_use_QTW);
 
 
   //- setting gamma matrix representation

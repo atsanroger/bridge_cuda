@@ -71,6 +71,14 @@ void ASolver_CG<AFIELD>::set_parameters(const Parameters& params)
 
   int Niter2 = Niter * Nrestart;
   set_parameters(Niter2, Stop_cond, init_guess_mode);
+
+  m_use_QDW = false;
+  params.fetch_bool("use_QDW", m_use_QDW);
+  m_use_qdw_int = m_use_QDW ? 1 : 0;
+
+  if (m_fopr) {
+    m_fopr->set_use_QDW(m_use_QDW);
+  }
 }
 
 
@@ -112,7 +120,7 @@ void ASolver_CG<AFIELD>::solve(AFIELD& xq, const AFIELD& b,
 {
   copy(m_s, b);
 
-  real_t sr    = norm2(m_s);
+  real_t sr    = m_s.norm2(m_use_qdw_int);
   real_t snorm = 1.0 / sr;
   vout.detailed(m_vl, "  snorm = %22.15e\n", snorm);
 
@@ -156,8 +164,8 @@ void ASolver_CG<AFIELD>::solve(AFIELD& xq, const AFIELD& b,
 
   m_fopr->mult(m_s, xq);
 
-  axpy(m_s, real_t(-1.0), b);
-  real_t diff2 = norm2(m_s);
+  m_s.axpy(real_t(-1.0), b, m_use_qdw_int);
+  real_t diff2 = m_s.norm2(m_use_qdw_int);
 
 #pragma omp master
   {
@@ -179,9 +187,9 @@ void ASolver_CG<AFIELD>::solve_CG_init(real_t& rrp, real_t& rr)
     copy(m_r, m_s);
     copy(m_x, m_s);
     m_fopr->mult(m_s, m_x);
-    axpy(m_r, real_t(-1.0), m_s);
+    m_r.axpy(real_t(-1.0), m_s, m_use_qdw_int);
     copy(m_p, m_r);
-    rr  = norm2(m_r);
+    rr  = m_r.norm2(m_use_qdw_int);
     rrp = rr;
   } else if (m_initial_mode == InitialGuess::GIVEN) {
     vout.crucial("%s: InitialGuess::GIVEN is not yet ready\n", class_name.c_str());
@@ -194,7 +202,7 @@ void ASolver_CG<AFIELD>::solve_CG_init(real_t& rrp, real_t& rr)
     m_s.set(0.0);
     m_x.set(0.0);
     copy(m_p, m_r);
-    rr  = norm2(m_r);
+    rr  = m_r.norm2(m_use_qdw_int);
     rrp = rr;
   } else {
     vout.crucial("%s: unkown init guess mode\n", class_name.c_str());
@@ -211,14 +219,14 @@ void ASolver_CG<AFIELD>::solve_CG_step(real_t& rrp, real_t& rr)
 
   m_fopr->mult(m_s, m_p);
 
-  real_t pap = dot(m_s, m_p);
+  real_t pap = m_s.dot(m_p, m_use_qdw_int);
   //    m_fopr->mult_normA_dev(pap, m_s, m_p);
   real_t cr = rrp / pap;
 
-  axpy(m_x, cr, m_p);
+  m_x.axpy(cr, m_p, m_use_qdw_int);
 
-  axpy(m_r, -cr, m_s);
-  rr = norm2(m_r);
+  m_r.axpy(-cr, m_s, m_use_qdw_int);
+  rr = m_r.norm2(m_use_qdw_int);
 
   real_t bk = rr / rrp;
 

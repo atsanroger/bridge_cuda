@@ -166,10 +166,10 @@ public:
     void copy(const int ex,
               const AField<real_t, ACCEL>& w, const int ex_w);
 
-    void axpy(const real_t, const AField<real_t, ACCEL>&);
+    void axpy(const real_t, const AField<real_t, ACCEL>&, const int use_qdw = 0);
 
     void axpy(const int ex, const real_t a, 
-              const AField<real_t, ACCEL>& w, const int ex_w);
+              const AField<real_t, ACCEL>& w, const int ex_w, const int use_qdw = 0);
 
     //! complex version of axpy: real and imaginary parts in order.
     void axpy(const real_t a_r, const real_t a_i,
@@ -216,13 +216,13 @@ public:
 
     void scal(const complex_t, const int ex);
 
-    real_t dot(const AField<real_t, ACCEL>&);
+    real_t dot(const AField<real_t, ACCEL>&, const int use_qdw = 0);
 
     //! complex inner-product: real and imaginary parts in order.
-    void dotc(real_t&, real_t&, const AField<real_t, ACCEL>&) const;
+    void dotc(real_t&, real_t&, const AField<real_t, ACCEL>&, const int use_qdw = 0) const;
 
     //! square norm squared (|v|^2).
-    real_t norm2(void) const;
+    real_t norm2(const int use_qdw = 0) const;
 
     //! square norm squared (|v|^2).
     real_t norm2_host(void) const;

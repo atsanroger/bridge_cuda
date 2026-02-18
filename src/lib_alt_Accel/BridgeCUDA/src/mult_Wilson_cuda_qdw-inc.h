@@ -103,7 +103,6 @@ void mult_wilson_qdw_D_dirac_kernel(
   int iz = lz;
 
   #include "inc/mult_Wilson_xyz_cuda_qdw-inc.h"
-
   #include "inc/mult_Wilson_t_dirac_cuda_qdw-inc.h"
 
   // Final update: v2 = v1 - kappa * temp

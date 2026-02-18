@@ -65,7 +65,6 @@ class AFopr_Wilson : public AFopr<AFIELD>
 
   int m_Nsize[4];
   int m_bc[4];
-  int m_bc[4];
   int m_bc2[4];
 
   bool m_use_QDW;
@@ -110,12 +109,20 @@ public:
   //! returns mult mode.
   std::string get_mode() const { return m_mode; }
 
+  //! multiplies fermion operator to a given field.
   void mult(AFIELD&, const AFIELD&);
+  //! hermitian conjugate of mult.
   void mult_dag(AFIELD&, const AFIELD&);
   void mult_gm5(AFIELD&, const AFIELD&);
 
   void mult(AFIELD&, const AFIELD&, const std::string mode);
   void mult_dag(AFIELD&, const AFIELD&, const std::string mode);
+
+  //! setting the QDW flag for high-precision arithmetic.
+  void set_use_QDW(bool flag) { m_use_QDW = flag; }
+
+  //! gets the QDW flag for high-precision arithmetic.
+  bool get_use_QDW() const { return m_use_QDW; }
 
   //! upward nearest neighbor hopping term.
   virtual void mult_up(int mu, AFIELD&, const AFIELD&);
