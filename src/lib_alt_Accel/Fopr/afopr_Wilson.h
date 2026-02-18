@@ -65,7 +65,12 @@ class AFopr_Wilson : public AFopr<AFIELD>
 
   int m_Nsize[4];
   int m_bc[4];
+  int m_bc[4];
   int m_bc2[4];
+
+  bool m_use_QDW;
+  bool m_use_QTW;
+
 
 public:
   //! constructor (to be discarded).

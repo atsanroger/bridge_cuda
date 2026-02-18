@@ -32,6 +32,11 @@
 #define IDX2_SP_I(ic, id, ist)  (((ist)%NWP) + NWP*(2*(ic)+1 + NVC*((id) + ND*((ist)/NWP))))
 #define IDX2_SP(ivc, id, ist)   (((ist)%NWP) + NWP*((ivc)    + NVC*((id) + ND*((ist)/NWP))))
 
+// for QDW Wilson-type fermion (double4)
+#define IDX2_QDW(ic, id, ist)   (((ist)%NWP) + NWP*((ic) + NC*((id) + ND*((ist)/NWP))))
+
+
+
 // for Domainwall-type fermion
 #define IDX2_SP_5D_R(ic, id, is, Ns, ist)  (((ist)%NWP) + NWP*(2*(ic)   + NVC*((id) + ND*( (is) + (Ns) * ((ist)/NWP)))))
 #define IDX2_SP_5D_I(ic, id, is, Ns, ist)  (((ist)%NWP) + NWP*(2*(ic)+1 + NVC*((id) + ND*( (is) + (Ns) * ((ist)/NWP)))))

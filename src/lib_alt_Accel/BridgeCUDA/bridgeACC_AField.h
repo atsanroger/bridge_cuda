@@ -12,6 +12,86 @@
 
 namespace BridgeACC {
 
+#ifdef __CUDACC__
+// QDW (Quasi Double-Word) Helper Macros & Functions
+// Data Layout Option C: double4 {r_hi, i_hi, r_lo, i_lo}
+
+#define QDW_R_HI(val) (val.x)
+#define QDW_I_HI(val) (val.y)
+#define QDW_R_LO(val) (val.z)
+#define QDW_I_LO(val) (val.w)
+
+__device__ __forceinline__ void TwoSum(double a, double b, double &s, double &e) {
+    s = a + b;
+    double v = s - a;
+    e = (a - (s - v)) + (b - v);
+}
+
+__device__ __forceinline__ void TwoProd(double a, double b, double &p, double &e) {
+    p = a * b;
+    e = __fma_rn(a, b, -p);
+}
+
+// QDW Add: res = a + b
+#define QDW_ADD(res, a, b) \
+    QDW_R_HI(res) = QDW_R_HI(a) + QDW_R_HI(b); \
+    QDW_I_HI(res) = QDW_I_HI(a) + QDW_I_HI(b); \
+    QDW_R_LO(res) = QDW_R_LO(a) + QDW_R_LO(b); \
+    QDW_I_LO(res) = QDW_I_LO(a) + QDW_I_LO(b);
+
+// QDW Subtract: res = a - b
+#define QDW_SUB(res, a, b) \
+    QDW_R_HI(res) = QDW_R_HI(a) - QDW_R_HI(b); \
+    QDW_I_HI(res) = QDW_I_HI(a) - QDW_I_HI(b); \
+    QDW_R_LO(res) = QDW_R_LO(a) - QDW_R_LO(b); \
+    QDW_I_LO(res) = QDW_I_LO(a) - QDW_I_LO(b);
+
+// QDW Negate: res = -a
+#define QDW_NEG(res, a) \
+    QDW_R_HI(res) = -QDW_R_HI(a); \
+    QDW_I_HI(res) = -QDW_I_HI(a); \
+    QDW_R_LO(res) = -QDW_R_LO(a); \
+    QDW_I_LO(res) = -QDW_I_LO(a);
+
+
+// QDW Multiply: res = u * v (Complex * Complex QDW)
+// u is double2 (r, i), v is double4 (QDW)
+__device__ __forceinline__ double4 qdw_mult_uc(double2 u, double4 v) {
+    double4 res;
+    double p_r_hi, e_r_hi;
+    double p_i_hi, e_i_hi;
+    
+    // Real part: (ur*vr - ui*vi)
+    double p1, e1, p2, e2;
+    TwoProd(u.x, v.x, p1, e1); // ur * vr_hi
+    TwoProd(u.y, v.y, p2, e2); // ui * vi_hi
+    TwoSum(p1, -p2, p_r_hi, e_r_hi); // p1 - p2
+    
+    // Low part approximation
+    double p_r_lo = u.x * v.z - u.y * v.w;
+    
+    res.x = p_r_hi;
+    res.z = p_r_lo + e1 - e2 + e_r_hi;
+
+    // Imaginary part: (ur*vi + ui*vr)
+    TwoProd(u.x, v.y, p1, e1); // ur * vi_hi
+    TwoProd(u.y, v.x, p2, e2); // ui * vr_hi
+    TwoSum(p1, p2, p_i_hi, e_i_hi); // p1 + p2
+    
+    double p_i_lo = u.x * v.w + u.y * v.z;
+    
+    res.y = p_i_hi;
+    res.w = p_i_lo + e1 + e2 + e_i_hi;
+    
+    return res;
+}
+
+#define QDW_LOAD(var, ptr, idx) var = ptr[idx]
+#define QDW_STORE(ptr, idx, var) ptr[idx] = var
+
+#endif // __CUDACC__
+
+
 // real_t = double
 
 void afield_init(double *data, const int size);

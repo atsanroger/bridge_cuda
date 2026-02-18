@@ -29,6 +29,16 @@ void mult_wilson_D_chiral(double* v2, double* u,
                           double* v1,
                           int *Nsize, int *bc, double kappa);
 
+// QDW Wrappers
+void mult_wilson_qdw_D_dirac(double* v2, double* u,
+                             double* v1,
+                             int *Nsize, int *bc, double kappa);
+
+void mult_wilson_qdw_D_chiral(double* v2, double* u,
+                              double* v1,
+                              int *Nsize, int *bc, double kappa);
+
+
 void mult_wilson_1_dirac(
                     double* buf_xp, double* buf_xm,
                     double* buf_yp, double* buf_ym,

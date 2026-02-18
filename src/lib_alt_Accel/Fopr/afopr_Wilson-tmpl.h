@@ -182,6 +182,13 @@ void AFopr_Wilson<AFIELD>::set_parameters(const Parameters& params)
     exit(EXIT_FAILURE);
  }
 
+  //- fetch optimization flags
+  m_use_QDW = false;
+  m_use_QTW = false;
+  params.fetch_bool("use_QDW", m_use_QDW);
+  params.fetch_bool("use_QTW", m_use_QTW);
+
+
   //- setting gamma matrix representation
   std::string repr;
   err = params.fetch_string("gamma_matrix_type", repr);
@@ -480,11 +487,18 @@ void AFopr_Wilson<AFIELD>::mult_D(AFIELD &v, const AFIELD &w)
     chset_send.start();
 
     // bulk part
-    if(m_repr == DIRAC){
+    if(m_use_QDW){
+      if(m_repr == DIRAC){
+        BridgeACC::mult_wilson_qdw_D_dirac(v2, u, v1, m_Nsize, m_bc2, m_CKs);
+      }else{
+        BridgeACC::mult_wilson_qdw_D_chiral(v2, u, v1, m_Nsize, m_bc2, m_CKs);
+      }
+    }else if(m_repr == DIRAC){
       BridgeACC::mult_wilson_D_dirac(v2, u, v1, m_Nsize, m_bc2, m_CKs);
     }else{
       BridgeACC::mult_wilson_D_chiral(v2, u, v1, m_Nsize, m_bc2, m_CKs);
     }
+
 
     chset_send.wait();
     chset_recv.wait();

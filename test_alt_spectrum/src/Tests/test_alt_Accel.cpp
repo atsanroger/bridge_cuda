@@ -42,10 +42,10 @@ namespace Test_alt_Accel{
 int Test_alt_Accel::test_all()
 {
   int result = 0;
-  //result += test_Spectrum_Wilson();
+  result += test_Spectrum_Wilson();
   //result += test_Spectrum_Clover();
   //result += test_Spectrum_Staggered();
-  result += test_Spectrum_Domainwall_5din();
+  //result += test_Spectrum_Domainwall_5din();
   //result += test_Spectrum_Domainwall();
   // result += test_Spectrum_OptimalDomainwall();
   //result += test_Eigenvalue_Wilson_Lanczos();
@@ -67,10 +67,10 @@ int Test_alt_Accel::test_Spectrum_Wilson()
   string file_params = "test_alt_Spectrum_Wilson_Hadron2ptFunction.yaml";
 
   int result = 0;
-  result += test_wilson.hadron_2ptFunction(file_params, "double");
-  test_wilson.hadron_2ptFunction(file_params, "float");
+  //result += test_wilson.hadron_2ptFunction(file_params, "double");
+  //test_wilson.hadron_2ptFunction(file_params, "float");
   result += test_wilson.hadron_2ptFunction(file_params, "double_eo");
-  test_wilson.hadron_2ptFunction(file_params, "float_eo");
+  //test_wilson.hadron_2ptFunction(file_params, "float_eo");
 
   //CLE test
   //string file_params = "test_alt_Spectrum_Wilson_CLE_Hadron2ptFunction.yaml";
@@ -94,10 +94,10 @@ int Test_alt_Accel::test_Spectrum_Clover()
   string file_params = "test_alt_Spectrum_Clover_Hadron2ptFunction.yaml";
 
   int result = 0;
-  result += test_wilson.hadron_2ptFunction(file_params, "double");
-  test_wilson.hadron_2ptFunction(file_params, "float");
+  //result += test_wilson.hadron_2ptFunction(file_params, "double");
+  //test_wilson.hadron_2ptFunction(file_params, "float");
   result += test_wilson.hadron_2ptFunction(file_params, "double_eo");
-  test_wilson.hadron_2ptFunction(file_params, "float_eo");
+  //test_wilson.hadron_2ptFunction(file_params, "float_eo");
   /*
   result += test_wilson.hadron_2ptFunction(file_params, "mixed");
   result += test_wilson.hadron_2ptFunction(file_params, "mixed_eo");

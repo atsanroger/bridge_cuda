@@ -135,9 +135,9 @@ void mult_wilson_D_dirac_kernel(
   int iz  = (site/(Nx * Ny)) % Nz;
   int ixy = site % (Nx * Ny);
 
-#include "inc/mult_Wilson_xyz_cuda-inc.h"
+  #include "inc/mult_Wilson_xyz_cuda-inc.h"
 
-#include "inc/mult_Wilson_t_dirac_cuda-inc.h"
+  #include "inc/mult_Wilson_t_dirac_cuda-inc.h"
 
   // aypx and write back to global memory
   v2[IDX2_SP_R(0,0,site)] = v1[IDX2_SP_R(0,0,site)] - kappa * v2_01;

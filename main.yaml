@@ -63,15 +63,14 @@ GaugeFixing:
 Solver:
   ## solver_type = {CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx}
 #  solver_type                         : BiCGStab_Cmplx
-#  solver_type                         : BiCGStab
-  solver_type                         : CGNR
-  use_QDW                             : false
-  use_QTW                             : false
+  solver_type                         : BiCGStab
+#  solver_type                         : CGNR
+  use_qtw                             : true
 #  maximum_number_of_iteration         : 100
-  maximum_number_of_iteration         : 10
+  maximum_number_of_iteration         : 100
   maximum_number_of_restart           : 40
-#  convergence_criterion_squared       : 1.0e-32
-  convergence_criterion_squared       : 1.0e-28
+  convergence_criterion_squared       : 1.0e-32
+#  convergence_criterion_squared       : 1.0e-28
 #  convergence_criterion_squared       : 1.0e-14
   use_initial_guess                   : false
   ## additional parameters for BiCGStab series

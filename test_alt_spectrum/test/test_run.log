@@ -1,0 +1,40 @@
+Bridge++ 2.0.0
+
+Timer: timestamp: 2026/02/05 20:54:30 +0900
+input filename : main.yaml
+
+file = main.yaml
+Main: input parameters
+  lattice_size     = [32, 8, 8, 12]
+  grid_size        = [1, 1, 1, 1]
+  number of thread = 1
+  number of color  = 3
+  logfile          = stdout
+  ildg_logfile     = stdout
+  vlevel           = General
+
+Lattice parameters:
+  Lx = 32,  Ly = 8,  Lz = 8,  Lt = 12,
+  Nx = 32,  Ny = 8,  Nz = 8,  Nt = 12,
+  NPEx = 1,  NPEy  = 1,  NPEz  = 1,  NPEt  = 1,
+  Lvol = 24576,  Nvol = 24576,  NPE = 1,
+  Ndim = 4
+  Nc   = 3
+  Nd   = 4
+
+ThreadManager: initialization
+Warning at ThreadManager: Nthread(env) != Nthread(input)
+  Number of threads(env)   = 2
+  Number of threads(input) = 1
+  reset Nthread = Nthread(input).
+  Number of threads = 1
+file = test_Eigensolver.yaml
+Error at ParameterManager_YAML: unable to read parameter file: test_Eigensolver.yaml.
+--------------------------------------------------------------------------
+MPI_ABORT was invoked on rank 0 in communicator MPI_COMM_WORLD
+with errorcode 1.
+
+NOTE: invoking MPI_ABORT causes Open MPI to kill all MPI processes.
+You may or may not see output from other processes, depending on
+exactly when Open MPI kills them.
+--------------------------------------------------------------------------

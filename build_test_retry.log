@@ -1,0 +1,43 @@
+Loading nvhpc-hpcx-cuda13/25.11
+  Loading
+    requirement: hpcx
+generating make.inc file ...
+Starting build_bridgecuda...
+make -C src/lib_alt_Accel/BridgeCUDA all
+make[1]: Entering directory '/home/wlchenhome/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA'
+Bridge++'s CUDA LIBRARY STARTING
+Total source files: 17
+make[1]: Leaving directory '/home/wlchenhome/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA'
+Creating symbolic link for libbridgecuda.a...
+rm -f ./build/libbridgecuda.a
+ln -s ../src/lib_alt_Accel/BridgeCUDA/libbridgecuda.a ./build/libbridgecuda.a
+Finished building BridgeCUDA
+make: Entering directory '/home/wlchenhome/Bridge/with_alpha/test_alt_spectrum/src'
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel  -I./ -c -o main.o main.cpp
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel  -I./ -c -o Tests/job_Utils.o Tests/job_Utils.cpp
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel  -I./ -c -o Tests/test.o Tests/test.cpp
+cat: ../../build/message.txt: No such file or directory
+make: *** [Makefile:31: msg] Error 1
+make: *** Waiting for unfinished jobs....
+"Tests/test.h", line 19: catastrophic error: cannot open source file "Parameters/parameterManager_YAML.h"
+  #include "Parameters/parameterManager_YAML.h"
+                                               ^
+
+1 catastrophic error detected in the compilation of "Tests/test.cpp".
+Compilation terminated.
+make: *** [Makefile:28: Tests/test.o] Error 2
+"main.cpp", line 17: catastrophic error: cannot open source file "lib/Communicator/communicator.h"
+  #include "lib/Communicator/communicator.h"
+                                            ^
+
+1 catastrophic error detected in the compilation of "main.cpp".
+Compilation terminated.
+make: *** [Makefile:28: main.o] Error 2
+"Tests/job_Utils.cpp", line 8: catastrophic error: cannot open source file "Parameters/commonParameters.h"
+  #include "Parameters/commonParameters.h"
+                                          ^
+
+1 catastrophic error detected in the compilation of "Tests/job_Utils.cpp".
+Compilation terminated.
+make: *** [Makefile:28: Tests/job_Utils.o] Error 2
+make: Leaving directory '/home/wlchenhome/Bridge/with_alpha/test_alt_spectrum/src'

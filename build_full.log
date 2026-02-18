@@ -1,0 +1,35 @@
+Loading nvhpc-hpcx-cuda13/25.11
+  Loading
+    requirement: hpcx
+Starting build_bridgecuda...
+make -C src/lib_alt_Accel/BridgeCUDA all
+make[1]: Entering directory '/home/wlchenhome/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA'
+Bridge++'s CUDA LIBRARY STARTING
+Total source files: 17
+Progress: [23/17] Compiling bridgeACC.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC.cu -o bridgeACC.o
+Progress: [24/17] Compiling bridgeACC_double.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_double.cu -o bridgeACC_double.o
+Progress: [25/17] Compiling bridgeACC_float.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_float.cu -o bridgeACC_float.o
+Progress: [26/17] Compiling bridgeACC_AField.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_AField.cu -o bridgeACC_AField.o
+Progress: [27/17] Compiling bridgeACC_AField_double.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_AField_double.cu -o bridgeACC_AField_double.o
+Progress: [28/17] Compiling bridgeACC_AField_float.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_AField_float.cu -o bridgeACC_AField_float.o
+Progress: [29/17] Compiling bridgeACC_Wilson_double.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_Wilson_double.cu -o bridgeACC_Wilson_double.o
+Progress: [30/17] Compiling bridgeACC_Wilson_float.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_Wilson_float.cu -o bridgeACC_Wilson_float.o
+Progress: [31/17] Compiling bridgeACC_Clover_double.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_Clover_double.cu -o bridgeACC_Clover_double.o
+Progress: [32/17] Compiling bridgeACC_Clover_float.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_Clover_float.cu -o bridgeACC_Clover_float.o
+Progress: [33/17] Compiling bridgeACC_CloverTerm_double.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_CloverTerm_double.cu -o bridgeACC_CloverTerm_double.o
+Progress: [34/17] Compiling bridgeACC_CloverTerm_float.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_CloverTerm_float.cu -o bridgeACC_CloverTerm_float.o
+Progress: [35/17] Compiling bridgeACC_Clover_coarse_double.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_Clover_coarse_double.cu -o bridgeACC_Clover_coarse_double.o
+Progress: [36/17] Compiling bridgeACC_Clover_coarse_float.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_Clover_coarse_float.cu -o bridgeACC_Clover_coarse_float.o
+Progress: [37/17] Compiling constant_memory.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c constant_memory.cu -o constant_memory.o
+Progress: [38/17] Compiling bridgeACC_Domainwall_5din_double.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_Domainwall_5din_double.cu -o bridgeACC_Domainwall_5din_double.o
+Progress: [39/17] Compiling bridgeACC_Domainwall_5din_float.cu, nvcc -O3 -std=c++11 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -rdc=true --disable-warnings -DUSE_GROUP_SU3  -c bridgeACC_Domainwall_5din_float.cu -o bridgeACC_Domainwall_5din_float.o
+nvcc -dlink bridgeACC.o bridgeACC_double.o bridgeACC_float.o bridgeACC_AField.o bridgeACC_AField_double.o bridgeACC_AField_float.o bridgeACC_Wilson_double.o bridgeACC_Wilson_float.o bridgeACC_Clover_double.o bridgeACC_Clover_float.o bridgeACC_CloverTerm_double.o bridgeACC_CloverTerm_float.o bridgeACC_Clover_coarse_double.o bridgeACC_Clover_coarse_float.o constant_memory.o bridgeACC_Domainwall_5din_double.o bridgeACC_Domainwall_5din_float.o -o link.o -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_90,code=sm_90 -lcudart
+ar rcs libbridgecuda.a bridgeACC.o bridgeACC_double.o bridgeACC_float.o bridgeACC_AField.o bridgeACC_AField_double.o bridgeACC_AField_float.o bridgeACC_Wilson_double.o bridgeACC_Wilson_float.o bridgeACC_Clover_double.o bridgeACC_Clover_float.o bridgeACC_CloverTerm_double.o bridgeACC_CloverTerm_float.o bridgeACC_Clover_coarse_double.o bridgeACC_Clover_coarse_float.o constant_memory.o bridgeACC_Domainwall_5din_double.o bridgeACC_Domainwall_5din_float.o link.o
+ranlib libbridgecuda.a
+libbridgecuda.a has been successfully compiled.
+make[1]: Leaving directory '/home/wlchenhome/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA'
+Creating symbolic link for libbridgecuda.a...
+rm -f ./build/libbridgecuda.a
+ln -s ../src/lib_alt_Accel/BridgeCUDA/libbridgecuda.a ./build/libbridgecuda.a
+ln: failed to create symbolic link './build/libbridgecuda.a': No such file or directory
+make: *** [Makefile:829: build_bridgecuda] Error 1

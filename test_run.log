@@ -1,0 +1,54 @@
+Bridge++ 2.0.0
+
+Timer: timestamp: 2026/02/05 20:53:36 +0900
+input filename : main.yaml
+
+file = main.yaml
+Parameters: get_Parameters: key 'Main' not found.
+Parameters: fetch_int_vector: key 'lattice_size' not found.
+Parameters: fetch_int_vector: key 'grid_size' not found.
+Parameters: fetch_int: key 'number_of_thread' not found.
+Parameters: fetch_int: key 'number_of_color' not found.
+Parameters: fetch_string: key 'log_filename' not found.
+Parameters: fetch_string: key 'ildg_log_filename' not found.
+Parameters: fetch_string: key 'verbose_level' not found.
+Main: input parameters
+  lattice_size     = []
+  grid_size        = []
+  number of thread = 0
+  number of color  = 3
+  logfile          = stdout
+  ildg_logfile     = stdout
+  vlevel           = General
+ERROR: find_map: length mismatch: 4, expected 0.
+[hanabatake2022:20396:0:20396] Caught signal 11 (Segmentation fault: address not mapped to object at address (nil))
+==== backtrace (tid:  20396) ====
+ 0 0x0000000000042520 __sigaction()  ???:0
+ 1 0x000000000082de61 CommonParameters::init()  /home/wlchenhome/Bridge/with_alpha/src/lib/Parameters/commonParameters.cpp:91
+ 2 0x00000000005bd366 bridge_setup()  /home/wlchenhome/Bridge/with_alpha/src/lib/bridge_setup.cpp:166
+ 3 0x00000000005bd02d bridge_setup()  /home/wlchenhome/Bridge/with_alpha/src/lib/bridge_setup.cpp:126
+ 4 0x0000000000426ea8 main()  /home/wlchenhome/Bridge/with_alpha/tests/src/main.cpp:62
+ 5 0x0000000000029d90 __libc_init_first()  ???:0
+ 6 0x0000000000029e40 __libc_start_main()  ???:0
+ 7 0x0000000000426b65 _start()  ???:0
+=================================
+[hanabatake2022:20396] *** Process received signal ***
+[hanabatake2022:20396] Signal: Segmentation fault (11)
+[hanabatake2022:20396] Signal code:  (-6)
+[hanabatake2022:20396] Failing at address: 0x3e800004fac
+[hanabatake2022:20396] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x42520)[0x78a329642520]
+[hanabatake2022:20396] [ 1] ./build/tests/bridge.all.elf[0x82de61]
+[hanabatake2022:20396] [ 2] ./build/tests/bridge.all.elf[0x5bd366]
+[hanabatake2022:20396] [ 3] ./build/tests/bridge.all.elf[0x5bd02d]
+[hanabatake2022:20396] [ 4] ./build/tests/bridge.all.elf[0x426ea8]
+[hanabatake2022:20396] [ 5] /lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x78a329629d90]
+[hanabatake2022:20396] [ 6] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x78a329629e40]
+[hanabatake2022:20396] [ 7] ./build/tests/bridge.all.elf[0x426b65]
+[hanabatake2022:20396] *** End of error message ***
+--------------------------------------------------------------------------
+Primary job  terminated normally, but 1 process returned
+a non-zero exit code. Per user-direction, the job has been aborted.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+mpirun noticed that process rank 0 with PID 0 on node hanabatake2022 exited on signal 11 (Segmentation fault).
+--------------------------------------------------------------------------
