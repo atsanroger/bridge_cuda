@@ -362,7 +362,7 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel(
     }
 
     if (sizeof(real_t) == 4) {
-      for (is = 1; is < Ns-1; ++is) {
+      for (int is = 1; is < Ns-1; ++is) {
         real_t a = real_t(0.5) * dm_con[is] * dpinv_con[is-1];
         real_t eis = e_con[is];
         xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[3];
@@ -379,7 +379,7 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel(
         yt[0] += eis * vt[0]; yt[1] += eis * vt[1]; yt[2] += eis * vt[2]; yt[3] += eis * vt[3];
       }
     } else {
-      for (is = 1; is < Ns-1; ++is) {
+      for (int is = 1; is < Ns-1; ++is) {
         real_t a = real_t(0.5) * dm_con[is] * dpinv_con[is-1];
         real_t eis = e_con[is];
         for(int id=0; id<ND; ++id) xt[id] = vt[id];
@@ -394,7 +394,7 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel(
     }
 
     if (sizeof(real_t) == 4) {
-      is = Ns-1;
+      int is = Ns-1;
       xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[3];
       int last_is_offset = stride_is * is;
       vt[0] = wp[base_site_idx + stride_id * 0 + last_is_offset];
@@ -411,8 +411,8 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel(
       vp[base_site_idx + stride_id * 2 + last_is_offset] = vt[2];
       vp[base_site_idx + stride_id * 3 + last_is_offset] = vt[3];
     } else {
-      is = Ns-1;
-      for(int id=0; id<ND; ++id) xt[id] = vt[id];
+      int is = Ns-1;
+      for(int id = 0; id < ND; ++id) xt[id] = vt[id];
       for(int id = 0; id < ND; ++id) vt[id] = wp[base_site_idx + stride_id * id + stride_is * is];
       real_t a_last = real_t(0.5) * dm_con[is] * dpinv_con[is-1];
       vt[0] += a_last * (xt[0] + xt[2]) - real_t(0.5) * (yt[0] - yt[2]);
@@ -424,7 +424,7 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel(
     // L_inv completed
 
     if (sizeof(real_t) == 4) {
-      is = Ns-1;
+      int is = Ns-1;
       real_t aa = dpinv_con[Ns-1];
       real_t f1 = real_t(0.5) * (real_t(1.0) + alpha);
       real_t f2 = real_t(0.5) * (real_t(-1.0) + alpha);
@@ -439,7 +439,7 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel(
       vp[base_site_idx + last_is_offset + stride_id * 3] = vt[3];
       yt[0] = real_t(0.5) * (vt[0] + vt[2]); yt[1] = real_t(0.5) * (vt[1] + vt[3]); yt[2] = real_t(0.5) * (vt[2] + vt[0]); yt[3] = real_t(0.5) * (vt[3] + vt[1]);
     } else {
-      is = Ns-1;
+      int is = Ns-1;
       real_t aa = dpinv_con[Ns-1];
       real_t f1 = real_t(0.5) * (real_t(1.0) + alpha);
       real_t f2 = real_t(0.5) * (real_t(-1.0) + alpha);
@@ -456,7 +456,7 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel(
     }
 
     if (sizeof(real_t) == 4) {
-      for (is = Ns-2; is >= 0; --is) {
+      for (int is = Ns-2; is >= 0; --is) {
         real_t a = real_t(0.5) * dm_con[is];
         real_t f_is = f_con[is];
         real_t aa_is = dpinv_con[is];
@@ -486,7 +486,7 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel(
         }
       }
     } else {
-      for (is = Ns-2; is >= 0; --is) {
+      for (int is = Ns-2; is >= 0; --is) {
         real_t a = real_t(0.5) * dm_con[is];
         real_t f_is = f_con[is];
         real_t aa_is = dpinv_con[is];
