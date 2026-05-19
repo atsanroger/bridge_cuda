@@ -23,17 +23,13 @@
       
       // Helper: res = a + i b
       #define PROJ_P(res, a, b) \
-        res.x = a.x - b.y; \
-        res.y = a.y + b.x; \
-        res.z = a.z - b.w; \
-        res.w = a.w + b.z;
+        dw_add(a.x, a.z, -b.y, -b.w, res.x, res.z); \
+        dw_add(a.y, a.w, b.x, b.z, res.y, res.w);
         
       // Helper: res = a - i b
       #define PROJ_M(res, a, b) \
-        res.x = a.x + b.y; \
-        res.y = a.y - b.x; \
-        res.z = a.z + b.w; \
-        res.w = a.w - b.z;
+        dw_add(a.x, a.z, b.y, b.w, res.x, res.z); \
+        dw_add(a.y, a.w, -b.x, -b.z, res.y, res.w);
 
       // Color 0
       vs0 = ((double4*)v1)[IDX2_QDW(0, 0, isn)];

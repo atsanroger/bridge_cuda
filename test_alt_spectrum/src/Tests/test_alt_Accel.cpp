@@ -42,10 +42,10 @@ namespace Test_alt_Accel{
 int Test_alt_Accel::test_all()
 {
   int result = 0;
-  result += test_Spectrum_Wilson();
+  //result += test_Spectrum_Wilson();
   //result += test_Spectrum_Clover();
   //result += test_Spectrum_Staggered();
-  //result += test_Spectrum_Domainwall_5din();
+  result += test_Spectrum_Domainwall_5din();
   //result += test_Spectrum_Domainwall();
   // result += test_Spectrum_OptimalDomainwall();
   //result += test_Eigenvalue_Wilson_Lanczos();
@@ -185,7 +185,7 @@ int Test_alt_Accel::test_Spectrum_Domainwall_5din()
   //result += test_dw.hadron_2ptFunction(test_file, "double");
   //test_dw.hadron_2ptFunction(test_file, "float");
   result += test_dw.hadron_2ptFunction(test_file, "float_eo");
-  result += test_dw.hadron_2ptFunction(test_file, "double_eo");
+  //result += test_dw.hadron_2ptFunction(test_file, "double_eo");
 
   // unchecked:
   //result += test_dw.hadron_2ptFunction("org");

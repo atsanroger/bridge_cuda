@@ -417,7 +417,17 @@ void AFopr_Wilson<AFIELD>::mult_gm5(AFIELD &v, const AFIELD &w)
   real_t* vp = v.ptr(0);
   real_t* wp = const_cast<AFIELD*>(&w)->ptr(0);
 
-  mult_gm5(vp, wp);
+  if(m_use_QDW && v.nin() == 4 * CommonParameters::Nc() * CommonParameters::Nd() && w.nin() == 4 * CommonParameters::Nc() * CommonParameters::Nd()){
+    if(m_repr == DIRAC){
+      BridgeACC::mult_wilson_qdw_gm5_dirac(vp, wp, m_Nsize, CommonParameters::Nc());
+    }else{
+      BridgeACC::mult_wilson_qdw_gm5_chiral(vp, wp, m_Nsize, CommonParameters::Nc());
+    }
+  }else if(m_repr == DIRAC){
+    BridgeACC::mult_wilson_gm5_dirac(vp, wp, m_Nsize, CommonParameters::Nc());
+  }else{
+    BridgeACC::mult_wilson_gm5_chiral(vp, wp, m_Nsize, CommonParameters::Nc());
+  }
 
 }
 
@@ -485,7 +495,7 @@ void AFopr_Wilson<AFIELD>::mult_D(AFIELD &v, const AFIELD &w)
     chset_send.start();
 
     // bulk part
-    if(m_use_QDW){
+    if(m_use_QDW && v.nin() == 4 * CommonParameters::Nc() * CommonParameters::Nd() && w.nin() == 4 * CommonParameters::Nc() * CommonParameters::Nd()){
       if(m_repr == DIRAC){
         BridgeACC::mult_wilson_qdw_D_dirac(v2, u, v1, m_Nsize, m_bc2, m_CKs);
       }else{

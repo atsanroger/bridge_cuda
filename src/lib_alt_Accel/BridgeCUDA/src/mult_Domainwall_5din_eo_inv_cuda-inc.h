@@ -214,8 +214,8 @@ void mult_domainwall_5din_ee_inv_dirac_5d_kernel_opt(
   const int Nst_pad = CEIL_NWP(Nst);
   const int idx     = blockIdx.x * blockDim.x + threadIdx.x;
   //__shared__ real_t shared_wp[8];
-  __shared__ real_t mat1, mat2;
-  __shared__ real_t wp1r, wp1i, wp2r, wp2i, wp3r, wp3i, wp4r, wp4i;
+  real_t mat1, mat2;
+  real_t wp1r, wp1i, wp2r, wp2i, wp3r, wp3i, wp4r, wp4i;
 
   if (idx < Nst_pad * NC * Ns) {
 
@@ -490,13 +490,13 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel(
         real_t a = real_t(0.5) * dm_con[is];
         real_t f_is = f_con[is];
         real_t aa_is = dpinv_con[is];
-        for(int id=0; id<ND; ++id) xt[id] = vt[id];
+        for(int id = 0; id < ND; ++id) xt[id] = vt[id];
         for(int id = 0; id < ND; ++id) vt[id] = vp[base_site_idx + stride_id * id + stride_is * is];
         vt[0] += a * (xt[0] - xt[2]) - f_is * yt[0];
         vt[1] += a * (xt[1] - xt[3]) - f_is * yt[1];
         vt[2] += a * (xt[2] - xt[0]) - f_is * yt[2];
         vt[3] += a * (xt[3] - xt[1]) - f_is * yt[3];
-        for(int id=0; id<ND; ++id) vt[id] *= aa_is;
+        for(int id = 0; id < ND; ++id) vt[id] *= aa_is;
         if(is == 0){
           real_t ff1 = real_t(0.5) * (real_t(1.0) + alpha);
           real_t ff2 = real_t(0.5) * (real_t(1.0) - alpha);

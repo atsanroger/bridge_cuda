@@ -119,7 +119,16 @@ public:
   void mult_dag(AFIELD&, const AFIELD&, const std::string mode);
 
   //! setting the QDW flag for high-precision arithmetic.
-  void set_use_QDW(bool flag) { m_use_QDW = flag; }
+  void set_use_QDW(bool flag) {
+    m_use_QDW = flag;
+    if (flag) {
+      int NinF_qdw = 4 * m_Nc * m_Nd;
+      m_v2.reset(NinF_qdw, m_Nst, 1);
+    } else {
+      int NinF = 2 * m_Nc * m_Nd;
+      m_v2.reset(NinF, m_Nst, 1);
+    }
+  }
 
   //! gets the QDW flag for high-precision arithmetic.
   bool get_use_QDW() const { return m_use_QDW; }

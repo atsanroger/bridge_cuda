@@ -76,6 +76,16 @@ void ASolver_CG<AFIELD>::set_parameters(const Parameters& params)
   params.fetch_bool("use_QDW", m_use_QDW);
   m_use_qdw_int = m_use_QDW ? 1 : 0;
 
+  if (m_use_QDW) {
+    int nin = 2 * m_fopr->field_nin();
+    int nvol = m_fopr->field_nvol();
+    int nex = m_fopr->field_nex();
+    m_x.reset(nin, nvol, nex);
+    m_r.reset(nin, nvol, nex);
+    m_p.reset(nin, nvol, nex);
+    m_s.reset(nin, nvol, nex);
+  }
+
   if (m_fopr) {
     m_fopr->set_use_QDW(m_use_QDW);
   }
@@ -162,10 +172,11 @@ void ASolver_CG<AFIELD>::solve(AFIELD& xq, const AFIELD& b,
 
   copy(xq, m_x);
 
-  m_fopr->mult(m_s, xq);
+  AFIELD s_temp(b.nin(), b.nvol(), b.nex());
+  m_fopr->mult(s_temp, xq);
 
-  m_s.axpy(real_t(-1.0), b, m_use_qdw_int);
-  real_t diff2 = m_s.norm2(m_use_qdw_int);
+  s_temp.axpy(real_t(-1.0), b, false);
+  real_t diff2 = s_temp.norm2(false);
 
 #pragma omp master
   {
@@ -186,8 +197,12 @@ void ASolver_CG<AFIELD>::solve_CG_init(real_t& rrp, real_t& rr)
 #endif
     copy(m_r, m_s);
     copy(m_x, m_s);
+    m_fopr->set_mode("DdagD");
+    vout.general(m_vl, "ASolver_CG solve_CG_init: m_x.nin() = %d, m_s.nin() = %d\n", m_x.nin(), m_s.nin());
     m_fopr->mult(m_s, m_x);
+    m_s.normalize(m_use_qdw_int);
     m_r.axpy(real_t(-1.0), m_s, m_use_qdw_int);
+    m_r.normalize(m_use_qdw_int);
     copy(m_p, m_r);
     rr  = m_r.norm2(m_use_qdw_int);
     rrp = rr;
@@ -218,19 +233,23 @@ void ASolver_CG<AFIELD>::solve_CG_step(real_t& rrp, real_t& rr)
   using complex_t = typename AFIELD::complex_t;
 
   m_fopr->mult(m_s, m_p);
+  m_s.normalize(m_use_qdw_int);
 
   real_t pap = m_s.dot(m_p, m_use_qdw_int);
   //    m_fopr->mult_normA_dev(pap, m_s, m_p);
   real_t cr = rrp / pap;
 
   m_x.axpy(cr, m_p, m_use_qdw_int);
+  m_x.normalize(m_use_qdw_int);
 
   m_r.axpy(-cr, m_s, m_use_qdw_int);
+  m_r.normalize(m_use_qdw_int);
   rr = m_r.norm2(m_use_qdw_int);
 
   real_t bk = rr / rrp;
 
-  aypx(bk, m_p, m_r);
+  aypx(bk, m_p, m_r, m_use_qdw_int);
+  m_p.normalize(m_use_qdw_int);
 
   rrp = rr;
 }

@@ -5,34 +5,24 @@
 
 // Definition of QDW macros for projection if not in AField
 #define PROJ_X_P(res, a, b) \
-  res.x = a.x - b.y; \
-  res.y = a.y + b.x; \
-  res.z = a.z - b.w; \
-  res.w = a.w + b.z;
+  dw_add(a.x, a.z, -b.y, -b.w, res.x, res.z); \
+  dw_add(a.y, a.w, b.x, b.z, res.y, res.w);
 
 #define PROJ_X_M(res, a, b) \
-  res.x = a.x + b.y; \
-  res.y = a.y - b.x; \
-  res.z = a.z + b.w; \
-  res.w = a.w - b.z;
+  dw_add(a.x, a.z, b.y, b.w, res.x, res.z); \
+  dw_add(a.y, a.w, -b.x, -b.z, res.y, res.w);
 
 #define PROJ_Y_P(res, a, b) \
-  res.x = a.x + b.x; \
-  res.y = a.y + b.y; \
-  res.z = a.z + b.z; \
-  res.w = a.w + b.w;
+  dw_add(a.x, a.z, b.x, b.z, res.x, res.z); \
+  dw_add(a.y, a.w, b.y, b.w, res.y, res.w);
 
 #define PROJ_Y_M(res, a, b) \
-  res.x = a.x - b.x; \
-  res.y = a.y - b.y; \
-  res.z = a.z - b.z; \
-  res.w = a.w - b.w;
+  dw_add(a.x, a.z, -b.x, -b.z, res.x, res.z); \
+  dw_add(a.y, a.w, -b.y, -b.w, res.y, res.w);
 
 #define PROJ_Z_P(res, a, b) \
-  res.x = a.x - b.y; \
-  res.y = a.y + b.x; \
-  res.z = a.z - b.w; \
-  res.w = a.w + b.z; // Same as X? No, Z gamma is different.
+  dw_add(a.x, a.z, -b.y, -b.w, res.x, res.z); \
+  dw_add(a.y, a.w, b.x, b.z, res.y, res.w); // Same as X? No, Z gamma is different.
 // Gamma matrices:
 // X: 0 0 0 -i
 //    0 0 -i 0
@@ -53,7 +43,8 @@
 // So same macro PROJ_X_P (a + i b) works if inputs are swapped correctly.
 
 #define PROJ_T_P(res, a) \
-  QDW_SCAL(res, 2.0, a);
+  dw_scal(2.0, QDW_R_HI(a), QDW_R_LO(a), QDW_R_HI(res), QDW_R_LO(res)); \
+  dw_scal(2.0, QDW_I_HI(a), QDW_I_LO(a), QDW_I_HI(res), QDW_I_LO(res));
 
 #define MULT_MI(res, a) \
   res.x = a.y; res.y = -a.x; \
@@ -64,8 +55,8 @@
   res.z = -a.w; res.w = a.z;
 
 #define QDW_SCAL(res, s, a) \
-  res.x = s * a.x; res.y = s * a.y; \
-  res.z = s * a.z; res.w = s * a.w;
+  dw_scal((double)s, QDW_R_HI(a), QDW_R_LO(a), QDW_R_HI(res), QDW_R_LO(res)); \
+  dw_scal((double)s, QDW_I_HI(a), QDW_I_LO(a), QDW_I_HI(res), QDW_I_LO(res));
 
 
 //====================================================================
@@ -272,3 +263,38 @@ void mult_wilson_qdw_D_chiral_kernel(
 
 }
 
+//====================================================================
+__global__ void mult_wilson_qdw_gm5_dirac_kernel(double4* v2, double4* v1, int size) {
+  int site = blockIdx.x * blockDim.x + threadIdx.x;
+  if(site >= size) return;
+  
+  for(int ic=0; ic<3; ic++){
+    v2[IDX2_QDW(ic, 0, site)] = v1[IDX2_QDW(ic, 0, site)];
+    v2[IDX2_QDW(ic, 1, site)] = v1[IDX2_QDW(ic, 1, site)];
+    
+    double4 s2 = v1[IDX2_QDW(ic, 2, site)];
+    double4 s3 = v1[IDX2_QDW(ic, 3, site)];
+    s2.x = -s2.x; s2.y = -s2.y; s2.z = -s2.z; s2.w = -s2.w;
+    s3.x = -s3.x; s3.y = -s3.y; s3.z = -s3.z; s3.w = -s3.w;
+    v2[IDX2_QDW(ic, 2, site)] = s2;
+    v2[IDX2_QDW(ic, 3, site)] = s3;
+  }
+}
+
+//====================================================================
+__global__ void mult_wilson_qdw_gm5_chiral_kernel(double4* v2, double4* v1, int size) {
+  int site = blockIdx.x * blockDim.x + threadIdx.x;
+  if(site >= size) return;
+
+  for(int ic=0; ic<3; ic++){
+    double4 s0 = v1[IDX2_QDW(ic, 0, site)];
+    double4 s1 = v1[IDX2_QDW(ic, 1, site)];
+    double4 s2 = v1[IDX2_QDW(ic, 2, site)];
+    double4 s3 = v1[IDX2_QDW(ic, 3, site)];
+    
+    v2[IDX2_QDW(ic, 0, site)] = s2;
+    v2[IDX2_QDW(ic, 1, site)] = s3;
+    v2[IDX2_QDW(ic, 2, site)] = s0;
+    v2[IDX2_QDW(ic, 3, site)] = s1;
+  }
+}

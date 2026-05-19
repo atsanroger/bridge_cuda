@@ -136,8 +136,8 @@ public:
     bool check_size(const AField<REALTYPE, ACCEL>& w) const
     {
       bool chk = true;
-      if(m_nin != w.nin() || m_nvol != w.nvol() || m_nex != w.nex())
-        chk = false;
+      if(m_nvol != w.nvol() || m_nex != w.nex()) chk = false;
+      if(m_nin != w.nin() && m_nin != 2 * w.nin() && m_nin * 2 != w.nin()) chk = false;
       return chk;
     }
 
@@ -187,26 +187,26 @@ public:
     void axpy(const complex_t a,
               const AField<real_t, ACCEL>& w);
 
-    void aypx(const real_t, const AField<real_t, ACCEL>&);
+    void aypx(const real_t, const AField<real_t, ACCEL>&, const int use_qdw = 0);
 
     void aypx(const int ex, const real_t,
-              const AField<real_t, ACCEL>& w, const int ex_w);
+              const AField<real_t, ACCEL>& w, const int ex_w, const int use_qdw = 0);
 
     //! complex version of aypx: real and imaginary parts in order.
     void aypx(const real_t a_r, const real_t a_i,
-              const AField<real_t, ACCEL>&);
+              const AField<real_t, ACCEL>&, const int use_qdw = 0);
 
     //! complex version of aypx: real and imaginary parts in order.
     void aypx(const int ex, const real_t a_r, const real_t a_i,
-              const AField<real_t, ACCEL>& w, const int ex_w);
+              const AField<real_t, ACCEL>& w, const int ex_w, const int use_qdw = 0);
 
     //! complex version of aypx: complex_t is set by ComplexTraits.
     void aypx(const complex_t a,
-              const AField<real_t, ACCEL>& w);
+              const AField<real_t, ACCEL>& w, const int use_qdw = 0);
 
     //! complex version of aypx: complex_t is set by ComplexTraits.
     void aypx(const int ex, const complex_t a,
-              const AField<real_t, ACCEL>& w, const int ex_w);
+              const AField<real_t, ACCEL>& w, const int ex_w, const int use_qdw = 0);
 
     void scal(const real_t);
 
@@ -226,6 +226,9 @@ public:
 
     //! square norm squared (|v|^2).
     real_t norm2_host(void) const;
+
+    //! normalize QDW/QTW drift
+    void normalize(const int use_qdw = 0);
 
     //! multiplying imaginary unit.
     void xI();

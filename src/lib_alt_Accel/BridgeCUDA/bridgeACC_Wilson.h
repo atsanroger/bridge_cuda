@@ -143,6 +143,10 @@ void mult_wilson_gm5_aypx_dirac(double a, double* v2,
 void mult_wilson_gm5_chiral(double* v2, double* v1,
                             int *Nsize, int Nc);
 
+void mult_wilson_qdw_gm5_dirac(double* v2, double* v1, int *Nsize, int Nc);
+
+void mult_wilson_qdw_gm5_chiral(double* v2, double* v1, int *Nsize, int Nc);
+
 void mult_wilson_gm5_aypx_chiral(double a, double* v2,
                                  double* v1, int *Nsize, int Nc);
 
@@ -413,6 +417,10 @@ void mult_wilson_gm5_aypx_dirac(float a, float* v2,
 
 void mult_wilson_gm5_chiral(float* v2, float* v1,
                             int *Nsize, int Nc);
+
+void mult_wilson_qdw_gm5_dirac(float* v2, float* v1, int *Nsize, int Nc);
+
+void mult_wilson_qdw_gm5_chiral(float* v2, float* v1, int *Nsize, int Nc);
 
 void mult_wilson_gm5_aypx_chiral(float a, float* v2,
                                  float* v1, int *Nsize, int Nc);

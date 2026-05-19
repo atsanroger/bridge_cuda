@@ -89,6 +89,44 @@ void mult_wilson_qdw_D_chiral(double* v2, double* u, double* v1,
   CHECK(cudaDeviceSynchronize());
 }
 
+void mult_wilson_qdw_gm5_dirac(double* v2, double* v1, int* Nsize, int Nc)
+{
+  double4* v2_dev = (double4*)dev_ptr(v2);
+  double4* v1_dev = (double4*)dev_ptr(v1);
+
+  int Nx = Nsize[0];
+  int Ny = Nsize[1];
+  int Nz = Nsize[2];
+  int Nt = Nsize[3];
+  int size = Nx * Ny * Nz * Nt;
+
+  int nth = VECTOR_LENGTH;
+  int nbl = size/nth;
+
+  mult_wilson_qdw_gm5_dirac_kernel<<<nbl,nth>>>(v2_dev, v1_dev, size);
+
+  CHECK(cudaDeviceSynchronize());
+}
+
+void mult_wilson_qdw_gm5_chiral(double* v2, double* v1, int* Nsize, int Nc)
+{
+  double4* v2_dev = (double4*)dev_ptr(v2);
+  double4* v1_dev = (double4*)dev_ptr(v1);
+
+  int Nx = Nsize[0];
+  int Ny = Nsize[1];
+  int Nz = Nsize[2];
+  int Nt = Nsize[3];
+  int size = Nx * Ny * Nz * Nt;
+
+  int nth = VECTOR_LENGTH;
+  int nbl = size/nth;
+
+  mult_wilson_qdw_gm5_chiral_kernel<<<nbl,nth>>>(v2_dev, v1_dev, size);
+
+  CHECK(cudaDeviceSynchronize());
+}
+
 
 
 }

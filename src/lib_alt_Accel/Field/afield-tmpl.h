@@ -287,8 +287,16 @@ void AField<REALTYPE,ACCEL>::copy(const AField<REALTYPE,ACCEL>& w)
   set_thread(ith, nth);
 
   if(ith == 0){
-    int nvex = m_nsize_pad/m_nin;
-    BridgeACC::copy(m_field, w.m_field, m_nin, nvex);
+    if (m_nin == w.nin()) {
+      int nvex = m_nsize_pad/m_nin;
+      BridgeACC::copy(m_field, w.m_field, m_nin, nvex);
+    } else if (m_nin == 2 * w.nin()) {
+      BridgeACC::copy_to_qdw(m_field, w.m_field, m_nvol_pad);
+    } else if (m_nin * 2 == w.nin()) {
+      BridgeACC::copy_from_qdw(m_field, w.m_field, m_nvol_pad);
+    } else {
+      assert(false);
+    }
   }
 #pragma omp barrier
 
@@ -453,7 +461,7 @@ void AField<REALTYPE,ACCEL>::axpy(
 //====================================================================
 template<typename REALTYPE>
 void AField<REALTYPE,ACCEL>::aypx(const REALTYPE a,
-                                    const AField<REALTYPE,ACCEL>& w)
+                                  const AField<REALTYPE,ACCEL>& w, const int use_qdw)
 {
   assert(check_size(w));
 
@@ -462,7 +470,7 @@ void AField<REALTYPE,ACCEL>::aypx(const REALTYPE a,
 
   if(ith == 0){
     int nvex = m_nsize_pad/m_nin;
-    BridgeACC::aypx(a, m_field, 0, w.m_field, 0, m_nin, nvex);
+    BridgeACC::aypx(a, m_field, 0, w.m_field, 0, m_nin, nvex, use_qdw);
   }
 #pragma omp barrier
 
@@ -471,9 +479,9 @@ void AField<REALTYPE,ACCEL>::aypx(const REALTYPE a,
 //====================================================================
 template<typename REALTYPE>
 void AField<REALTYPE,ACCEL>::aypx(const int ex,
-                                    const REALTYPE a,
-                                    const AField<REALTYPE,ACCEL>& w,
-                                    const int ex_w)
+                                  const REALTYPE a,
+                                  const AField<REALTYPE,ACCEL>& w,
+                                  const int ex_w, const int use_qdw)
 {
   assert( nin() == w.nin());
   assert(nvol() == w.nvol());
@@ -486,7 +494,7 @@ void AField<REALTYPE,ACCEL>::aypx(const int ex,
   if(ith == 0){
     int size2 = m_nin * m_nvol_pad;
     BridgeACC::aypx(a, m_field, size2 * ex, w.m_field, size2 * ex_w,
-                    m_nin, m_nvol_pad);
+                    m_nin, m_nvol_pad, use_qdw);
   }
 #pragma omp barrier
 
@@ -495,7 +503,7 @@ void AField<REALTYPE,ACCEL>::aypx(const int ex,
 //====================================================================
 template<typename REALTYPE>
 void AField<REALTYPE,ACCEL>::aypx(const REALTYPE ar, const REALTYPE ai,
-                                    const AField<REALTYPE,ACCEL>& w)
+                                    const AField<REALTYPE,ACCEL>& w, const int use_qdw)
 {
   assert(check_size(w));
 
@@ -504,7 +512,7 @@ void AField<REALTYPE,ACCEL>::aypx(const REALTYPE ar, const REALTYPE ai,
 
   if(ith == 0){
     int nvex = m_nsize_pad/m_nin;
-    BridgeACC::aypx(ar, ai, m_field, 0, w.m_field, 0, m_nin, nvex);
+    BridgeACC::aypx(ar, ai, m_field, 0, w.m_field, 0, m_nin, nvex, use_qdw);
   }
 #pragma omp barrier
 
@@ -514,7 +522,7 @@ void AField<REALTYPE,ACCEL>::aypx(const REALTYPE ar, const REALTYPE ai,
 template<typename REALTYPE>
 void AField<REALTYPE,ACCEL>::aypx(
                  const typename ComplexTraits<REALTYPE>::complex_t a,
-                 const AField<REALTYPE,ACCEL>& w)
+                 const AField<REALTYPE,ACCEL>& w, const int use_qdw)
 {
   assert(check_size(w));
 
@@ -525,7 +533,7 @@ void AField<REALTYPE,ACCEL>::aypx(
     REALTYPE ar = real(a);
     REALTYPE ai = imag(a);
     int nvex = m_nsize_pad/m_nin;
-    BridgeACC::aypx(ar, ai, m_field, 0, w.m_field, 0, m_nin, nvex);
+    BridgeACC::aypx(ar, ai, m_field, 0, w.m_field, 0, m_nin, nvex, use_qdw);
   }
 #pragma omp barrier
 
@@ -537,7 +545,7 @@ void AField<REALTYPE,ACCEL>::aypx(
                  const int ex,
                  const typename ComplexTraits<REALTYPE>::complex_t a,
                  const AField<REALTYPE,ACCEL>& w,
-                 const int ex_w)
+                 const int ex_w, const int use_qdw)
 {
   assert( nin() == w.nin());
   assert(nvol() == w.nvol());
@@ -552,7 +560,7 @@ void AField<REALTYPE,ACCEL>::aypx(
     REALTYPE ar = real(a);
     REALTYPE ai = imag(a);
     BridgeACC::aypx(ar, ai, m_field, size2 * ex, w.m_field, size2 * ex_w,
-                    m_nin, m_nvol_pad);
+                    m_nin, m_nvol_pad, use_qdw);
   }
 
 #pragma omp barrier
@@ -744,6 +752,23 @@ REALTYPE AField<REALTYPE,ACCEL>::norm2_host() const
   ThreadManager::reduce_sum_global(a, ith, nth);
 
   return a;
+
+}
+
+//====================================================================
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::normalize(const int use_qdw)
+{
+  if (!use_qdw) return;
+
+  int ith, nth;
+  set_thread(ith, nth);
+
+  if(ith == 0){
+    int nvol_pad_ex = m_nvol_pad * m_nex;
+    BridgeACC::normalize(m_field, m_nin, nvol_pad_ex, use_qdw);
+  }
+#pragma omp barrier
 
 }
 

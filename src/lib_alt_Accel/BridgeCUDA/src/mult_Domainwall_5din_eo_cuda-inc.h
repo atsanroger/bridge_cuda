@@ -518,8 +518,7 @@ void mult_domainwall_5din_eo_hopb_dirac_4D_kernel(
   const int Nst  = Nx * Ny * Nz * Nt;
   const int site = blockIdx.x * blockDim.x + threadIdx.x;
 
-  extern __shared__ real_t sharedMemory[];
-  real_t* ut = &sharedMemory[0];
+  real_t ut[NDF];
 
   if (site < Nst) {
     int Nxy  = Nx  * Ny;
@@ -816,9 +815,9 @@ void mult_domainwall_5din_eo_hopb_dirac_5D_kernel(
     int keo  = (jeo + iy + iz + it) % 2;
     int idir;
 
-    __shared__ real_t u_0, u_1, u_2, u_3, u_4, u_5;
-    __shared__ real_t u_6, u_7, u_8, u_9, u10, u11;
-    __shared__ real_t u12, u13, u14, u15, u16, u17;
+    real_t u_0, u_1, u_2, u_3, u_4, u_5;
+    real_t u_6, u_7, u_8, u_9, u10, u11;
+    real_t u12, u13, u14, u15, u16, u17;
     real_t vt1_0, vt1_1, vt1_2, vt1_3, vt1_4, vt1_5;
     real_t vt2_0, vt2_1, vt2_2, vt2_3, vt2_4, vt2_5;
     real_t wt1r, wt1i, wt2r, wt2i;
@@ -917,8 +916,7 @@ void mult_domainwall_5din_eo_hop1x_dirac_dev(
   const int Nin5bd = NVC  * ND2 * Ns     ;
   const int Nst    = Nx   * Ny  * Nz * Nt;
   int idir         = 0                   ;
-  extern __shared__ real_t sharedMemory[];
-  real_t* ut = &sharedMemory[0];
+  real_t ut[NDF];
 
   if ( iyzt < Nyzt ){
 
@@ -995,8 +993,7 @@ void mult_domainwall_5din_eo_hop1y_dirac_dev(
   const int Nin5         = NVCD * Ns;
   const int Nin5bd       = NVC  * ND2 * Ns;
   int idir = 1;
-  extern __shared__ real_t sharedMemory[];
-  real_t* ut = &sharedMemory[0];
+  real_t ut[NDF];
   if ( ixzt < Nxzt ){
 
     int iy = 0;
@@ -1067,8 +1064,7 @@ void mult_domainwall_5din_eo_hop1z_dirac_dev(
   const int Nin5bd = NVC * ND2 * Ns;
 
   int idir = 2;
-  extern __shared__ real_t sharedMemory[];
-  real_t* ut = &sharedMemory[0];
+  real_t ut[NDF];
 
   if ( ixyt < Nxyt ){
 
@@ -1136,8 +1132,7 @@ __global__  void mult_domainwall_5din_eo_hop1t_dirac_dev(
   const int Nin5         = NVCD * Ns;
   const int Nin5bd       = NVC  * ND2 * Ns;
   int idir = 3;
-  extern __shared__ real_t sharedMemory[];
-  real_t* ut = &sharedMemory[0];
+  real_t ut[NDF];
   if ( ixyz < Nxyz ){
 
     int it = 0;
@@ -1207,8 +1202,7 @@ __global__ void mult_domainwall_5din_eo_hop1x_5D_dirac_dev(
   const int gridSize = gridDim.x * blockDim.x;
 
   int idir   = 0;
-  extern __shared__ real_t sharedMemory[];
-  real_t* ut = &sharedMemory[0];
+  real_t ut[NDF];
 
   for (int idx = ist; idx < Nyzt * Ns; idx += gridSize){
 
@@ -1288,8 +1282,7 @@ __global__ void mult_domainwall_5din_eo_hop1y_5D_dirac_dev(
   const int gridSize = gridDim.x *blockDim.x;
 
   int idir = 1;
-  extern __shared__ real_t sharedMemory[];
-  real_t* ut = &sharedMemory[0];
+  real_t ut[NDF];
 
   for (int idx = ist; idx < Nxzt * Ns; idx += gridSize){
 
@@ -1357,8 +1350,7 @@ __global__ void mult_domainwall_5din_eo_hop1z_5D_dirac_dev(
   const int GridSize = gridDim.x * blockDim.x;
 
   const int idir = 2;
-  extern __shared__ real_t sharedMemory[];
-  real_t* ut = &sharedMemory[0];
+  real_t ut[NDF];
 
   for (int idx = ist; idx < Nxyt * Ns; idx += GridSize){
 
@@ -1424,8 +1416,7 @@ __global__ void mult_domainwall_5din_eo_hop1t_5D_dirac_dev(
   const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
   const int GridSize = blockDim.x * gridDim.x;
 
-  extern __shared__ real_t sharedMemory[];
-  real_t *ut = &sharedMemory[0];
+  real_t ut[NDF];
 
   for (int idx = ist; idx < Nxyz * Ns; idx += GridSize){
 
@@ -1576,8 +1567,7 @@ __global__ void mult_domainwall_5din_eo_hop2_dirac_dev(
   const int Nin5bd = (NVCD / 2) * Ns     ;
   const int Nst    = Nx   * Ny  * Nz * Nt;
   const int Nin5   = NVCD * Ns           ;
-  extern __shared__ real_t sharedMemory[];
-  real_t* ut = &sharedMemory[0];
+  real_t ut[NDF];
   for (int site = ist; site < Nst; site += GridSize){
 
     int ix   = site % Nx;
@@ -1750,8 +1740,7 @@ __global__ void mult_domainwall_5din_eo_hop2_5D_dirac_dev(
   const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
   const int GridSize = blockDim.x * gridDim.x;
 
-  extern __shared__ real_t sharedMemory[];
-  real_t *ut = &sharedMemory[0];
+  real_t ut[NDF];
 
   for (int idx = ist; idx < Nst_pad * Ns; idx += GridSize){
 

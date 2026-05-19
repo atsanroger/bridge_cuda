@@ -39,6 +39,17 @@ void mult_wilson_qdw_D_chiral(float* v2, float* u, float* v1,
   exit(1);
 }
 
+void mult_wilson_qdw_gm5_dirac(float* v2, float* v1, int* Nsize, int Nc)
+{
+  printf("Error: QDW mult only supported for double precision.\n");
+  exit(1);
+}
+
+void mult_wilson_qdw_gm5_chiral(float* v2, float* v1, int* Nsize, int Nc)
+{
+  printf("Error: QDW mult only supported for double precision.\n");
+  exit(1);
+}
 
 }
 

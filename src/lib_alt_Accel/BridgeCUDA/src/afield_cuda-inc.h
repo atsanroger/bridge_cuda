@@ -168,6 +168,75 @@ void reverse(double *y, real_t *x, int nin, int nvol, int nvol_pad)
 }
 
 //====================================================================
+__global__ void copy_to_qdw_kernel(double4 *qdw, const real_t *std_v, int nvol)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+  if(site >= nvol) return;
+
+  for(int id=0; id<ND; ++id) {
+    for(int ic=0; ic<NC; ++ic) {
+       int qdw_idx = IDX2_QDW(ic, id, site);
+       int r_idx = IDX2_SP_R(ic, id, site);
+       int i_idx = IDX2_SP_I(ic, id, site);
+       
+       double4 v;
+       v.x = std_v[r_idx];
+       v.y = std_v[i_idx];
+       v.z = 0.0;
+       v.w = 0.0;
+       qdw[qdw_idx] = v;
+    }
+  }
+}
+
+//====================================================================
+__global__ void copy_from_qdw_kernel(real_t *std_v, const double4 *qdw, int nvol)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+  if(site >= nvol) return;
+
+  for(int id=0; id<ND; ++id) {
+    for(int ic=0; ic<NC; ++ic) {
+       int qdw_idx = IDX2_QDW(ic, id, site);
+       int r_idx = IDX2_SP_R(ic, id, site);
+       int i_idx = IDX2_SP_I(ic, id, site);
+       
+       double4 v = qdw[qdw_idx];
+       std_v[r_idx] = v.x + v.z;
+       std_v[i_idx] = v.y + v.w;
+    }
+  }
+}
+
+//====================================================================
+void copy_to_qdw(real_t* qdw_v, const real_t* std_v, int nvol)
+{
+  double4* qdw_dev = (double4*)dev_ptr(qdw_v);
+  real_t* std_dev  = (real_t*)dev_ptr(const_cast<real_t*>(std_v));
+
+  int nth = VECTOR_LENGTH;
+  int nbl = CEIL_NWP(nvol) / nth; 
+  if (nbl == 0) nbl = 1;
+
+  copy_to_qdw_kernel<<<nbl, nth>>>(qdw_dev, std_dev, nvol);
+  cudaDeviceSynchronize();
+}
+
+//====================================================================
+void copy_from_qdw(real_t* std_v, const real_t* qdw_v, int nvol)
+{
+  real_t* std_dev  = (real_t*)dev_ptr(std_v);
+  double4* qdw_dev = (double4*)dev_ptr(const_cast<real_t*>(qdw_v));
+
+  int nth = VECTOR_LENGTH;
+  int nbl = CEIL_NWP(nvol) / nth; 
+  if (nbl == 0) nbl = 1;
+
+  copy_from_qdw_kernel<<<nbl, nth>>>(std_dev, qdw_dev, nvol);
+  cudaDeviceSynchronize();
+}
+
+//====================================================================
 __global__ void copy_kernel(real_t *v, real_t *w, int nin)
 {
   const int site = blockIdx.x * blockDim.x + threadIdx.x;
@@ -303,16 +372,38 @@ __global__ void axpy_kernel_opt(real_t *v, real_t a, real_t *w, int nin)
 }
 
 //====================================================================
-// QDW-enhanced axpy kernel: uses __fma_rn for better precision
+// QDW-enhanced axpy kernel: uses dw math for better precision (v = a*w + v)
 __global__ void axpy_kernel_qdw(real_t *v, real_t a, real_t *w, int nin)
 {
   const int site = blockIdx.x * blockDim.x + threadIdx.x;
+  double a_d = (double)a;
 
-  for (int in = 0; in < nin; ++in)
+  for (int in4 = 0; in4 < nin / 4; ++in4)
   {
-    int idx = IDX2(nin, in, site);
-    // Use FMA for higher precision: v[idx] = fma(a, w[idx], v[idx])
-    v[idx] = __fma_rn(a, w[idx], v[idx]);
+    double wh_re = (double)w[IDX2(nin, 4 * in4 + 0, site)];
+    double wh_im = (double)w[IDX2(nin, 4 * in4 + 1, site)];
+    double wl_re = (double)w[IDX2(nin, 4 * in4 + 2, site)];
+    double wl_im = (double)w[IDX2(nin, 4 * in4 + 3, site)];
+    
+    double vh_re = (double)v[IDX2(nin, 4 * in4 + 0, site)];
+    double vh_im = (double)v[IDX2(nin, 4 * in4 + 1, site)];
+    double vl_re = (double)v[IDX2(nin, 4 * in4 + 2, site)];
+    double vl_im = (double)v[IDX2(nin, 4 * in4 + 3, site)];
+
+    double th_re, tl_re;
+    dw_scal(a_d, wh_re, wl_re, th_re, tl_re);
+    double th_im, tl_im;
+    dw_scal(a_d, wh_im, wl_im, th_im, tl_im);
+    
+    double out_h_re, out_l_re;
+    dw_add(vh_re, vl_re, th_re, tl_re, out_h_re, out_l_re);
+    double out_h_im, out_l_im;
+    dw_add(vh_im, vl_im, th_im, tl_im, out_h_im, out_l_im);
+    
+    v[IDX2(nin, 4 * in4 + 0, site)] = (real_t)out_h_re;
+    v[IDX2(nin, 4 * in4 + 1, site)] = (real_t)out_h_im;
+    v[IDX2(nin, 4 * in4 + 2, site)] = (real_t)out_l_re;
+    v[IDX2(nin, 4 * in4 + 3, site)] = (real_t)out_l_im;
   }
 }
 
@@ -406,8 +497,44 @@ __global__ void aypx_kernel(real_t a, real_t *v, real_t *w, int nin)
 }
 
 //====================================================================
+// QDW-enhanced aypx kernel: uses dw math for better precision (v = a*v + w)
+__global__ void aypx_kernel_qdw(real_t a, real_t *v, real_t *w, int nin)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+  double a_d = (double)a;
+
+  for (int in4 = 0; in4 < nin / 4; ++in4)
+  {
+    double vh_re = (double)v[IDX2(nin, 4 * in4 + 0, site)];
+    double vh_im = (double)v[IDX2(nin, 4 * in4 + 1, site)];
+    double vl_re = (double)v[IDX2(nin, 4 * in4 + 2, site)];
+    double vl_im = (double)v[IDX2(nin, 4 * in4 + 3, site)];
+    
+    double wh_re = (double)w[IDX2(nin, 4 * in4 + 0, site)];
+    double wh_im = (double)w[IDX2(nin, 4 * in4 + 1, site)];
+    double wl_re = (double)w[IDX2(nin, 4 * in4 + 2, site)];
+    double wl_im = (double)w[IDX2(nin, 4 * in4 + 3, site)];
+
+    double th_re, tl_re;
+    dw_scal(a_d, vh_re, vl_re, th_re, tl_re);
+    double th_im, tl_im;
+    dw_scal(a_d, vh_im, vl_im, th_im, tl_im);
+    
+    double out_h_re, out_l_re;
+    dw_add(wh_re, wl_re, th_re, tl_re, out_h_re, out_l_re);
+    double out_h_im, out_l_im;
+    dw_add(wh_im, wl_im, th_im, tl_im, out_h_im, out_l_im);
+    
+    v[IDX2(nin, 4 * in4 + 0, site)] = (real_t)out_h_re;
+    v[IDX2(nin, 4 * in4 + 1, site)] = (real_t)out_h_im;
+    v[IDX2(nin, 4 * in4 + 2, site)] = (real_t)out_l_re;
+    v[IDX2(nin, 4 * in4 + 3, site)] = (real_t)out_l_im;
+  }
+}
+
+//====================================================================
 void aypx(real_t a, real_t *y, int nv1,
-          real_t *x, int nv2, int nin, int nvol)
+          real_t *x, int nv2, int nin, int nvol, int use_qdw)
 {
   real_t *y_dev = (real_t *)dev_ptr(y);
   real_t *x_dev = (real_t *)dev_ptr(x);
@@ -415,7 +542,11 @@ void aypx(real_t a, real_t *y, int nv1,
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  aypx_kernel<<<nbl, nth>>>(a, &y_dev[nv1], &x_dev[nv2], nin);
+  if (use_qdw) {
+    aypx_kernel_qdw<<<nbl, nth>>>(a, &y_dev[nv1], &x_dev[nv2], nin);
+  } else {
+    aypx_kernel<<<nbl, nth>>>(a, &y_dev[nv1], &x_dev[nv2], nin);
+  }
 
   cudaDeviceSynchronize();
 }
@@ -439,8 +570,51 @@ __global__ void aypx_kernel(real_t ar, real_t ai, real_t *v,
 }
 
 //====================================================================
+// QDW-enhanced complex aypx kernel: uses dw math for better precision (v = a*v + w)
+// a = ar + i ai
+// a*v = (ar*vr - ai*vi) + i(ai*vr + ar*vi)
+__global__ void aypx_kernel_qdw(real_t ar, real_t ai, real_t *v, real_t *w, int nin)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+  double ar_d = (double)ar;
+  double ai_d = (double)ai;
+
+  for (int in4 = 0; in4 < nin / 4; ++in4)
+  {
+    double vh_re = (double)v[IDX2(nin, 4 * in4 + 0, site)];
+    double vh_im = (double)v[IDX2(nin, 4 * in4 + 1, site)];
+    double vl_re = (double)v[IDX2(nin, 4 * in4 + 2, site)];
+    double vl_im = (double)v[IDX2(nin, 4 * in4 + 3, site)];
+    
+    double wh_re = (double)w[IDX2(nin, 4 * in4 + 0, site)];
+    double wh_im = (double)w[IDX2(nin, 4 * in4 + 1, site)];
+    double wl_re = (double)w[IDX2(nin, 4 * in4 + 2, site)];
+    double wl_im = (double)w[IDX2(nin, 4 * in4 + 3, site)];
+
+    // real part: ar*vr - ai*vi
+    double p1_r, e1_r; dw_scal(ar_d, vh_re, vl_re, p1_r, e1_r);
+    double p2_r, e2_r; dw_scal(ai_d, vh_im, vl_im, p2_r, e2_r);
+    double r_h, r_l; dw_add(p1_r, e1_r, -p2_r, -e2_r, r_h, r_l);
+    
+    // imag part: ai*vr + ar*vi
+    double p1_i, e1_i; dw_scal(ai_d, vh_re, vl_re, p1_i, e1_i);
+    double p2_i, e2_i; dw_scal(ar_d, vh_im, vl_im, p2_i, e2_i);
+    double i_h, i_l; dw_add(p1_i, e1_i, p2_i, e2_i, i_h, i_l);
+    
+    // add w: v = a*v + w
+    double out_h_re, out_l_re; dw_add(wh_re, wl_re, r_h, r_l, out_h_re, out_l_re);
+    double out_h_im, out_l_im; dw_add(wh_im, wl_im, i_h, i_l, out_h_im, out_l_im);
+    
+    v[IDX2(nin, 4 * in4 + 0, site)] = (real_t)out_h_re;
+    v[IDX2(nin, 4 * in4 + 1, site)] = (real_t)out_h_im;
+    v[IDX2(nin, 4 * in4 + 2, site)] = (real_t)out_l_re;
+    v[IDX2(nin, 4 * in4 + 3, site)] = (real_t)out_l_im;
+  }
+}
+
+//====================================================================
 void aypx(real_t ar, real_t ai, real_t *y, int nv1,
-          real_t *x, int nv2, int nin, int nvol)
+          real_t *x, int nv2, int nin, int nvol, int use_qdw)
 {
   real_t *y_dev = (real_t *)dev_ptr(y);
   real_t *x_dev = (real_t *)dev_ptr(x);
@@ -448,7 +622,11 @@ void aypx(real_t ar, real_t ai, real_t *y, int nv1,
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  aypx_kernel<<<nbl, nth>>>(ar, ai, &y_dev[nv1], &x_dev[nv2], nin);
+  if (use_qdw) {
+    aypx_kernel_qdw<<<nbl, nth>>>(ar, ai, &y_dev[nv1], &x_dev[nv2], nin);
+  } else {
+    aypx_kernel<<<nbl, nth>>>(ar, ai, &y_dev[nv1], &x_dev[nv2], nin);
+  }
 
   cudaDeviceSynchronize();
 }
@@ -676,14 +854,41 @@ __global__ void norm2_reduce_fused_kernel_qdw(real_t *red,
     for (int ex = 0; ex < nex; ++ex)
     {
       int ist2 = idx + nvol * ex;
-      for (int in = 0; in < nin; ++in)
+      
+      // QDW variables are loaded 4 floats contiguous (1 double4)
+      for (int in4 = 0; in4 < nin / 4; ++in4)
       {
-        real_t vt = v1[IDX2(nin, in, ist2)];
-        real_t prod = vt * vt;
-        real_t y = prod - comp;
-        real_t t = sum + y;
-        comp = (t - sum) - y;
-        sum = t;
+        double h_re = (double)v1[IDX2(nin, 4 * in4 + 0, ist2)];
+        double h_im = (double)v1[IDX2(nin, 4 * in4 + 1, ist2)];
+        double l_re = (double)v1[IDX2(nin, 4 * in4 + 2, ist2)];
+        double l_im = (double)v1[IDX2(nin, 4 * in4 + 3, ist2)];
+        
+        // Exact real square
+        double p1, e1;
+        TwoProd(h_re, h_re, p1, e1);
+        double lo = 2.0 * h_re * l_re + e1;
+        
+        double dh, dl;
+        double sum_d = (double)sum;
+        TwoSum(sum_d, p1, dh, dl);
+        double temp_sum = dh;
+        double temp_comp = (double)comp + dl + lo;
+        double sum_out, comp_out;
+        TwoSum(temp_sum, temp_comp, sum_out, comp_out);
+        sum = (real_t)sum_out;
+        comp = (real_t)comp_out;
+        
+        // Exact imaginary square
+        TwoProd(h_im, h_im, p1, e1);
+        lo = 2.0 * h_im * l_im + e1;
+        
+        sum_d = (double)sum;
+        TwoSum(sum_d, p1, dh, dl);
+        temp_sum = dh;
+        temp_comp = (double)comp + dl + lo;
+        TwoSum(temp_sum, temp_comp, sum_out, comp_out);
+        sum = (real_t)sum_out;
+        comp = (real_t)comp_out;
       }
     }
   }
@@ -845,13 +1050,37 @@ __global__ void dot_reduce_fused_kernel_qdw(real_t *red,
     for (int ex = 0; ex < nex; ++ex)
     {
       int ist2 = idx + nvol * ex;
-      for (int in = 0; in < nin; ++in)
+      for (int in4 = 0; in4 < nin / 4; ++in4)
       {
-        real_t prod = v1[IDX2(nin, in, ist2)] * v2[IDX2(nin, in, ist2)];
-        real_t y = prod - comp;
-        real_t t = at + y;
-        comp = (t - at) - y;
-        at = t;
+        double v1h_re = (double)v1[IDX2(nin, 4 * in4 + 0, ist2)];
+        double v1h_im = (double)v1[IDX2(nin, 4 * in4 + 1, ist2)];
+        double v1l_re = (double)v1[IDX2(nin, 4 * in4 + 2, ist2)];
+        double v1l_im = (double)v1[IDX2(nin, 4 * in4 + 3, ist2)];
+        
+        double v2h_re = (double)v2[IDX2(nin, 4 * in4 + 0, ist2)];
+        double v2h_im = (double)v2[IDX2(nin, 4 * in4 + 1, ist2)];
+        double v2l_re = (double)v2[IDX2(nin, 4 * in4 + 2, ist2)];
+        double v2l_im = (double)v2[IDX2(nin, 4 * in4 + 3, ist2)];
+
+        // Real dot product part: v1.re * v2.re + v1.im * v2.im
+        double p1_r, e1_r, p2_r, e2_r;
+        TwoProd(v1h_re, v2h_re, p1_r, e1_r);
+        TwoProd(v1h_im, v2h_im, p2_r, e2_r);
+        
+        double dh_r, dl_r;
+        TwoSum(p1_r, p2_r, dh_r, dl_r);
+        
+        double lo_r = v1h_re * v2l_re + v1l_re * v2h_re + v1h_im * v2l_im + v1l_im * v2h_im + e1_r + e2_r + dl_r;
+        
+        double dh, dl;
+        double at_d = (double)at;
+        TwoSum(at_d, dh_r, dh, dl);
+        double temp_sum = dh;
+        double temp_comp = (double)comp + dl + lo_r;
+        double at_out, comp_out;
+        TwoSum(temp_sum, temp_comp, at_out, comp_out);
+        at = (real_t)at_out;
+        comp = (real_t)comp_out;
       }
     }
   }
@@ -1061,29 +1290,56 @@ __global__ void dotc_reduce_fused_kernel_qdw(real_t *red1, real_t *red2,
     {
       int ist2 = ist + nvol * ex;
 
-      for (int in2 = 0; in2 < nin2; ++in2)
+      for (int in4 = 0; in4 < nin / 4; ++in4)
       {
-        int kr = 2 * in2;
-        int ki = 2 * in2 + 1;
+        double v1h_re = (double)v1[IDX2(nin, 4 * in4 + 0, ist2)];
+        double v1h_im = (double)v1[IDX2(nin, 4 * in4 + 1, ist2)];
+        double v1l_re = (double)v1[IDX2(nin, 4 * in4 + 2, ist2)];
+        double v1l_im = (double)v1[IDX2(nin, 4 * in4 + 3, ist2)];
+        
+        double v2h_re = (double)v2[IDX2(nin, 4 * in4 + 0, ist2)];
+        double v2h_im = (double)v2[IDX2(nin, 4 * in4 + 1, ist2)];
+        double v2l_re = (double)v2[IDX2(nin, 4 * in4 + 2, ist2)];
+        double v2l_im = (double)v2[IDX2(nin, 4 * in4 + 3, ist2)];
 
-        real_t v1r = v1[IDX2(nin, kr, ist2)];
-        real_t v1i = v1[IDX2(nin, ki, ist2)];
-        real_t v2r = v2[IDX2(nin, kr, ist2)];
-        real_t v2i = v2[IDX2(nin, ki, ist2)];
+        // Real part: v1.re * v2.re + v1.im * v2.im
+        double p1_r, e1_r, p2_r, e2_r;
+        TwoProd(v1h_re, v2h_re, p1_r, e1_r);
+        TwoProd(v1h_im, v2h_im, p2_r, e2_r);
+        
+        double dh_r, dl_r;
+        TwoSum(p1_r, p2_r, dh_r, dl_r);
+        
+        double lo_r = v1h_re * v2l_re + v1l_re * v2h_re + v1h_im * v2l_im + v1l_im * v2h_im + e1_r + e2_r + dl_r;
+        
+        double dh, dl;
+        double ar_d = (double)ar;
+        TwoSum(ar_d, dh_r, dh, dl);
+        double temp_sum_r = dh;
+        double temp_comp_r = (double)comp_r + dl + lo_r;
+        double ar_out, comp_r_out;
+        TwoSum(temp_sum_r, temp_comp_r, ar_out, comp_r_out);
+        ar = (real_t)ar_out;
+        comp_r = (real_t)comp_r_out;
 
-        // Real part: v1r*v2r + v1i*v2i
-        real_t prod_r = v1r * v2r + v1i * v2i;
-        real_t yr = prod_r - comp_r;
-        real_t tr = ar + yr;
-        comp_r = (tr - ar) - yr;
-        ar = tr;
-
-        // Imag part: v1r*v2i - v1i*v2r
-        real_t prod_i = v1r * v2i - v1i * v2r;
-        real_t yi = prod_i - comp_i;
-        real_t ti = ai + yi;
-        comp_i = (ti - ai) - yi;
-        ai = ti;
+        // Imag part: v1.re * v2.im - v1.im * v2.re
+        double p1_i, e1_i, p2_i, e2_i;
+        TwoProd(v1h_re, v2h_im, p1_i, e1_i);
+        TwoProd(-v1h_im, v2h_re, p2_i, e2_i);
+        
+        double dh_i, dl_i;
+        TwoSum(p1_i, p2_i, dh_i, dl_i);
+        
+        double lo_i = v1h_re * v2l_im + v1l_re * v2h_im - v1h_im * v2l_re - v1l_im * v2h_re + e1_i + e2_i + dl_i;
+        
+        double ai_d = (double)ai;
+        TwoSum(ai_d, dh_i, dh, dl);
+        double temp_sum_i = dh;
+        double temp_comp_i = (double)comp_i + dl + lo_i;
+        double ai_out, comp_i_out;
+        TwoSum(temp_sum_i, temp_comp_i, ai_out, comp_i_out);
+        ai = (real_t)ai_out;
+        comp_i = (real_t)comp_i_out;
       }
     }
   }
@@ -1161,6 +1417,44 @@ void dotc(real_t *ar, real_t *ai, real_t *x1, real_t *x2,
 
   *ar = atr;
   *ai = ati;
+}
+
+//====================================================================
+#ifdef __CUDACC__
+namespace {
+__global__ void normalize_kernel_qdw_actual(double4 *spinor, int nvol)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+  if(site >= nvol) return;
+
+  for (int id = 0; id < ND; ++id) {
+    for (int ic = 0; ic < NC; ++ic) {
+      int idx = IDX2_QDW(ic, id, site);
+      double4 s = spinor[idx];
+      double sr, er, si, ei;
+      TwoSum(s.x, s.z, sr, er);
+      TwoSum(s.y, s.w, si, ei);
+      s.x = sr; s.z = er;
+      s.y = si; s.w = ei;
+      spinor[idx] = s;
+    }
+  }
+}
+}
+#endif
+
+void normalize(real_t* v, int nin, int nvol, int use_qdw)
+{
+  if (!use_qdw) return;
+#ifdef __CUDACC__
+  if (sizeof(real_t) == 8) {
+    double4 *v_dev = (double4 *)dev_ptr(v);
+    int nth = VECTOR_LENGTH;
+    int nbl = (nvol + nth - 1) / nth;
+    normalize_kernel_qdw_actual<<<nbl, nth>>>(v_dev, nvol);
+    cudaDeviceSynchronize();
+  }
+#endif
 }
 
 //============================================================END=====

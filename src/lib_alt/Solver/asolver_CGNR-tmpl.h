@@ -90,7 +90,16 @@ void ASolver_CGNR<AFIELD>::solve(AFIELD& xq, const AFIELD& b,
 
 #pragma omp barrier
 
+  bool use_qdw_flag = m_fopr->get_use_QDW();
+  if (use_qdw_flag) {
+    m_fopr->set_use_QDW(false);
+  }
+
   m_fopr->mult_dag(m_b2, b);
+
+  if (use_qdw_flag) {
+    m_fopr->set_use_QDW(true);
+  }
 
   if (ith == 0) {
     m_flop = m_fopr->flop_count();
