@@ -777,10 +777,151 @@ void mult_domainwall_5din_eo_hopb_dirac_4d(
 }
 
 //====================================================================
+// v2 of hopb_dirac_5D: block-level gauge link sharing via __shared__.
+//   Thread block: (NWP, NS_PER_BLOCK).  NS_PER_BLOCK warps share the same
+//   32-site block but process different is.  is_local==0 loads 12 gauge
+//   doubles once per direction into u_sh, all warps read from u_sh.
+//   Requires SU3_3RD_ROW_RECONST and Ns % NS_PER_BLOCK == 0.
+//   Toggle off by removing -DUSE_5D_HOPB_V2 (falls back to v1 launcher).
+//
+// Tunables to benchmark:
+//   NS_PER_BLOCK   2 / 4 / 8 / 16     (must divide Ns; smaller → more occupancy,
+//                                      bigger → more u-sharing)
+//   LB_BLOCKS_PER_SM   1 / 2 / 3      (2nd arg to __launch_bounds__; higher
+//                                      forces lower REG/thread)
+#ifndef NS_PER_BLOCK
+#define NS_PER_BLOCK 8
+#endif
+#ifndef LB_BLOCKS_PER_SM
+#define LB_BLOCKS_PER_SM 2
+#endif
+
+#define U_UP_LOAD_AND_SYNC(isg) do { \
+  __syncthreads(); \
+  if (is_local == 0) { \
+    u_sh[ 0*NWP + lane] = u_up[IDX2_G_R(0,0,isg)]; \
+    u_sh[ 1*NWP + lane] = u_up[IDX2_G_I(0,0,isg)]; \
+    u_sh[ 2*NWP + lane] = u_up[IDX2_G_R(1,0,isg)]; \
+    u_sh[ 3*NWP + lane] = u_up[IDX2_G_I(1,0,isg)]; \
+    u_sh[ 4*NWP + lane] = u_up[IDX2_G_R(2,0,isg)]; \
+    u_sh[ 5*NWP + lane] = u_up[IDX2_G_I(2,0,isg)]; \
+    u_sh[ 6*NWP + lane] = u_up[IDX2_G_R(0,1,isg)]; \
+    u_sh[ 7*NWP + lane] = u_up[IDX2_G_I(0,1,isg)]; \
+    u_sh[ 8*NWP + lane] = u_up[IDX2_G_R(1,1,isg)]; \
+    u_sh[ 9*NWP + lane] = u_up[IDX2_G_I(1,1,isg)]; \
+    u_sh[10*NWP + lane] = u_up[IDX2_G_R(2,1,isg)]; \
+    u_sh[11*NWP + lane] = u_up[IDX2_G_I(2,1,isg)]; \
+  } \
+  __syncthreads(); \
+} while(0)
+
+#define U_DN_LOAD_AND_SYNC(isg) do { \
+  __syncthreads(); \
+  if (is_local == 0) { \
+    u_sh[ 0*NWP + lane] = u_dn[IDX2_G_R(0,0,isg)]; \
+    u_sh[ 1*NWP + lane] = u_dn[IDX2_G_I(0,0,isg)]; \
+    u_sh[ 2*NWP + lane] = u_dn[IDX2_G_R(0,1,isg)]; \
+    u_sh[ 3*NWP + lane] = u_dn[IDX2_G_I(0,1,isg)]; \
+    u_sh[ 4*NWP + lane] = u_dn[IDX2_G_R(0,2,isg)]; \
+    u_sh[ 5*NWP + lane] = u_dn[IDX2_G_I(0,2,isg)]; \
+    u_sh[ 6*NWP + lane] = u_dn[IDX2_G_R(1,0,isg)]; \
+    u_sh[ 7*NWP + lane] = u_dn[IDX2_G_I(1,0,isg)]; \
+    u_sh[ 8*NWP + lane] = u_dn[IDX2_G_R(1,1,isg)]; \
+    u_sh[ 9*NWP + lane] = u_dn[IDX2_G_I(1,1,isg)]; \
+    u_sh[10*NWP + lane] = u_dn[IDX2_G_R(1,2,isg)]; \
+    u_sh[11*NWP + lane] = u_dn[IDX2_G_I(1,2,isg)]; \
+  } \
+  __syncthreads(); \
+} while(0)
+
+__global__ __launch_bounds__(NWP * NS_PER_BLOCK, LB_BLOCKS_PER_SM)
+void mult_domainwall_5din_eo_hopb_dirac_5D_v2_kernel(
+  real_t * __restrict__ vp, real_t * __restrict__ up, real_t * __restrict__ wp,
+  int Ns,
+  int bc_x, int bc_y, int bc_z, int bc_t,
+  int Nx, int Ny, int Nz, int Nt,
+  int ieo, int jeo,
+  int do_comm_x, int do_comm_y, int do_comm_z, int do_comm_t,
+  int Nst_pad, int jgm5){
+
+  const int Nxy   = Nx * Ny;
+  const int Nst   = Nx * Ny * Nz * Nt;
+  const int Nxyz  = Nx * Ny * Nz;
+
+  const int lane     = threadIdx.x;
+  const int is_local = threadIdx.y;
+  const int idx_out  = blockIdx.x;
+  const int is_base  = blockIdx.y * NS_PER_BLOCK;
+  const int is       = is_base + is_local;
+  const int site     = lane + NWP * idx_out;
+
+  real_t * u_up = up;
+  real_t * u_dn = up;
+
+  __shared__ real_t u_sh[12 * NWP];
+
+  int ix   = site % Nx;
+  int iyzt = site / Nx;
+  int iy   = iyzt % Ny;
+  int izt  = site / Nxy;
+  int iz   = izt  % Nz;
+  int it   = izt  / Nz;
+  int ixyz = site % Nxyz;
+  int keo  = (jeo + iy + iz + it) % 2;
+  int idir;
+
+  real_t u_0, u_1, u_2, u_3, u_4, u_5;
+  real_t u_6, u_7, u_8, u_9, u10, u11;
+  real_t u12, u13, u14, u15, u16, u17;
+  real_t vt1_0, vt1_1, vt1_2, vt1_3, vt1_4, vt1_5;
+  real_t vt2_0, vt2_1, vt2_2, vt2_3, vt2_4, vt2_5;
+  real_t wt1r, wt1i, wt2r, wt2i;
+
+  real_t v2_01, v2_11, v2_21, v2_31, v2_41, v2_51;
+  real_t v2_02, v2_12, v2_22, v2_32, v2_42, v2_52;
+  real_t v2_03, v2_13, v2_23, v2_33, v2_43, v2_53;
+  real_t v2_04, v2_14, v2_24, v2_34, v2_44, v2_54;
+
+  real_t * v1 = wp;
+  real_t * v2 = vp;
+
+  #include "inc/mult_Domainwall_eo_cuda_xyz_shmem-inc.h"
+  #include "inc/mult_Domainwall_eo_cuda_t_dirac_shmem-inc.h"
+
+  v2[IDX2_SP_5D_R(0,0,is,Ns,site)] = v2_01;
+  v2[IDX2_SP_5D_I(0,0,is,Ns,site)] = v2_11;
+  v2[IDX2_SP_5D_R(1,0,is,Ns,site)] = v2_21;
+  v2[IDX2_SP_5D_I(1,0,is,Ns,site)] = v2_31;
+  v2[IDX2_SP_5D_R(2,0,is,Ns,site)] = v2_41;
+  v2[IDX2_SP_5D_I(2,0,is,Ns,site)] = v2_51;
+
+  v2[IDX2_SP_5D_R(0,1,is,Ns,site)] = v2_02;
+  v2[IDX2_SP_5D_I(0,1,is,Ns,site)] = v2_12;
+  v2[IDX2_SP_5D_R(1,1,is,Ns,site)] = v2_22;
+  v2[IDX2_SP_5D_I(1,1,is,Ns,site)] = v2_32;
+  v2[IDX2_SP_5D_R(2,1,is,Ns,site)] = v2_42;
+  v2[IDX2_SP_5D_I(2,1,is,Ns,site)] = v2_52;
+
+  v2[IDX2_SP_5D_R(0,2,is,Ns,site)] = v2_03;
+  v2[IDX2_SP_5D_I(0,2,is,Ns,site)] = v2_13;
+  v2[IDX2_SP_5D_R(1,2,is,Ns,site)] = v2_23;
+  v2[IDX2_SP_5D_I(1,2,is,Ns,site)] = v2_33;
+  v2[IDX2_SP_5D_R(2,2,is,Ns,site)] = v2_43;
+  v2[IDX2_SP_5D_I(2,2,is,Ns,site)] = v2_53;
+
+  v2[IDX2_SP_5D_R(0,3,is,Ns,site)] = v2_04;
+  v2[IDX2_SP_5D_I(0,3,is,Ns,site)] = v2_14;
+  v2[IDX2_SP_5D_R(1,3,is,Ns,site)] = v2_24;
+  v2[IDX2_SP_5D_I(1,3,is,Ns,site)] = v2_34;
+  v2[IDX2_SP_5D_R(2,3,is,Ns,site)] = v2_44;
+  v2[IDX2_SP_5D_I(2,3,is,Ns,site)] = v2_54;
+}
+
+//====================================================================
 __global__
 void mult_domainwall_5din_eo_hopb_dirac_5D_kernel(
-  real_t * __restrict__ vp, real_t * __restrict__ up, real_t * __restrict__ wp, 
-  int Ns, 
+  real_t * __restrict__ vp, real_t * __restrict__ up, real_t * __restrict__ wp,
+  int Ns,
   int bc_x, int bc_y, int bc_z, int bc_t,
   int Nx, int Ny, int Nz, int Nt, 
   int ieo, int jeo, 
@@ -887,14 +1028,31 @@ void mult_domainwall_5din_eo_hopb_dirac_5d(
   int do_comm_z = do_comm[2];
   int do_comm_t = do_comm[3];
 
-  int blockSize = VECTOR_LENGTH; 
+#ifdef USE_5D_HOPB_V2
+  if (Ns % NS_PER_BLOCK == 0 && (Nst_pad % NWP == 0)) {
+    dim3 block(NWP, NS_PER_BLOCK);
+    dim3 grid (Nst_pad / NWP, Ns / NS_PER_BLOCK);
+    mult_domainwall_5din_eo_hopb_dirac_5D_v2_kernel<<<grid, block>>>(
+        vp_dev, up_dev, wp_dev, Ns,
+        bc_x, bc_y, bc_z, bc_t,
+        Nx, Ny, Nz, Nt,
+        ieo, jeo,
+        do_comm_x, do_comm_y, do_comm_z, do_comm_t,
+        Nst_pad, jgm5);
+    cudaDeviceSynchronize();
+    return;
+  }
+  // fallthrough: v2 requirements not met
+#endif
+
+  int blockSize = VECTOR_LENGTH;
   int gridSize  = (Nst_pad * Ns + blockSize - 1) / blockSize;
 
   mult_domainwall_5din_eo_hopb_dirac_5D_kernel<<<gridSize, blockSize>>>(
-      vp_dev, up_dev, wp_dev, Ns, 
+      vp_dev, up_dev, wp_dev, Ns,
       bc_x, bc_y, bc_z, bc_t,
-      Nx, Ny, Nz, Nt, 
-      ieo, jeo, 
+      Nx, Ny, Nz, Nt,
+      ieo, jeo,
       do_comm_x, do_comm_y, do_comm_z, do_comm_t,
       Nst_pad, jgm5);
 

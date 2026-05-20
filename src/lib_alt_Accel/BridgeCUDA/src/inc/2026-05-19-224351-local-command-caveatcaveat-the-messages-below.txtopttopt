@@ -1,0 +1,1332 @@
+╭─── Claude Code v2.1.144 ─────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting        │
+│               Welcome back まつもり!               │ started                 │
+│                                                    │ Run /init to create a … │
+│                       ▐▛███▜▌                      │ ─────────────────────── │
+│                      ▝▜█████▛▘                     │ What's new              │
+│                        ▘▘ ▝▝                       │ Added `/resume` suppor… │
+│    Opus 4.7 · Claude Pro · wlchenba@gmail.com's    │ Added elapsed duration… │
+│    Organization                                    │ The `/plugin` browse a… │
+│      ~/…/src/lib_alt_Accel/BridgeCUDA/src/inc      │ /release-notes for more │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+✻ Conversation compacted (ctrl+o for history)
+
+
+● 先解釋一下為什麼 5D 比 4D 快(這個理解到了再談優化才有方向):
+
+  為什麼 5D 遠快於 4D
+
+  ┌───────────────────────┬────────────────────┬─────────────────────┐
+  │         指標          │  4D hopb_dirac_4D  │  5D hopb_dirac_5D   │
+  ├───────────────────────┼────────────────────┼─────────────────────┤
+  │ REG/thread            │ 226                │ 128                 │
+  ├───────────────────────┼────────────────────┼─────────────────────┤
+  │ Theoretical occupancy │ ~14% (~9 warps/SM) │ ~25% (~16 warps/SM) │
+  ├───────────────────────┼────────────────────┼─────────────────────┤
+  │ Threads launched      │ Nst                │ Nst × Ns            │
+  ├───────────────────────┼────────────────────┼─────────────────────┤
+  │ 平行度                │ 低                 │ 高                  │
+  └───────────────────────┴────────────────────┴─────────────────────┘
+
+  GPU 是 latency-hiding machine。stencil kernel 永遠 memory-bound,延遲靠 warp
+  切換來蓋。4D 因為每個 thread 跑全部 is,單一 thread 工作量大、register 多、warp
+   數少 → 沒有足夠的「替補 warp」蓋住 DRAM latency。5D 把 is 拆出來變平行,warp 
+  多 10 倍以上,Tensor Core 級的 latency 都能蓋過去。
+
+  所以 5D 沒問題,不要回頭考慮 4D 結構。
+
+  ---
+  5D EO hopb_dirac_5D 的真正瓶頸:u 重複讀
+
+  觀察
+
+  Block 內的 thread mapping(line 801-805):
+
+  threadIdx.x ∈ [0..63] (blockSize=64=2×NWP)
+    warp 0 (lane 0..31): is = blockId*2 % Ns,   idx_out = blockId*2 / Ns
+    warp 1 (lane 0..31): is = (blockId*2+1) % Ns, idx_out = (blockId*2+1) / Ns
+
+  當 Ns ≥ 2(domain wall 一定 Ns ≥ 8):block 內兩個 warp idx_out 相同 → 同樣的 32 
+  個 site,只是 is 不同。
+
+  但 isg = site + Nst * idir 只跟 site 有關,完全不看 is。
+
+  → warp 0 跟 warp 1 每個 lane 都在讀同一個 isg 的同一個 gauge link,讀了兩次。
+
+  如果你把 blockSize 拉到 NWP × Ns(例如 Ns=16 → blockSize=512),一個 block 內 16
+  個 warp 全部共用 site block,但目前的寫法會讓 u 被讀 16 次!
+
+  量化:當 Ns=16 時的 gauge link 浪費
+
+  現況:每 thread 載 8 dirs × 12 doubles = 96 doubles
+        整個 block (blockSize=64) × Ns(假設一個 block 跑 2 個 is) = 192 doubles
+  per site
+        若 blockSize=64×Ns/2 → Ns 倍重複
+
+  理論最小:每 site × 8 dirs × 12 = 96 doubles
+
+  潛在加速:gauge link bandwidth 省 Ns 倍(對 hopb 來說 gauge 大概佔 1/3
+  traffic,所以總頻寬約省 1/3 × (Ns-1)/Ns)。
+
+  修法:shared memory 載入 u,給 block 內所有 is 共用
+
+  具體結構:
+
+  __global__ void mult_domainwall_5din_eo_hopb_dirac_5D_kernel(...) {
+    // 重設 thread mapping:blockDim.x = NWP, blockDim.y = num_is_per_block
+    const int lane     = threadIdx.x;             // 0..31
+    const int is_local = threadIdx.y;             // 0..(blockDim.y-1)
+    const int idx_out  = blockIdx.x;
+    const int is_base  = blockIdx.y * blockDim.y;
+    const int is       = is_base + is_local;
+    const int site     = lane + NWP * idx_out;
+    if (is >= Ns) return;
+
+    // 共用的 gauge link,layout 為 [direction][NDF][NWP] 避免 bank conflict
+    __shared__ real_t u_shmem[2][NDF_RECONST][NWP];  // 2 = ping-pong 或 1 = 
+  順序
+    // NDF_RECONST = 12 (3rd row 由運算重建)
+
+    // 只有 is_local==0 的 thread 載入 u,其他 is 共用
+    for (int idir_step = 0; idir_step < 8; ++idir_step) {
+      int idir = ...;  // 拆解 idir_step 成 (x±,y±,z±,t±)
+      if (is_local == 0) {
+        int isg = site + Nst * idir;   // 或 nei + Nst*idir for - direction
+        // 12 個 doubles loaded once
+        u_shmem[idir_step % 2][0][lane] = __ldg(&u_up[IDX2_G_R(0,0,isg)]);
+        ... (12 doubles)
+      }
+      __syncthreads();
+
+      // 全 block 從 shared 讀 u
+      real_t u0 = u_shmem[idir_step%2][0][lane];
+      ...
+      // reconstruct 3rd row
+      real_t u12 = EXT_IMG_R(...);
+      ...
+      // 用 u 算這個方向的 contribution(每個 thread 自己的 is)
+      ...
+
+      __syncthreads();  // 在覆寫前確保所有人讀完
+    }
+  }
+
+  幾個要點:
+  - Bank conflict-free layout:[NDF][NWP] 而不是 [NWP][NDF],讓 32 個 lane
+  同時讀同一個 component 時走 32 個 bank
+  - is_local==0 只負擔一次 load,其他 is 一起讀 shared
+  - __syncthreads() overhead 跟省下的 LDG 比一下,我估 Ns≥8 時很值得
+  - shared memory 用量:2 × 12 × 32 × 8 = 6144 bytes per block(ping-pong);非
+  ping-pong 只要 3072 bytes
+
+  ---
+  配套的小優化
+
+  A. __launch_bounds__ 配 5D 的新 blockSize
+
+  __global__ __launch_bounds__(256, 4)   // 8 warps × 32 = 256, 4 blocks/SM
+  void mult_domainwall_5din_eo_hopb_dirac_5D_kernel(...)
+
+  讓 nvcc 知道目標 occupancy。256 thread/block × 4 blocks/SM = 1024
+  thread/SM,REG ≤ 64。會逼 nvcc 把當前 128 reg/thread 降一半。
+
+  B. 把所有 read-only data 加 __ldg
+
+  v1[IDX2_SP_5D_R(...)]、u_up[IDX2_G_*(...)] 全部用 __ldg(&...) 包起來。保證走 
+  read-only L1 cache,跟一般 LDG 比延遲更低、寬頻更高。
+
+  C. 把 mult_Domainwall_eo_openacc2_xyz-inc.h 內的 8 個 direction 用 macro 折疊
+
+  現在 xyz/t kernel header 是 8 段 copy-paste 的 stencil code(line 14-380)。每段
+   80-100 行重複的 SU3 mul 跟 v2_* 累加。改成 macro/template
+  可以讓編譯器更容易做 ILP scheduling,並減少 register lifetime 重疊。
+
+  ---
+  我建議的執行順序
+
+  1. 重編 + measure baseline(改完 race 之後)
+  2. 加 __launch_bounds__(64, 8)(對 5D hopb 試試 8 blocks/SM)→ 看 REG 是否降到
+  ~80
+  3. 給 u_up 跟 v1 加 __ldg wrapper → 估 5-10% 提升
+  4. 重頭戲:重構成 blockDim.y = Ns(或 8/16)+ shared u → 估 20-40% 提升,但要重寫
+
+  第 4 步是大工程,建議先把 1-3 跑出 baseline 再決定值不值得做。要不要我先幫你把
+  __launch_bounds__ 跟 __ldg 套到 5D EO hopb?這兩個都是低風險、可逆的改動。
+
+✻ Brewed for 2m 29s
+
+❯ /compact                                                                      
+  ⎿  Compacted (ctrl+o to see full summary)
+     Tip: You have access to Opus 1M with 5x more context
+  ⎿  Referenced file src/mult_Domainwall_5din_eo_cuda-inc.h
+  ⎿  Referenced file src/mult_Domainwall_5din_eo_inv_cuda-inc.h
+  ⎿  Referenced file src/mult_Domainwall_5din_cuda-inc.h
+  ⎿  Referenced file src/mult_Wilson_cuda-inc.h
+  ⎿  Read inline/define_index.h (70 lines)
+
+❯ 你壓縮卡死了..                                                                
+
+● 了解,壓縮卡住了不要緊,context 還在。
+
+  回到剛剛的 5D EO 優化,我建議的順序:
+
+  1. __launch_bounds__ 試 occupancy(低風險)
+  2. __ldg 包 u_up / v1(低風險)
+  3. 重構成 blockDim.y = Ns + shared u 共用(大工程)
+
+  要從哪一步開始?或先跑 baseline measurement 確認瓶頸再動?
+
+✻ Cooked for 9s
+
+❯ 沒關係 我們直接嘗試3                                                          
+
+● 好,先重讀關鍵檔案確認當前結構。
+
+  Searched for 2 patterns, read 3 files (ctrl+o to expand)
+
+● 我來實作 option 3。策略:創建 _shmem-inc.h 新 header + 新 kernel _v2,launcher
+  用 #define 切換,可一鍵 revert。
+
+  先用 Python 自動轉換 stencil header(把 u_up[...]/u_dn[...] 改寫成從 shmem
+  讀,並在每個方向插入 sync+load 巨集)。
+
+● Bash(cat /dev/stdin > /tmp/xform_shmem.py <<'PYEOF'
+      #!/usr/bin/env python3…)
+  ⎿  OK
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+● 確認 transform 結果無誤(8 個方向、0 個殘留 u_up/u_dn 讀)。現在在主 kernel
+  檔加入 macro + 新 kernel + launcher 切換。
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/src/mult_Domainwall_5d
+        in_eo_cuda-inc.h)
+  ⎿  Added 134 lines, removed 2 lines
+      777  }
+      778  
+      779  //============================================================
+           ========
+      780 +// v2 of hopb_dirac_5D: block-level gauge link sharing via __s
+          +hared__.                                                      
+      781 +//   Thread block: (NWP, NS_PER_BLOCK).  NS_PER_BLOCK warps sh
+          +are the same                                                  
+      782 +//   32-site block but process different is.  is_local==0 load
+          +s 12 gauge                                                    
+      783 +//   doubles once per direction into u_sh, all warps read from
+          + u_sh.                                                        
+      784 +//   Requires SU3_3RD_ROW_RECONST and Ns % NS_PER_BLOCK == 0. 
+      785 +//   Toggle off by removing -DUSE_5D_HOPB_V2 (falls back to v1
+          + launcher).                                                   
+      786 +#ifndef NS_PER_BLOCK                                          
+      787 +#define NS_PER_BLOCK 4                                        
+      788 +#endif                                                        
+      789 +                                                              
+      790 +#define U_UP_LOAD_AND_SYNC(isg) do { \                        
+      791 +  __syncthreads(); \                                          
+      792 +  if (is_local == 0) { \                                      
+      793 +    u_sh[ 0*NWP + lane] = u_up[IDX2_G_R(0,0,isg)]; \          
+      794 +    u_sh[ 1*NWP + lane] = u_up[IDX2_G_I(0,0,isg)]; \          
+      795 +    u_sh[ 2*NWP + lane] = u_up[IDX2_G_R(1,0,isg)]; \          
+      796 +    u_sh[ 3*NWP + lane] = u_up[IDX2_G_I(1,0,isg)]; \          
+      797 +    u_sh[ 4*NWP + lane] = u_up[IDX2_G_R(2,0,isg)]; \          
+      798 +    u_sh[ 5*NWP + lane] = u_up[IDX2_G_I(2,0,isg)]; \          
+      799 +    u_sh[ 6*NWP + lane] = u_up[IDX2_G_R(0,1,isg)]; \          
+      800 +    u_sh[ 7*NWP + lane] = u_up[IDX2_G_I(0,1,isg)]; \          
+      801 +    u_sh[ 8*NWP + lane] = u_up[IDX2_G_R(1,1,isg)]; \          
+      802 +    u_sh[ 9*NWP + lane] = u_up[IDX2_G_I(1,1,isg)]; \          
+      803 +    u_sh[10*NWP + lane] = u_up[IDX2_G_R(2,1,isg)]; \          
+      804 +    u_sh[11*NWP + lane] = u_up[IDX2_G_I(2,1,isg)]; \          
+      805 +  } \                                                         
+      806 +  __syncthreads(); \                                          
+      807 +} while(0)                                                    
+      808 +                                                              
+      809 +#define U_DN_LOAD_AND_SYNC(isg) do { \                        
+      810 +  __syncthreads(); \                                          
+      811 +  if (is_local == 0) { \                                      
+      812 +    u_sh[ 0*NWP + lane] = u_dn[IDX2_G_R(0,0,isg)]; \          
+      813 +    u_sh[ 1*NWP + lane] = u_dn[IDX2_G_I(0,0,isg)]; \          
+      814 +    u_sh[ 2*NWP + lane] = u_dn[IDX2_G_R(0,1,isg)]; \          
+      815 +    u_sh[ 3*NWP + lane] = u_dn[IDX2_G_I(0,1,isg)]; \          
+      816 +    u_sh[ 4*NWP + lane] = u_dn[IDX2_G_R(0,2,isg)]; \          
+      817 +    u_sh[ 5*NWP + lane] = u_dn[IDX2_G_I(0,2,isg)]; \          
+      818 +    u_sh[ 6*NWP + lane] = u_dn[IDX2_G_R(1,0,isg)]; \          
+      819 +    u_sh[ 7*NWP + lane] = u_dn[IDX2_G_I(1,0,isg)]; \          
+      820 +    u_sh[ 8*NWP + lane] = u_dn[IDX2_G_R(1,1,isg)]; \          
+      821 +    u_sh[ 9*NWP + lane] = u_dn[IDX2_G_I(1,1,isg)]; \          
+      822 +    u_sh[10*NWP + lane] = u_dn[IDX2_G_R(1,2,isg)]; \          
+      823 +    u_sh[11*NWP + lane] = u_dn[IDX2_G_I(1,2,isg)]; \          
+      824 +  } \                                                         
+      825 +  __syncthreads(); \                                          
+      826 +} while(0)                                                    
+      827 +                                                              
+      828 +__global__ __launch_bounds__(NWP * NS_PER_BLOCK, 2)           
+      829 +void mult_domainwall_5din_eo_hopb_dirac_5D_v2_kernel(         
+      830 +  real_t * __restrict__ vp, real_t * __restrict__ up, real_t *
+          + __restrict__ wp,                                             
+      831 +  int Ns,                                                     
+      832 +  int bc_x, int bc_y, int bc_z, int bc_t,                     
+      833 +  int Nx, int Ny, int Nz, int Nt,                             
+      834 +  int ieo, int jeo,                                           
+      835 +  int do_comm_x, int do_comm_y, int do_comm_z, int do_comm_t, 
+      836 +  int Nst_pad, int jgm5){                                     
+      837 +                                                              
+      838 +  const int Nxy   = Nx * Ny;                                  
+      839 +  const int Nst   = Nx * Ny * Nz * Nt;                        
+      840 +  const int Nxyz  = Nx * Ny * Nz;                             
+      841 +                                                              
+      842 +  const int lane     = threadIdx.x;                           
+      843 +  const int is_local = threadIdx.y;                           
+      844 +  const int idx_out  = blockIdx.x;                            
+      845 +  const int is_base  = blockIdx.y * NS_PER_BLOCK;             
+      846 +  const int is       = is_base + is_local;                    
+      847 +  const int site     = lane + NWP * idx_out;                  
+      848 +                                                              
+      849 +  real_t * u_up = up;                                         
+      850 +  real_t * u_dn = up;                                         
+      851 +                                                              
+      852 +  __shared__ real_t u_sh[12 * NWP];                           
+      853 +                                                              
+      854 +  int ix   = site % Nx;                                       
+      855 +  int iyzt = site / Nx;                                       
+      856 +  int iy   = iyzt % Ny;                                       
+      857 +  int izt  = site / Nxy;                                      
+      858 +  int iz   = izt  % Nz;                                       
+      859 +  int it   = izt  / Nz;                                       
+      860 +  int ixyz = site % Nxyz;                                     
+      861 +  int keo  = (jeo + iy + iz + it) % 2;                        
+      862 +  int idir;                                                   
+      863 +                                                              
+      864 +  real_t u_0, u_1, u_2, u_3, u_4, u_5;                        
+      865 +  real_t u_6, u_7, u_8, u_9, u10, u11;                        
+      866 +  real_t u12, u13, u14, u15, u16, u17;                        
+      867 +  real_t vt1_0, vt1_1, vt1_2, vt1_3, vt1_4, vt1_5;            
+      868 +  real_t vt2_0, vt2_1, vt2_2, vt2_3, vt2_4, vt2_5;            
+      869 +  real_t wt1r, wt1i, wt2r, wt2i;                              
+      870 +                                                              
+      871 +  real_t v2_01, v2_11, v2_21, v2_31, v2_41, v2_51;            
+      872 +  real_t v2_02, v2_12, v2_22, v2_32, v2_42, v2_52;            
+      873 +  real_t v2_03, v2_13, v2_23, v2_33, v2_43, v2_53;            
+      874 +  real_t v2_04, v2_14, v2_24, v2_34, v2_44, v2_54;            
+      875 +                                                              
+      876 +  real_t * v1 = wp;                                           
+      877 +  real_t * v2 = vp;                                           
+      878 +                                                              
+      879 +  #include "inc/mult_Domainwall_eo_openacc2_xyz_shmem-inc.h"  
+      880 +  #include "inc/mult_Domainwall_eo_openacc2_t_dirac_shmem-inc.
+          +h"                                                            
+      881 +                                                              
+      882 +  v2[IDX2_SP_5D_R(0,0,is,Ns,site)] = v2_01;                   
+      883 +  v2[IDX2_SP_5D_I(0,0,is,Ns,site)] = v2_11;                   
+      884 +  v2[IDX2_SP_5D_R(1,0,is,Ns,site)] = v2_21;                   
+      885 +  v2[IDX2_SP_5D_I(1,0,is,Ns,site)] = v2_31;                   
+      886 +  v2[IDX2_SP_5D_R(2,0,is,Ns,site)] = v2_41;                   
+      887 +  v2[IDX2_SP_5D_I(2,0,is,Ns,site)] = v2_51;                   
+      888 +                                                              
+      889 +  v2[IDX2_SP_5D_R(0,1,is,Ns,site)] = v2_02;                   
+      890 +  v2[IDX2_SP_5D_I(0,1,is,Ns,site)] = v2_12;                   
+      891 +  v2[IDX2_SP_5D_R(1,1,is,Ns,site)] = v2_22;                   
+      892 +  v2[IDX2_SP_5D_I(1,1,is,Ns,site)] = v2_32;                   
+      893 +  v2[IDX2_SP_5D_R(2,1,is,Ns,site)] = v2_42;                   
+      894 +  v2[IDX2_SP_5D_I(2,1,is,Ns,site)] = v2_52;                   
+      895 +                                                              
+      896 +  v2[IDX2_SP_5D_R(0,2,is,Ns,site)] = v2_03;                   
+      897 +  v2[IDX2_SP_5D_I(0,2,is,Ns,site)] = v2_13;                   
+      898 +  v2[IDX2_SP_5D_R(1,2,is,Ns,site)] = v2_23;                   
+      899 +  v2[IDX2_SP_5D_I(1,2,is,Ns,site)] = v2_33;                   
+      900 +  v2[IDX2_SP_5D_R(2,2,is,Ns,site)] = v2_43;                   
+      901 +  v2[IDX2_SP_5D_I(2,2,is,Ns,site)] = v2_53;                   
+      902 +                                                              
+      903 +  v2[IDX2_SP_5D_R(0,3,is,Ns,site)] = v2_04;                   
+      904 +  v2[IDX2_SP_5D_I(0,3,is,Ns,site)] = v2_14;                   
+      905 +  v2[IDX2_SP_5D_R(1,3,is,Ns,site)] = v2_24;                   
+      906 +  v2[IDX2_SP_5D_I(1,3,is,Ns,site)] = v2_34;                   
+      907 +  v2[IDX2_SP_5D_R(2,3,is,Ns,site)] = v2_44;                   
+      908 +  v2[IDX2_SP_5D_I(2,3,is,Ns,site)] = v2_54;                   
+      909 +}                                                             
+      910 +                                                              
+      911 +//============================================================
+          +========                                                      
+      912  __global__
+      913  void mult_domainwall_5din_eo_hopb_dirac_5D_kernel(
+      782 -  real_t * __restrict__ vp, real_t * __restrict__ up, real_t *
+          - __restrict__ wp,                                             
+      783 -  int Ns,                                                     
+      914 +  real_t * __restrict__ vp, real_t * __restrict__ up, real_t *
+          + __restrict__ wp,                                             
+      915 +  int Ns,                                                     
+      916    int bc_x, int bc_y, int bc_z, int bc_t,
+      917    int Nx, int Ny, int Nz, int Nt, 
+      918    int ieo, int jeo, 
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/src/mult_Domainwall_5d
+        in_eo_cuda-inc.h)
+  ⎿  Added 21 lines, removed 4 lines
+      1019    int do_comm_z = do_comm[2];
+      1020    int do_comm_t = do_comm[3];
+      1021  
+      1022 -  int blockSize = VECTOR_LENGTH;                             
+      1022 +#ifdef USE_5D_HOPB_V2                                        
+      1023 +  if (Ns % NS_PER_BLOCK == 0 && (Nst_pad % NWP == 0)) {      
+      1024 +    dim3 block(NWP, NS_PER_BLOCK);                           
+      1025 +    dim3 grid (Nst_pad / NWP, Ns / NS_PER_BLOCK);            
+      1026 +    mult_domainwall_5din_eo_hopb_dirac_5D_v2_kernel<<<grid, b
+           +lock>>>(                                                     
+      1027 +        vp_dev, up_dev, wp_dev, Ns,                          
+      1028 +        bc_x, bc_y, bc_z, bc_t,                              
+      1029 +        Nx, Ny, Nz, Nt,                                      
+      1030 +        ieo, jeo,                                            
+      1031 +        do_comm_x, do_comm_y, do_comm_z, do_comm_t,          
+      1032 +        Nst_pad, jgm5);                                      
+      1033 +    cudaDeviceSynchronize();                                 
+      1034 +    return;                                                  
+      1035 +  }                                                          
+      1036 +  // fallthrough: v2 requirements not met                    
+      1037 +#endif                                                       
+      1038 +                                                             
+      1039 +  int blockSize = VECTOR_LENGTH;                             
+      1040    int gridSize  = (Nst_pad * Ns + blockSize - 1) / blockSize;
+      1041  
+      1042    mult_domainwall_5din_eo_hopb_dirac_5D_kernel<<<gridSize, bl
+            ockSize>>>(
+      1026 -      vp_dev, up_dev, wp_dev, Ns,                            
+      1043 +      vp_dev, up_dev, wp_dev, Ns,                            
+      1044        bc_x, bc_y, bc_z, bc_t,
+      1028 -      Nx, Ny, Nz, Nt,                                        
+      1029 -      ieo, jeo,                                              
+      1045 +      Nx, Ny, Nz, Nt,                                        
+      1046 +      ieo, jeo,                                              
+      1047        do_comm_x, do_comm_y, do_comm_z, do_comm_t,
+      1048        Nst_pad, jgm5);
+      1049  
+
+  Searched for 1 pattern (ctrl+o to expand)
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/bridgeACC_Domainwall_5
+        din_double.cu)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/bridgeACC_Domainwall_5
+        din_double.cu)
+  ⎿  Added 1 line
+      20  namespace BridgeACC {
+      21  
+      22  #define SU3_3RD_ROW_RECONST
+      23 +#define USE_5D_HOPB_V2  // shared-memory gauge link sharing for
+         + 5D EO hopb kernel                                             
+      24  
+      25  #include "src/mult_Domainwall_5din_cuda-inc.h"
+      26  #include "src/mult_Domainwall_5din_eo_cuda-inc.h"
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/bridgeACC_Domainwall_5
+        din_float.cu)
+  ⎿  Added 1 line
+      20  namespace BridgeACC {
+      21  
+      22  #define SU3_3RD_ROW_RECONST
+      23 +#define USE_5D_HOPB_V2  // shared-memory gauge link sharing for
+         + 5D EO hopb kernel                                             
+      24  
+      25  #include "src/mult_Domainwall_5din_cuda-inc.h"
+      26  #include "src/mult_Domainwall_5din_eo_cuda-inc.h"
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+● Bash(which nvcc && nvcc --version 2>&1 | head -3)
+  ⎿  Error: Exit code 1
+
+● Bash(module load 2>&1 | head -3; ls /usr/local/cuda*/bin/nvcc 2>&1 | head -3;
+      module avail 2>&1 | head -20)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ 我可以自己compile 你code寫好和我說就好                                        
+
+● 好,改動完成。摘要:
+
+  新增檔案
+
+  - src/inc/mult_Domainwall_eo_openacc2_xyz_shmem-inc.h
+  - src/inc/mult_Domainwall_eo_openacc2_t_dirac_shmem-inc.h
+
+  (由 Python 腳本從原 header 自動轉換:u_X = u_(up|dn)[IDX2_G_*(...)] → u_X = 
+  u_sh[X*NWP + lane],並在每個方向第一個 u 載入前插入 U_UP/DN_LOAD_AND_SYNC(isg))
+
+  修改檔案
+
+  1. src/mult_Domainwall_5din_eo_cuda-inc.h(line 779 起)
+    - 新增 #define NS_PER_BLOCK 4(可調)
+    - 新增 U_UP_LOAD_AND_SYNC / U_DN_LOAD_AND_SYNC 兩個 macro(只由 is_local==0
+  寫 12 doubles 到 shmem,前後各一次 __syncthreads)
+    - 新增 kernel mult_domainwall_5din_eo_hopb_dirac_5D_v2_kernel,__launch_bound
+  s__(NWP*NS_PER_BLOCK, 2),thread 用 2D mapping (lane, is_local),blockIdx
+  (idx_out, is_block)
+    - launcher mult_domainwall_5din_eo_hopb_dirac_5d 加入 #ifdef USE_5D_HOPB_V2
+  分支,當 Ns % NS_PER_BLOCK == 0 時走 v2,否則 fallback 原 v1
+  2. bridgeACC_Domainwall_5din_double.cu & bridgeACC_Domainwall_5din_float.cu
+    - 加 #define USE_5D_HOPB_V2(放在 #define SU3_3RD_ROW_RECONST 旁)
+
+  注意事項
+
+  - v2 需要 Ns % NS_PER_BLOCK == 0 — 預設 NS_PER_BLOCK=4。Ns=8/16/32 都
+  OK。Ns=10、12 之類就走 fallback
+  - v2 需要 SU3_3RD_ROW_RECONST — 你目前是開的
+  - 每個方向多 2 個 __syncthreads()(全 kernel 共 16 個)。256 thread/block 的
+  sync 很便宜
+  - shmem 用量:3072 bytes/block(12 doubles × 32 lanes × 8)
+  - 期望影響:block 內 NS_PER_BLOCK 個 warp 共用同一份 gauge link,gauge bandwidth
+   降 NS_PER_BLOCK 倍(預設 4×)
+
+  一鍵回退
+
+  把 bridgeACC_Domainwall_5din_*.cu 的 #define USE_5D_HOPB_V2 註解掉即可。
+
+  編譯後請檢查
+
+  1. 正確性:跑 spectrum test 比對結果
+  2. REG/SHARED:cuobjdump --dump-resource-usage 看
+  mult_domainwall_5din_eo_hopb_dirac_5D_v2_kernel 的 reg / shmem
+  3. 想調整可以改 NS_PER_BLOCK (2/4/8 都試試),或 __launch_bounds__ 第二參數(目前
+   2 blocks/SM)
+
+  編譯有問題或結果不對的話貼錯誤給我。
+
+✻ Cooked for 22s
+
+❯ Fprop_alt_Standard_eo<Afield<float,ACCEL> >: mult performance:                
+    mult mode = Doe                                                             
+    Number of mult =                400                                         
+    Elapsed time   =       0.080067 sec                                         
+    Flop(Fopr)     =          146276352                                         
+    Flop(total)    =        58510540800                                         
+    Performance    =     730.768 GFlops                                         
+  Fprop_alt_Standard_eo<Afield<float,ACCEL> >: mult performance:                
+    mult mode = Doe                                                             
+    Number of mult =                400                                         
+    Elapsed time   =       0.070917 sec                                         
+    Flop(Fopr)     =          146276352                                         
+    Flop(total)    =        58510540800                                         
+    Performance    =     825.058 GFlops 好像有快一點?                           
+
+● 730 → 825 = +13%。比預期(理論 4× gauge bandwidth 節省)少很多,代表瓶頸不全在
+  gauge link 重複讀(spinor traffic 沒被 share、occupancy 也降了)。
+
+  幾個快速可調的旋鈕,試試哪個最有效:
+
+  旋鈕 1:NS_PER_BLOCK(改 mult_Domainwall_5din_eo_cuda-inc.h)
+
+  #define NS_PER_BLOCK 4   // 目前
+
+  - 2:小 block(64 thr),occupancy 高、share 少(2×)
+  - 4:目前
+  - 8:大 block(256 thr),share 多(8×),但 occupancy 低
+  - 16:若 Ns=16,整個 Ns 在一個 block(極限)
+
+  旋鈕 2:__launch_bounds__ 第二參數
+
+  __global__ __launch_bounds__(NWP * NS_PER_BLOCK, 2)
+
+  第二參數 = 目標 blocks/SM。試 1、2、3。
+  - 改大 → 強制降 REG → 可能 spill
+  - 改小 → 給更多 REG → 但 occupancy 更低
+
+  排列組合建議
+
+  先固定 __launch_bounds__(..., 2),試 NS_PER_BLOCK ∈ {2, 4, 8}
+  看哪個最快。再對勝者試 (.., 1) 和 (.., 3)。
+
+  如果你想再進一步榨
+
+  - double-buffer u_sh:用 6144 bytes(兩份),用 idir%2 切換,可以省掉一半
+  syncthreads(但 shmem 雙倍 → 占用 ↑)
+  - pre-load all 8 directions:u_sh[8][12*NWP] = 24KB,一次性把 8 個方向的 u
+  都載入,只需 1 個 sync。但 occupancy 可能掉
+  - 看 ncu profile 確認瓶頸到底在哪 — DRAM throughput?L1 hit rate?warp stall
+  reason?
+
+  要不要我先把 NS_PER_BLOCK=8 跟 double-buffer 版本寫好讓你跑?
+
+✻ Cooked for 25s
+
+※ recap: Goal: optimize 5D EO `hopb_dirac` CUDA kernel via shared-memory gauge link sharing. Just shipped v2 (NS_PER_BLOCK=4), got +13% (730→825 GFlops). Next: tune `NS_PER_BLOCK` to 2 or 8 to see if speedup grows. (disable recaps in /config)
+
+❯   - src/inc/mult_Domainwall_eo_openacc2_xyz_sh                                
+    mem-inc.h                                                                   
+    - src/inc/mult_Domainwall_eo_openacc2_t_dira                                
+    c_shmem-inc.h 順便幫我把這兩個的openacc改成cuda 都試看看?                   
+
+● 來改檔名。我用 git mv 保留 history,然後更新 #include。
+
+● Bash(cd
+      /home/wlchenhome/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/src/inc &&
+       \
+      git mv mult_Domainwall_eo_openacc2_xyz_shmem-inc.h
+      mult_Domainwall_eo_cuda_xyz_s…)
+  ⎿  Error: Exit code 128
+     fatal: not under version control, source=src/lib_alt_Accel/BridgeCUDA/src/i
+     nc/mult_Domainwall_eo_openacc2_xyz_shmem-inc.h, destination=src/lib_alt_Acc
+     el/BridgeCUDA/src/inc/mult_Domainwall_eo_cuda_xyz_shmem-inc.h
+
+● Bash(cd
+      /home/wlchenhome/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/src/inc &&
+       \
+      mv mult_Domainwall_eo_openacc2_xyz_shmem-inc.h
+      mult_Domainwall_eo_cuda_xyz_shmem…)
+  ⎿  mult_Domainwall_eo_cuda_t_dirac_shmem-inc.h
+     mult_Domainwall_eo_cuda_xyz_shmem-inc.h
+
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/src/mult_Domainwall_5d
+        in_eo_cuda-inc.h)
+  ⎿  Added 2 lines, removed 2 lines
+      876    real_t * v1 = wp;
+      877    real_t * v2 = vp;
+      878  
+      879 -  #include "inc/mult_Domainwall_eo_openacc2_xyz_shmem-inc.h"  
+      880 -  #include "inc/mult_Domainwall_eo_openacc2_t_dirac_shmem-inc.
+          -h"                                                            
+      879 +  #include "inc/mult_Domainwall_eo_cuda_xyz_shmem-inc.h"      
+      880 +  #include "inc/mult_Domainwall_eo_cuda_t_dirac_shmem-inc.h"  
+      881  
+      882    v2[IDX2_SP_5D_R(0,0,is,Ns,site)] = v2_01;
+      883    v2[IDX2_SP_5D_I(0,0,is,Ns,site)] = v2_11;
+
+  Read 1 file (ctrl+o to expand)
+
+● 檔名改完,#include 也更新了。把 v2 區塊的 tunables 加個說明 comment
+  方便你掃過。
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/src/mult_Domainwall_5d
+        in_eo_cuda-inc.h)  ⎿  Added 9 lines
+      783  //   doubles once per direction into u_sh, all warps read from
+            u_sh.
+      784  //   Requires SU3_3RD_ROW_RECONST and Ns % NS_PER_BLOCK == 0.
+      785  //   Toggle off by removing -DUSE_5D_HOPB_V2 (falls back to v1
+            launcher).
+      786 +//                                                            
+      787 +// Tunables to benchmark:                                     
+      788 +//   NS_PER_BLOCK   2 / 4 / 8 / 16     (must divide Ns; smalle
+          +r → more occupancy,                                           
+      789 +//                                      bigger → more u-sharin
+          +g)                                                            
+      790 +//   LB_BLOCKS_PER_SM   1 / 2 / 3      (2nd arg to __launch_bo
+          +unds__; higher                                                
+      791 +//                                      forces lower REG/threa
+          +d)                                                            
+      792  #ifndef NS_PER_BLOCK
+      793  #define NS_PER_BLOCK 4
+      794  #endif
+      795 +#ifndef LB_BLOCKS_PER_SM                                      
+      796 +#define LB_BLOCKS_PER_SM 2                                    
+      797 +#endif                                                        
+      798  
+      799  #define U_UP_LOAD_AND_SYNC(isg) do { \
+      800    __syncthreads(); \
+
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/src/mult_Domainwall_5d
+        in_eo_cuda-inc.h)
+  ⎿  Added 1 line, removed 1 line
+      834    __syncthreads(); \
+      835  } while(0)
+      836  
+      837 -__global__ __launch_bounds__(NWP * NS_PER_BLOCK, 2)           
+      837 +__global__ __launch_bounds__(NWP * NS_PER_BLOCK, LB_BLOCKS_PER
+          +_SM)                                                          
+      838  void mult_domainwall_5din_eo_hopb_dirac_5D_v2_kernel(
+      839    real_t * __restrict__ vp, real_t * __restrict__ up, real_t *
+            __restrict__ wp,
+      840    int Ns,
+
+● 完成。現在你可以這樣跑實驗:
+
+  改檔名 + 暴露兩個 tunable
+
+  - 兩個新 header 已更名為 mult_Domainwall_eo_cuda_xyz_shmem-inc.h /
+  _t_dirac_shmem-inc.h
+  - mult_Domainwall_5din_eo_cuda-inc.h 的 v2 區塊現有兩個 #define:
+  #define NS_PER_BLOCK     4    // 試 2 / 4 / 8 / 16
+  #define LB_BLOCKS_PER_SM 2    // 試 1 / 2 / 3
+
+  建議實驗順序(從快到慢)
+
+  ┌────────────────┬──────────────┬──────────────────┬────────────┐
+  │      步驟      │ NS_PER_BLOCK │ LB_BLOCKS_PER_SM │ block 大小 │
+  ├────────────────┼──────────────┼──────────────────┼────────────┤
+  │ baseline(已測) │ 4            │ 2                │ 128        │
+  ├────────────────┼──────────────┼──────────────────┼────────────┤
+  │ A              │ 2            │ 2                │ 64         │
+  ├────────────────┼──────────────┼──────────────────┼────────────┤
+  │ B              │ 8            │ 2                │ 256        │
+  ├────────────────┼──────────────┼──────────────────┼────────────┤
+  │ C              │ 16           │ 2                │ 512        │
+  └────────────────┴──────────────┴──────────────────┴────────────┘
+
+  跑完 A/B/C 找出最快的 NS_PER_BLOCK,再對它試 LB=1 跟 LB=3。
+
+  跑完告訴我哪個組合最快
+
+  如果 NS_PER_BLOCK=8 以上有明顯效益,我可以再寫 double-buffer 版(用 2 倍
+  shmem,把 8 個方向裡 ping-pong load,省一半 syncthreads),那個是下一階段。
+
+✻ Baked for 1m 42s
+
+※ recap: Goal: optimize 5D EO hopb CUDA kernel for Domain Wall fermion. Implemented v2 with shared-memory gauge link sharing (NS_PER_BLOCK warps share u), got 730→825 GFlops. Next: benchmark NS_PER_BLOCK ∈ {2, 8, 16} and LB_BLOCKS_PER_SM ∈ {1, 3} to find best combo. (disable recaps in /config)
+
+❯ 沒啥感覺                                                                      
+
+● 代表 u-sharing 不是主要瓶頸 — L1/L2 cache 大概已經吸收掉 gauge link 的
+  redundant 讀取了。
+
+  要往哪走需要先確定真正的瓶頸。建議:
+
+  1. 用 ncu profile(最有資訊量)
+
+  ncu --set full --kernel-name regex:hopb_dirac_5D_v2 \
+      --launch-skip 100 --launch-count 1 \
+      -o profile_v2 <你的 test 可執行檔>
+
+  主要看:
+  - Memory Workload Analysis → DRAM throughput / L1 hit rate / L2 hit rate
+  - Warp State Statistics → stall 原因(Long Scoreboard / Wait / Math throttle)
+  - Source Counters → 哪一行 stall 最多
+
+  把這三張截圖或文字貼給我,可以針對性建議下一步。
+
+  2. 如果 profile 顯示 DRAM-bound
+
+  代表已經接近頻寬上限,shmem 對 redundant load 沒用是合理的。下一步可能要:
+  - 把 spinor v1 用 __ldg 包,讀進 read-only L1
+  - 改 v1 的記憶體 layout(這就大工程了)
+
+  3. 如果 profile 顯示 Long Scoreboard stall(等記憶體)
+
+  代表 latency hiding 不夠 → 需要更高 occupancy。試:
+  - 降 REG(用 --maxrregcount=64 或 __launch_bounds__(_, 3)),即便會 spill
+  - 或回到 v1 + 純加 __launch_bounds__ 比較
+
+  4. 如果是 Math/Pipe Throttle
+
+  代表已經 compute-bound 了(對 stencil 不太可能),那 825 GFlops
+  大概就是現在這台卡的天花板。
+
+  ---
+  短期實用建議:把 v2 關掉(#undef USE_5D_HOPB_V2),回到 v1 baseline,確認 v2 vs v1
+  的差距是來自 shmem 還是 launch_bounds。也許 launch_bounds 本身就貢獻了那 13%。
+
+  你方便跑 ncu 嗎?還是只能 benchmark 看 GFlops?
+
+✻ Worked for 44s
+
+❯ 離roofline比較遠的是inv內的LU分解就是了..                                     
+
+● 那邊才是大頭。讓我看一下 LU 分解在哪個 kernel。
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● 對,看到了。LUinv_dirac_kernel(line 314)和 LUdaginv_dirac_kernel(line 542)真的
+  roofline 不會高 —— 那個 forward/backward sweep 沿著 is 有 sequential
+  dependency,而且有兩次 DRAM round-trip。
+
+  分析:LUinv 的真正瓶頸
+
+  每個 thread 處理一個 (site, ivc),沿 is = 0..Ns-1 跑 forward sweep,再 is = 
+  Ns-1..0 跑 backward sweep。問題出在:
+
+  // Forward 寫 vp[is]
+  vp[base_idx + stride_is*is + ...] = vt[id];
+
+  // 後面 Backward 又讀回來!
+  vt[id] = vp[base_idx + stride_is*is + ...];
+
+  對 Ns=16:
+
+  ┌──────────┬───────────┬───────────┐
+  │  Phase   │   Loads   │  Stores   │
+  ├──────────┼───────────┼───────────┤
+  │ Forward  │ 4×Ns (wp) │ 4×Ns (vp) │
+  ├──────────┼───────────┼───────────┤
+  │ Middle   │ 4 (vp)    │ 4 (vp)    │
+  ├──────────┼───────────┼───────────┤
+  │ Backward │ 4×Ns (vp) │ 4×Ns (vp) │
+  └──────────┴───────────┴───────────┘
+
+  那 4×Ns DRAM 寫 + 4×Ns DRAM 讀 是被自己寫進去又讀出來的中間結果,完全可以省。
+
+  Arithmetic Intensity 估算(float, Ns=16)
+
+  ┌────────┬──────────────┬──────────────┬──────┬────────────────────────────┐
+  │        │ bytes/thread │ FLOPs/thread │  AI  │ Max GFlops (A100 1555GB/s) │
+  ├────────┼──────────────┼──────────────┼──────┼────────────────────────────┤
+  │ 現況   │ ~1056        │ ~784         │ 0.74 │ ~1150                      │
+  ├────────┼──────────────┼──────────────┼──────┼────────────────────────────┤
+  │ 優化後 │ ~512         │ ~784         │ 1.53 │ ~2380                      │
+  └────────┴──────────────┴──────────────┴──────┴────────────────────────────┘
+
+  理論可以 ~2×。
+
+  優化方案:把 forward sweep 結果留在 thread-local
+
+  template <int NS_MAX>
+  __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel_v2(
+      real_t* vp, real_t* wp, int Ns, int Nst_pad, real_t alpha)
+  {
+    // ... idx mapping ...
+
+    real_t vt_fwd[NS_MAX][ND];   // 每個 is 的 forward 結果留著
+    real_t vt[ND], yt[ND];
+
+    // Forward: 寫 vt_fwd[is] 而不是 vp[is]
+    // ...
+    vt_fwd[is][0] = vt[0]; vt_fwd[is][1] = vt[1]; ... // local
+
+    // Middle: 直接用 vt (還在 register),不從 vp 讀
+
+    // Backward: 從 vt_fwd[is] 讀,不從 vp 讀;最終結果才寫 vp
+    vt[0] = vt_fwd[is][0]; ...
+    // compute backward step
+    vp[base_idx + ...] = vt[0]; // only final write
+  }
+
+  需要把 kernel template 化(因為 vt_fwd[NS_MAX][4] 需要編譯時常數),launcher 用
+  Ns 跳轉到對應 specialization:
+
+  switch(Ns) {
+    case  8: launcher<8>(...);  break;
+    case 12: launcher<12>(...); break;
+    case 16: launcher<16>(...); break;
+    case 32: launcher<32>(...); break;
+    default: 走原版 kernel
+  }
+
+  Register / Local memory 顧慮
+
+  ┌─────┬─────────────────────────┬──────────────────────────────────────────┐
+  │ Ns  │   vt_fwd[Ns][4] 大小    │                   行為                   │
+  ├─────┼─────────────────────────┼──────────────────────────────────────────┤
+  │ 8   │ 32 doubles = 64 fp32    │ 可能全在 register                        │
+  │     │ regs                    │                                          │
+  ├─────┼─────────────────────────┼──────────────────────────────────────────┤
+  │ 16  │ 64 doubles = 128 fp32   │ 可能 spill 但 L1 cached                  │
+  │     │ regs                    │                                          │
+  ├─────┼─────────────────────────┼──────────────────────────────────────────┤
+  │ 32  │ 128 doubles             │ 一定 spill,但 local-mem 還是比 DRAM      │
+  │     │                         │ round-trip 快                            │
+  └─────┴─────────────────────────┴──────────────────────────────────────────┘
+
+  即使 spill 到 local memory(其實是 L1-cached DRAM),只要 L1 hit
+  多,就比現在直接走 DRAM 快很多。
+
+  ---
+  要不要我寫這個 v2 版本?同樣方式:加新 kernel _v2 + #define USE_LUINV_V2
+  切換、保留 v1 作 fallback。LUdaginv_dirac_kernel(line
+  542)也是類似結構,可以一起改。
+
+✻ Worked for 2m 45s
+
+❯ 恩恩 實務上NS不會太大但是還是有可能 寫吧                                      
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● 寫 v2 LUinv 跟 LUdaginv,template 化 NS,把 forward-sweep 結果留在 thread-local
+  陣列。
+
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/src/mult_Domainwall_5d
+        in_eo_inv_cuda-inc.h)
+  ⎿  Added 244 lines
+      311    CHECK(cudaFree(mat_inv_dev));
+      312  }
+      313  
+      314 +//============================================================
+          +========                                                      
+      315 +// v2 LU(dag) inv: cache forward-sweep results in a thread-loc
+          +al NS x ND                                                    
+      316 +//   array so the backward sweep does not round-trip through D
+          +RAM.                                                          
+      317 +//   Templated on NS so the array size is known at compile tim
+          +e and the                                                     
+      318 +//   sweep loops fully unroll.  Toggle with -DUSE_LUINV_V2 in 
+          +the .cu file;                                                 
+      319 +//   only Ns that appear in the launcher switch take the v2 pa
+          +th, others                                                    
+      320 +//   fall back to the original kernel.                        
+      321 +template <int NS>                                             
+      322 +__global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel_v2(
+      323 +                        real_t* __restrict__ vp, real_t* __res
+          +trict__ wp,                                                   
+      324 +                        int Nst_pad, real_t alpha)            
+      325 +{                                                             
+      326 +  const int Nin5     = NVCD * NS;                             
+      327 +  const int ist      = blockIdx.x * blockDim.x + threadIdx.x; 
+      328 +  const int GridSize = blockDim.x * gridDim.x;                
+      329 +                                                              
+      330 +  const real_t* e_con     = ConstantMemoryTraits<real_t>::e();
+      331 +  const real_t* f_con     = ConstantMemoryTraits<real_t>::f();
+      332 +  const real_t* dpinv_con = ConstantMemoryTraits<real_t>::dpin
+          +v();                                                          
+      333 +  const real_t* dm_con    = ConstantMemoryTraits<real_t>::dm()
+          +;                                                             
+      334 +                                                              
+      335 +  for( int idx = ist; idx < Nst_pad * NVC; idx += GridSize){  
+      336 +    int idx2_wp = idx / NWP;                                  
+      337 +    int idx_in  = idx % NWP;                                  
+      338 +    int ivc     = idx2_wp % NVC;                              
+      339 +    int idx_out = idx2_wp / NVC;                              
+      340 +                                                              
+      341 +    const int base_site_idx = idx_in + NWP * (ivc + Nin5 * idx
+          +_out);                                                        
+      342 +    const int stride_id = NWP * NVC;                          
+      343 +    const int stride_is = NWP * NVCD;                         
+      344 +                                                              
+      345 +    real_t vt_fwd[NS][ND];                                    
+      346 +    real_t vt[ND], yt[ND], xt[ND];                            
+      347 +                                                              
+      348 +    // === Forward (L-inv) is=0 ===                           
+      349 +    {                                                         
+      350 +      vt[0] = wp[base_site_idx + stride_id * 0];              
+      351 +      vt[1] = wp[base_site_idx + stride_id * 1];              
+      352 +      vt[2] = wp[base_site_idx + stride_id * 2];              
+      353 +      vt[3] = wp[base_site_idx + stride_id * 3];              
+      354 +      vt_fwd[0][0] = vt[0]; vt_fwd[0][1] = vt[1]; vt_fwd[0][2]
+          + = vt[2]; vt_fwd[0][3] = vt[3];                               
+      355 +      real_t e0 = e_con[0];                                   
+      356 +      yt[0] = e0 * vt[0]; yt[1] = e0 * vt[1]; yt[2] = e0 * vt[
+          +2]; yt[3] = e0 * vt[3];                                       
+      357 +    }                                                         
+      358 +                                                              
+      359 +    // === Forward (L-inv) is=1..NS-2 ===                     
+      360 +    #pragma unroll                                            
+      361 +    for (int is = 1; is < NS-1; ++is) {                       
+      362 +      real_t a   = real_t(0.5) * dm_con[is] * dpinv_con[is-1];
+      363 +      real_t eis = e_con[is];                                 
+      364 +      xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[
+          +3];                                                           
+      365 +      int is_offset = stride_is * is;                         
+      366 +      vt[0] = wp[base_site_idx + stride_id * 0 + is_offset];  
+      367 +      vt[1] = wp[base_site_idx + stride_id * 1 + is_offset];  
+      368 +      vt[2] = wp[base_site_idx + stride_id * 2 + is_offset];  
+      369 +      vt[3] = wp[base_site_idx + stride_id * 3 + is_offset];  
+      370 +      vt[0] += a * (xt[0] + xt[2]); vt[1] += a * (xt[1] + xt[3
+          +]);                                                           
+      371 +      vt[2] += a * (xt[2] + xt[0]); vt[3] += a * (xt[3] + xt[1
+          +]);                                                           
+      372 +      vt_fwd[is][0] = vt[0]; vt_fwd[is][1] = vt[1]; vt_fwd[is]
+          +[2] = vt[2]; vt_fwd[is][3] = vt[3];                           
+      373 +      yt[0] += eis * vt[0]; yt[1] += eis * vt[1]; yt[2] += eis
+          + * vt[2]; yt[3] += eis * vt[3];                               
+      374 +    }                                                         
+      375 +                                                              
+      376 +    // === Forward (L-inv) is=NS-1 (with -0.5*yt correction; n
+          +o vt_fwd[NS-1] needed) ===                                    
+      377 +    {                                                         
+      378 +      const int is = NS-1;                                    
+      379 +      xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[
+          +3];                                                           
+      380 +      int last_is_offset = stride_is * is;                    
+      381 +      vt[0] = wp[base_site_idx + stride_id * 0 + last_is_offse
+          +t];                                                           
+      382 +      vt[1] = wp[base_site_idx + stride_id * 1 + last_is_offse
+          +t];                                                           
+      383 +      vt[2] = wp[base_site_idx + stride_id * 2 + last_is_offse
+          +t];                                                           
+      384 +      vt[3] = wp[base_site_idx + stride_id * 3 + last_is_offse
+          +t];                                                           
+      385 +      real_t a_last = real_t(0.5) * dm_con[is] * dpinv_con[is-
+          +1];                                                           
+      386 +      vt[0] += a_last * (xt[0] + xt[2]) - real_t(0.5) * (yt[0]
+          + - yt[2]);                                                    
+      387 +      vt[1] += a_last * (xt[1] + xt[3]) - real_t(0.5) * (yt[1]
+          + - yt[3]);                                                    
+      388 +      vt[2] += a_last * (xt[2] + xt[0]) - real_t(0.5) * (yt[2]
+          + - yt[0]);                                                    
+      389 +      vt[3] += a_last * (xt[3] + xt[1]) - real_t(0.5) * (yt[3]
+          + - yt[1]);                                                    
+      390 +    }                                                         
+      391 +                                                              
+      392 +    // === Middle step (D-inv at is=NS-1); uses vt directly (n
+          +o vp round-trip) ===                                          
+      393 +    {                                                         
+      394 +      const int is = NS-1;                                    
+      395 +      real_t aa = dpinv_con[NS-1];                            
+      396 +      real_t f1 = real_t(0.5) * (real_t(1.0) + alpha);        
+      397 +      real_t f2 = real_t(0.5) * (real_t(-1.0) + alpha);       
+      398 +      real_t v0 = vt[0], v1c = vt[1], v2c = vt[2], v3c = vt[3]
+          +;                                                             
+      399 +      vt[0] = aa * (f1 * v0  + f2 * v2c);                     
+      400 +      vt[1] = aa * (f1 * v1c + f2 * v3c);                     
+      401 +      vt[2] = aa * (f1 * v2c + f2 * v0 );                     
+      402 +      vt[3] = aa * (f1 * v3c + f2 * v1c);                     
+      403 +      int last_is_offset = stride_is * is;                    
+      404 +      vp[base_site_idx + last_is_offset + stride_id * 0] = vt[
+          +0];                                                           
+      405 +      vp[base_site_idx + last_is_offset + stride_id * 1] = vt[
+          +1];                                                           
+      406 +      vp[base_site_idx + last_is_offset + stride_id * 2] = vt[
+          +2];                                                           
+      407 +      vp[base_site_idx + last_is_offset + stride_id * 3] = vt[
+          +3];                                                           
+      408 +      yt[0] = real_t(0.5) * (vt[0] + vt[2]);                  
+      409 +      yt[1] = real_t(0.5) * (vt[1] + vt[3]);                  
+      410 +      yt[2] = real_t(0.5) * (vt[2] + vt[0]);                  
+      411 +      yt[3] = real_t(0.5) * (vt[3] + vt[1]);                  
+      412 +    }                                                         
+      413 +                                                              
+      414 +    // === Backward (U-inv) is=NS-2..0; read from vt_fwd, writ
+          +e final vp ===                                                
+      415 +    #pragma unroll                                            
+      416 +    for (int is = NS-2; is >= 0; --is) {                      
+      417 +      real_t a     = real_t(0.5) * dm_con[is];                
+      418 +      real_t f_is  = f_con[is];                               
+      419 +      real_t aa_is = dpinv_con[is];                           
+      420 +      xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[
+          +3];                                                           
+      421 +      int is_offset = stride_is * is;                         
+      422 +      vt[0] = vt_fwd[is][0]; vt[1] = vt_fwd[is][1];           
+      423 +      vt[2] = vt_fwd[is][2]; vt[3] = vt_fwd[is][3];           
+      424 +      vt[0] += a * (xt[0] - xt[2]) - f_is * yt[0];            
+      425 +      vt[1] += a * (xt[1] - xt[3]) - f_is * yt[1];            
+      426 +      vt[2] += a * (xt[2] - xt[0]) - f_is * yt[2];            
+      427 +      vt[3] += a * (xt[3] - xt[1]) - f_is * yt[3];            
+      428 +      vt[0] *= aa_is; vt[1] *= aa_is; vt[2] *= aa_is; vt[3] *=
+          + aa_is;                                                       
+      429 +      if(is == 0){                                            
+      430 +        real_t ff1 = real_t(0.5) * (real_t(1.0) + alpha);     
+      431 +        real_t ff2 = real_t(0.5) * (real_t(1.0) - alpha);     
+      432 +        vp[base_site_idx + is_offset + NWP * ID1] = ff1 * vt[0
+          +] + ff2 * vt[2];                                              
+      433 +        vp[base_site_idx + is_offset + NWP * ID2] = ff1 * vt[1
+          +] + ff2 * vt[3];                                              
+      434 +        vp[base_site_idx + is_offset + NWP * ID3] = ff1 * vt[2
+          +] + ff2 * vt[0];                                              
+      435 +        vp[base_site_idx + is_offset + NWP * ID4] = ff1 * vt[3
+          +] + ff2 * vt[1];                                              
+      436 +      }else{                                                  
+      437 +        vp[base_site_idx + is_offset + stride_id * 0] = vt[0];
+      438 +        vp[base_site_idx + is_offset + stride_id * 1] = vt[1];
+      439 +        vp[base_site_idx + is_offset + stride_id * 2] = vt[2];
+      440 +        vp[base_site_idx + is_offset + stride_id * 3] = vt[3];
+      441 +      }                                                       
+      442 +    }                                                         
+      443 +  } // idx loop                                               
+      444 +}                                                             
+      445 +                                                              
+      446 +template <int NS>                                             
+      447 +__global__ void mult_domainwall_5din_ee_LUdaginv_dirac_kernel_
+          +v2(                                                           
+      448 +                        real_t* __restrict__ vp, real_t* __res
+          +trict__ wp,                                                   
+      449 +                        int Nst_pad, real_t alpha)            
+      450 +{                                                             
+      451 +  const int Nin5     = NVCD * NS;                             
+      452 +  const int ist      = blockIdx.x * blockDim.x + threadIdx.x; 
+      453 +  const int GridSize = blockDim.x * gridDim.x;                
+      454 +                                                              
+      455 +  const real_t* e_con     = ConstantMemoryTraits<real_t>::e();
+      456 +  const real_t* f_con     = ConstantMemoryTraits<real_t>::f();
+      457 +  const real_t* dpinv_con = ConstantMemoryTraits<real_t>::dpin
+          +v();                                                          
+      458 +  const real_t* dm_con    = ConstantMemoryTraits<real_t>::dm()
+          +;                                                             
+      459 +                                                              
+      460 +  for( int idx = ist; idx < Nst_pad * NVC; idx += GridSize){  
+      461 +    int idx2_wp = idx / NWP;                                  
+      462 +    int idx_in  = idx % NWP;                                  
+      463 +    int ivc     = idx2_wp % NVC;                              
+      464 +    int idx_out = idx2_wp / NVC;                              
+      465 +                                                              
+      466 +    const int base_site_idx = idx_in + NWP * (ivc + Nin5 * idx
+          +_out);                                                        
+      467 +    const int stride_id = NWP * NVC;                          
+      468 +    const int stride_is = NWP * NVCD;                         
+      469 +                                                              
+      470 +    real_t vt_fwd[NS][ND];                                    
+      471 +    real_t vt[ND], yt[ND], xt[ND];                            
+      472 +                                                              
+      473 +    // === Udag-inv is=0 (initial special) ===                
+      474 +    {                                                         
+      475 +      const int is = 0;                                       
+      476 +      real_t a0   = dpinv_con[0];                             
+      477 +      real_t f1_0 = real_t(0.5) * (real_t(1.0) + alpha);      
+      478 +      real_t f2_0 = real_t(0.5) * (real_t(1.0) - alpha);      
+      479 +      vt[0] = a0 * (f1_0 * wp[base_site_idx + stride_is * is +
+          + NWP * ID1] + f2_0 * wp[base_site_idx + stride_is * is + NWP *
+          + ID3]);                                                       
+      480 +      vt[1] = a0 * (f1_0 * wp[base_site_idx + stride_is * is +
+          + NWP * ID2] + f2_0 * wp[base_site_idx + stride_is * is + NWP *
+          + ID4]);                                                       
+      481 +      vt[2] = a0 * (f1_0 * wp[base_site_idx + stride_is * is +
+          + NWP * ID3] + f2_0 * wp[base_site_idx + stride_is * is + NWP *
+          + ID1]);                                                       
+      482 +      vt[3] = a0 * (f1_0 * wp[base_site_idx + stride_is * is +
+          + NWP * ID4] + f2_0 * wp[base_site_idx + stride_is * is + NWP *
+          + ID2]);                                                       
+      483 +      real_t f0 = f_con[0];                                   
+      484 +      vt_fwd[0][0] = vt[0]; vt_fwd[0][1] = vt[1]; vt_fwd[0][2]
+          + = vt[2]; vt_fwd[0][3] = vt[3];                               
+      485 +      yt[0] = f0 * vt[0]; yt[1] = f0 * vt[1]; yt[2] = f0 * vt[
+          +2]; yt[3] = f0 * vt[3];                                       
+      486 +    }                                                         
+      487 +                                                              
+      488 +    // === Udag-inv is=1..NS-2 ===                            
+      489 +    #pragma unroll                                            
+      490 +    for (int is = 1; is < NS-1; ++is) {                       
+      491 +      real_t a    = real_t(0.5) * dm_con[is - 1];             
+      492 +      real_t aa   = dpinv_con[is];                            
+      493 +      real_t f_is = f_con[is];                                
+      494 +      xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[
+          +3];                                                           
+      495 +      int is_offset = stride_is * is;                         
+      496 +      vt[0] = wp[base_site_idx + stride_id * 0 + is_offset];  
+      497 +      vt[1] = wp[base_site_idx + stride_id * 1 + is_offset];  
+      498 +      vt[2] = wp[base_site_idx + stride_id * 2 + is_offset];  
+      499 +      vt[3] = wp[base_site_idx + stride_id * 3 + is_offset];  
+      500 +      vt[0] += a * (xt[0] - xt[2]); vt[1] += a * (xt[1] - xt[3
+          +]);                                                           
+      501 +      vt[2] += a * (xt[2] - xt[0]); vt[3] += a * (xt[3] - xt[1
+          +]);                                                           
+      502 +      vt[0] *= aa; vt[1] *= aa; vt[2] *= aa; vt[3] *= aa;     
+      503 +      vt_fwd[is][0] = vt[0]; vt_fwd[is][1] = vt[1]; vt_fwd[is]
+          +[2] = vt[2]; vt_fwd[is][3] = vt[3];                           
+      504 +      yt[0] += f_is * vt[0]; yt[1] += f_is * vt[1]; yt[2] += f
+          +_is * vt[2]; yt[3] += f_is * vt[3];                           
+      505 +    }                                                         
+      506 +                                                              
+      507 +    // === Udag-inv is=NS-1 (final, write transformed vp) === 
+      508 +    {                                                         
+      509 +      const int is = NS-1;                                    
+      510 +      xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[
+          +3];                                                           
+      511 +      int last_is_offset = stride_is * is;                    
+      512 +      vt[0] = wp[base_site_idx + stride_id * 0 + last_is_offse
+          +t];                                                           
+      513 +      vt[1] = wp[base_site_idx + stride_id * 1 + last_is_offse
+          +t];                                                           
+      514 +      vt[2] = wp[base_site_idx + stride_id * 2 + last_is_offse
+          +t];                                                           
+      515 +      vt[3] = wp[base_site_idx + stride_id * 3 + last_is_offse
+          +t];                                                           
+      516 +      real_t a_last  = real_t(0.5) * dm_con[is - 1];          
+      517 +      vt[0] += a_last * (xt[0] - xt[2]) - real_t(0.5) * (yt[0]
+          + + yt[2]);                                                    
+      518 +      vt[1] += a_last * (xt[1] - xt[3]) - real_t(0.5) * (yt[1]
+          + + yt[3]);                                                    
+      519 +      vt[2] += a_last * (xt[2] - xt[0]) - real_t(0.5) * (yt[2]
+          + + yt[0]);                                                    
+      520 +      vt[3] += a_last * (xt[3] - xt[1]) - real_t(0.5) * (yt[3]
+          + + yt[1]);                                                    
+      521 +      real_t aa_last = dpinv_con[is];                         
+      522 +      vt[0] *= aa_last; vt[1] *= aa_last; vt[2] *= aa_last; vt
+          +[3] *= aa_last;                                               
+      523 +      real_t ff1 = real_t(0.5) * (real_t(1.0) + alpha);       
+      524 +      real_t ff2 = real_t(0.5) * (real_t(-1.0) + alpha);      
+      525 +      vp[base_site_idx + stride_is * is + NWP * ID1] = ff1 * v
+          +t[0] + ff2 * vt[2];                                           
+      526 +      vp[base_site_idx + stride_is * is + NWP * ID2] = ff1 * v
+          +t[1] + ff2 * vt[3];                                           
+      527 +      vp[base_site_idx + stride_is * is + NWP * ID3] = ff1 * v
+          +t[2] + ff2 * vt[0];                                           
+      528 +      vp[base_site_idx + stride_is * is + NWP * ID4] = ff1 * v
+          +t[3] + ff2 * vt[1];                                           
+      529 +      // yt init for backward sweep (uses pre-transform vt[0..
+          +3])                                                           
+      530 +      yt[0] = real_t(0.5) * (vt[0] - vt[2]);                  
+      531 +      yt[1] = real_t(0.5) * (vt[1] - vt[3]);                  
+      532 +      yt[2] = real_t(0.5) * (vt[2] - vt[0]);                  
+      533 +      yt[3] = real_t(0.5) * (vt[3] - vt[1]);                  
+      534 +    }                                                         
+      535 +                                                              
+      536 +    // === Backward (L^T-inv) is=NS-2..0; read from vt_fwd, wr
+          +ite final vp ===                                              
+      537 +    #pragma unroll                                            
+      538 +    for (int is = NS-2; is >= 0; --is) {                      
+      539 +      real_t a    = real_t(0.5) * dm_con[is + 1] * dpinv_con[i
+          +s];                                                           
+      540 +      real_t e_is = e_con[is];                                
+      541 +      xt[0] = vt[0]; xt[1] = vt[1]; xt[2] = vt[2]; xt[3] = vt[
+          +3];                                                           
+      542 +      int is_offset = stride_is * is;                         
+      543 +      vt[0] = vt_fwd[is][0]; vt[1] = vt_fwd[is][1];           
+      544 +      vt[2] = vt_fwd[is][2]; vt[3] = vt_fwd[is][3];           
+      545 +      vt[0] += a * (xt[0] + xt[2]) - e_is * yt[0];            
+      546 +      vt[1] += a * (xt[1] + xt[3]) - e_is * yt[1];            
+      547 +      vt[2] += a * (xt[2] + xt[0]) - e_is * yt[2];            
+      548 +      vt[3] += a * (xt[3] + xt[1]) - e_is * yt[3];            
+      549 +      vp[base_site_idx + stride_id * 0 + is_offset] = vt[0];  
+      550 +      vp[base_site_idx + stride_id * 1 + is_offset] = vt[1];  
+      551 +      vp[base_site_idx + stride_id * 2 + is_offset] = vt[2];  
+      552 +      vp[base_site_idx + stride_id * 3 + is_offset] = vt[3];  
+      553 +    }                                                         
+      554 +  } // idx loop                                               
+      555 +}                                                             
+      556 +                                                              
+      557 +//============================================================
+          +========                                                      
+      558  __global__ void mult_domainwall_5din_ee_LUinv_dirac_kernel(
+      559                          real_t* __restrict__ vp, real_t* __res
+           trict__ wp,
+      560                          int Ns, int Nst_pad, real_t alpha)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/src/mult_Domainwall_5d
+        in_eo_inv_cuda-inc.h)
+  ⎿  Added 22 lines
+      776    int gridSize  = (Nst_pad * NVC)/ blockSize;
+      777    //int nSM       = getNumSMs();
+      778  
+      779 +#ifdef USE_LUINV_V2                                           
+      780 +  #define LUINV_V2_DISPATCH(NS) \                             
+      781 +    mult_domainwall_5din_ee_LUinv_dirac_kernel_v2<NS><<<gridSi
+          +ze, blockSize>>>( \                                           
+      782 +        vp_dev, wp_dev, Nst_pad, alpha)                       
+      783 +  switch (Ns) {                                               
+      784 +    case  4: LUINV_V2_DISPATCH( 4); break;                    
+      785 +    case  6: LUINV_V2_DISPATCH( 6); break;                    
+      786 +    case  8: LUINV_V2_DISPATCH( 8); break;                    
+      787 +    case 10: LUINV_V2_DISPATCH(10); break;                    
+      788 +    case 12: LUINV_V2_DISPATCH(12); break;                    
+      789 +    case 16: LUINV_V2_DISPATCH(16); break;                    
+      790 +    case 20: LUINV_V2_DISPATCH(20); break;                    
+      791 +    case 24: LUINV_V2_DISPATCH(24); break;                    
+      792 +    case 32: LUINV_V2_DISPATCH(32); break;                    
+      793 +    default:                                                  
+      794 +      mult_domainwall_5din_ee_LUinv_dirac_kernel<<<gridSize, b
+          +lockSize>>>(                                                  
+      795 +          vp_dev, wp_dev, Ns, Nst_pad, alpha);                
+      796 +      break;                                                  
+      797 +  }                                                           
+      798 +  #undef LUINV_V2_DISPATCH                                    
+      799 +#else                                                         
+      800    mult_domainwall_5din_ee_LUinv_dirac_kernel<<<gridSize, block
+           Size>>>(
+      801      vp_dev, wp_dev, Ns, Nst_pad, alpha);
+      802 +#endif                                                        
+      803  
+      804    CHECK(cudaDeviceSynchronize());
+      805  
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/src/mult_Domainwall_5d
+        in_eo_inv_cuda-inc.h)
+  ⎿  Added 22 lines
+      1007    int gridSize   = (Nst_pad * NVC)/blockSize;
+      1008    //int nSM        = getNumSMs();
+      1009  
+      1010 +#ifdef USE_LUINV_V2                                          
+      1011 +  #define LUDAGINV_V2_DISPATCH(NS) \                         
+      1012 +    mult_domainwall_5din_ee_LUdaginv_dirac_kernel_v2<NS><<<gr
+           +idSize, blockSize>>>( \                                      
+      1013 +        vp_dev, wp_dev, Nst_pad, alpha)                      
+      1014 +  switch (Ns) {                                              
+      1015 +    case  4: LUDAGINV_V2_DISPATCH( 4); break;                
+      1016 +    case  6: LUDAGINV_V2_DISPATCH( 6); break;                
+      1017 +    case  8: LUDAGINV_V2_DISPATCH( 8); break;                
+      1018 +    case 10: LUDAGINV_V2_DISPATCH(10); break;                
+      1019 +    case 12: LUDAGINV_V2_DISPATCH(12); break;                
+      1020 +    case 16: LUDAGINV_V2_DISPATCH(16); break;                
+      1021 +    case 20: LUDAGINV_V2_DISPATCH(20); break;                
+      1022 +    case 24: LUDAGINV_V2_DISPATCH(24); break;                
+      1023 +    case 32: LUDAGINV_V2_DISPATCH(32); break;                
+      1024 +    default:                                                 
+      1025 +      mult_domainwall_5din_ee_LUdaginv_dirac_kernel<<<gridSiz
+           +e, blockSize>>>(                                             
+      1026 +          vp_dev, wp_dev, Ns, Nst_pad, alpha);               
+      1027 +      break;                                                 
+      1028 +  }                                                          
+      1029 +  #undef LUDAGINV_V2_DISPATCH                                
+      1030 +#else                                                        
+      1031    mult_domainwall_5din_ee_LUdaginv_dirac_kernel<<<gridSize, b
+            lockSize>>>(
+      1032      vp_dev, wp_dev,
+      1033      Ns, Nst_pad, alpha);
+      1034 +#endif                                                       
+      1035  
+      1036    CHECK(cudaDeviceSynchronize());
+      1037  }
+
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/bridgeACC_Domainwall_5
+        din_double.cu)
+  ⎿  Added 1 line
+      21  
+      22  #define SU3_3RD_ROW_RECONST
+      23  #define USE_5D_HOPB_V2  // shared-memory gauge link sharing for
+           5D EO hopb kernel
+      24 +#define USE_LUINV_V2    // thread-local vt_fwd[NS][ND] for LU(d
+         +ag)inv (drops vp round-trip)                                   
+      25  
+      26  #include "src/mult_Domainwall_5din_cuda-inc.h"
+      27  #include "src/mult_Domainwall_5din_eo_cuda-inc.h"
+
+● Update(~/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA/bridgeACC_Domainwall_5
+        din_float.cu)
+  ⎿  Added 1 line
+      21  
+      22  #define SU3_3RD_ROW_RECONST
+      23  #define USE_5D_HOPB_V2  // shared-memory gauge link sharing for
+           5D EO hopb kernel
+      24 +#define USE_LUINV_V2    // thread-local vt_fwd[NS][ND] for LU(d
+         +ag)inv (drops vp round-trip)                                   
+      25  
+      26  #include "src/mult_Domainwall_5din_cuda-inc.h"
+      27  #include "src/mult_Domainwall_5din_eo_cuda-inc.h"
+
+● 完成。摘要:
+
+  新增
+
+  mult_Domainwall_5din_eo_inv_cuda-inc.h 加入兩個 templated kernel:
+  - mult_domainwall_5din_ee_LUinv_dirac_kernel_v2<NS>(在 line 314 前)
+  - mult_domainwall_5din_ee_LUdaginv_dirac_kernel_v2<NS>
+
+  兩個都用 thread-local 陣列 real_t vt_fwd[NS][ND] 把 forward sweep
+  結果留住,middle 用 register 直接連接,backward 從 vt_fwd 讀 → 完全砍掉 forward 
+  寫 vp + backward 讀 vp 的 DRAM round-trip。
+
+  Launcher dispatch
+
+  兩個 launcher 都加了 switch dispatch:
+
+  switch (Ns) {
+    case  4: case  6: case  8: case 10: case 12:
+    case 16: case 20: case 24: case 32:   // 走 v2
+    default: 走 v1
+  }
+
+  如果你的 Ns 不在這個清單,記得加上去。當前清單覆蓋常見值。
+
+  切換 toggle
+
+  bridgeACC_Domainwall_5din_double.cu 跟 _float.cu 加了:
+  #define USE_LUINV_V2
+
+  註解掉就回 v1。
+
+  預期
+
+  - DRAM 流量大概砍 ~50%(forward 寫 + backward 讀都不走 vp)
+  - 編譯後 kernel REG 可能升(NS=16 約多 64 float),#pragma unroll 把 sweep loop
+  全展開 → 可能讓 nvcc 把 vt_fwd[NS][ND] 配進 register 或 spill 到
+  local-mem(L1-cached,還是比 DRAM round-trip 快)
+  - NS 越小越省 register;NS=32 可能要靠 local-mem cache
+  - 每個 NS 都會編譯一份 kernel → .o 會稍微變大、編譯時間略增
+
+  編譯後檢查
+
+  1. 正確性:test_alt_Accel 跑完比 v1 結果 — 浮點要逐 bit 一樣不容易(reductions
+  順序變了),容差內就 OK
+  2. REG/LMEM:cuobjdump --dump-resource-usage 看每個 specialization 的 REG /
+  local-mem (STL/LDL)
+  3. GFlops:LUinv 應該明顯接近 roofline
+
+  跑完貼結果給我。
+
+✻ Sautéed for 4m 46s
+
+❯ /export                                                                         ⎿  Conversation copied to clipboard

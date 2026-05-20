@@ -1,0 +1,155 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE":               "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS":  "ON",
+        "USE_MPI":           "ON",
+        "USE_OPENMP":        "ON",
+        "BRIDGE_GAUGE_GROUP":"SU3",
+        "USE_ALTERNATIVE":   "ON",
+        "USE_ALT_ACCEL":     "OFF",
+        "USE_ACCEL_IMPL":    "cuda"
+      }
+    },
+    {
+      "name": "cuda-base",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "USE_ALT_ACCEL":  "ON",
+        "USE_ACCEL_IMPL": "cuda"
+      }
+    },
+    {
+      "name": "cuda-ampere-mpi",
+      "displayName": "CUDA Ampere (sm_80/86) + MPI  [production]",
+      "description": "A100 / A6000, Release, MPI+OpenMP",
+      "inherits": "cuda-base",
+      "cacheVariables": {
+        "CMAKE_CUDA_ARCHITECTURES": "80;86"
+      }
+    },
+    {
+      "name": "cuda-ampere-debug",
+      "displayName": "CUDA Ampere (sm_80/86) + MPI  [debug]",
+      "inherits": "cuda-base",
+      "cacheVariables": {
+        "CMAKE_CUDA_ARCHITECTURES": "80;86",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "cuda-hopper-mpi",
+      "displayName": "CUDA Hopper (sm_90) + MPI  [production]",
+      "description": "H100, Release, MPI+OpenMP",
+      "inherits": "cuda-base",
+      "cacheVariables": {
+        "CMAKE_CUDA_ARCHITECTURES": "90"
+      }
+    },
+    {
+      "name": "nvshmem-base",
+      "hidden": true,
+      "inherits": "cuda-base",
+      "cacheVariables": {
+        "USE_ACCEL_IMPL": "nvshmem"
+      }
+    },
+    {
+      "name": "nvshmem-ampere-mpi",
+      "displayName": "NVSHMEM Ampere (sm_80) + MPI  [production]",
+      "description": "A100, CUDA+NVSHMEM, Release, MPI+OpenMP",
+      "inherits": "nvshmem-base",
+      "cacheVariables": {
+        "CMAKE_CUDA_ARCHITECTURES": "80"
+      }
+    },
+    {
+      "name": "nvshmem-hopper-mpi",
+      "displayName": "NVSHMEM Hopper (sm_90) + MPI  [production]",
+      "description": "H100, CUDA+NVSHMEM, Release, MPI+OpenMP",
+      "inherits": "nvshmem-base",
+      "cacheVariables": {
+        "CMAKE_CUDA_ARCHITECTURES": "90"
+      }
+    },
+    {
+      "name": "pc-gnu-mpi",
+      "displayName": "CPU GNU + MPI  [production]",
+      "description": "CPU-only, GCC, Release, MPI+OpenMP",
+      "inherits": "base",
+      "cacheVariables": {
+        "USE_ALT_ACCEL":       "OFF",
+        "CMAKE_CXX_COMPILER":  "mpic++"
+      }
+    },
+    {
+      "name": "pc-gnu-debug",
+      "displayName": "CPU GNU + MPI  [debug]",
+      "inherits": "pc-gnu-mpi",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "openacc-base",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "USE_ALT_ACCEL":  "ON",
+        "USE_ACCEL_IMPL": "openacc"
+      }
+    },
+    {
+      "name": "openacc-ampere-mpi",
+      "displayName": "OpenACC Ampere (cc80) + MPI  [production]",
+      "description": "A100, NVHPC nvc++, Release, MPI+OpenMP",
+      "inherits": "openacc-base",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "nvc++",
+        "CMAKE_CXX_FLAGS":    "-gpu=cc80"
+      }
+    },
+    {
+      "name": "openacc-hopper-mpi",
+      "displayName": "OpenACC Hopper (cc90) + MPI  [production]",
+      "description": "H100, NVHPC nvc++, Release, MPI+OpenMP",
+      "inherits": "openacc-base",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "nvc++",
+        "CMAKE_CXX_FLAGS":    "-gpu=cc90"
+      }
+    },
+    {
+      "name": "fugaku",
+      "displayName": "Fugaku (Clang + FJMPI)  [production]",
+      "description": "Requires cmake/toolchains/fugaku.cmake",
+      "inherits": "base",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/fugaku.cmake",
+      "cacheVariables": {
+        "USE_MPI":        "fjmpi",
+        "USE_ALT_ACCEL":  "OFF",
+        "USE_ALT_QXS":    "ON",
+        "USE_QXS_ARCH":   "acle"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "cuda-ampere-mpi",   "configurePreset": "cuda-ampere-mpi",   "jobs": 8 },
+    { "name": "cuda-ampere-debug", "configurePreset": "cuda-ampere-debug", "jobs": 8 },
+    { "name": "cuda-hopper-mpi",   "configurePreset": "cuda-hopper-mpi",   "jobs": 8 },
+    { "name": "pc-gnu-mpi",        "configurePreset": "pc-gnu-mpi",        "jobs": 8 },
+    { "name": "pc-gnu-debug",      "configurePreset": "pc-gnu-debug",      "jobs": 8 },
+    { "name": "openacc-ampere-mpi",   "configurePreset": "openacc-ampere-mpi",   "jobs": 8 },
+    { "name": "openacc-hopper-mpi",   "configurePreset": "openacc-hopper-mpi",   "jobs": 8 },
+    { "name": "nvshmem-ampere-mpi",   "configurePreset": "nvshmem-ampere-mpi",   "jobs": 8 },
+    { "name": "nvshmem-hopper-mpi",   "configurePreset": "nvshmem-hopper-mpi",   "jobs": 8 },
+    { "name": "fugaku",            "configurePreset": "fugaku",            "jobs": 8 }
+  ]
+}
