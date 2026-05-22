@@ -177,6 +177,8 @@ void AFopr_Domainwall_5din_eo<AFIELD>::init(const Parameters& params)
     vout.general("do_comm[%d] = %d\n", mu, do_comm[mu]);
   }
 
+  m_use_QDW = false;
+
   m_Ns = 0; // temporary set
   set_parameters(params);
 
@@ -464,6 +466,16 @@ void AFopr_Domainwall_5din_eo<AFIELD>::set_parameters(
 #pragma omp barrier
 }
 
+
+//====================================================================
+template<typename AFIELD>
+void AFopr_Domainwall_5din_eo<AFIELD>::set_use_QDW(bool flag)
+{
+  m_use_QDW = flag;
+  if (flag && m_NinF > 0) {
+    m_w1_qdw.reset(m_NinF * 2, m_Nst2, 1);
+  }
+}
 
 //====================================================================
 template<typename AFIELD>
@@ -1022,9 +1034,18 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D_eo(AFIELD& v,
 
   real_t *vp = v.ptr(0);
   real_t *wp = const_cast<AFIELD *>(&w)->ptr(0);
-  real_t *yp = m_w1.ptr(0);  // working vector
   real_t *up = m_Ueo.ptr(0);
   int jeo    = (m_Ieo_origin + ieo) % 2;
+
+  bool use_qdw_path = (m_use_QDW
+                       && v.nin() == m_NinF * 2
+                       && w.nin() == m_NinF * 2);
+  if (use_qdw_path && do_comm_any > 0) {
+    vout.crucial(m_vl, "%s: QDW mode requires do_comm_any == 0 (single process).\n",
+                 class_name.c_str());
+    exit(EXIT_FAILURE);
+  }
+  real_t *yp = use_qdw_path ? m_w1_qdw.ptr(0) : m_w1.ptr(0);
 
   if(do_comm_any > 0 && ith == 0){
     TIMER_comm_recv_start_start;
@@ -1034,27 +1055,33 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D_eo(AFIELD& v,
 
   if (ith == ith_kernel){
 
-    BridgeACC::mult_domainwall_5din_eo_5dir_dirac(
+    if (use_qdw_path) {
+      BridgeACC::mult_domainwall_5din_eo_5dir_dirac_qdw(
+                              yp, wp, real_t(m_mq), real_t(m_M0), m_Ns,
+                              &m_b[0], &m_c[0], real_t(m_alpha), m_Nsize);
+    } else {
+      BridgeACC::mult_domainwall_5din_eo_5dir_dirac(
                               yp, wp, m_mq, m_M0, m_Ns,
                               &m_b[0], &m_c[0], m_alpha, m_Nsize);
 
-    if (do_comm_any > 0) {
-      TIMER_pack_start;
-      real_t *buf1_xp = (real_t *)chsend_dn[0].ptr();
-      real_t *buf1_xm = (real_t *)chsend_up[0].ptr();
-      real_t *buf1_yp = (real_t *)chsend_dn[1].ptr();
-      real_t *buf1_ym = (real_t *)chsend_up[1].ptr();
-      real_t *buf1_zp = (real_t *)chsend_dn[2].ptr();
-      real_t *buf1_zm = (real_t *)chsend_up[2].ptr();
-      real_t *buf1_tp = (real_t *)chsend_dn[3].ptr();
-      real_t *buf1_tm = (real_t *)chsend_up[3].ptr();
+      if (do_comm_any > 0) {
+        TIMER_pack_start;
+        real_t *buf1_xp = (real_t *)chsend_dn[0].ptr();
+        real_t *buf1_xm = (real_t *)chsend_up[0].ptr();
+        real_t *buf1_yp = (real_t *)chsend_dn[1].ptr();
+        real_t *buf1_ym = (real_t *)chsend_up[1].ptr();
+        real_t *buf1_zp = (real_t *)chsend_dn[2].ptr();
+        real_t *buf1_zm = (real_t *)chsend_up[2].ptr();
+        real_t *buf1_tp = (real_t *)chsend_dn[3].ptr();
+        real_t *buf1_tm = (real_t *)chsend_up[3].ptr();
 
-      BridgeACC::mult_domainwall_5din_eo_hop1_dirac(
-                       buf1_xp, buf1_xm, buf1_yp, buf1_ym,
-                       buf1_zp, buf1_zm, buf1_tp, buf1_tm,
-                       up, yp,
-                       m_Ns, m_bc, m_Nsize, do_comm, ieo, jeo, 0);
-      TIMER_pack_stop;
+        BridgeACC::mult_domainwall_5din_eo_hop1_dirac(
+                         buf1_xp, buf1_xm, buf1_yp, buf1_ym,
+                         buf1_zp, buf1_zm, buf1_tp, buf1_tm,
+                         up, yp,
+                         m_Ns, m_bc, m_Nsize, do_comm, ieo, jeo, 0);
+        TIMER_pack_stop;
+      }
     }
   }
 
@@ -1069,8 +1096,11 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D_eo(AFIELD& v,
 
   if (ith == ith_kernel){
     TIMER_bulk_start;
-    //BridgeACC::mult_domainwall_5din_eo_hopb_dirac(
-    if(m_impl == "5d"){
+    if (use_qdw_path) {
+      BridgeACC::mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
+                         vp, up, yp, m_Ns, m_bc2,
+                         m_Nsize, do_comm, ieo, jeo, 0);
+    } else if(m_impl == "5d"){
       BridgeACC::mult_domainwall_5din_eo_hopb_dirac_5d(
                          vp, up, yp, m_Ns, m_bc2,
                          m_Nsize, do_comm, ieo, jeo, 0);
@@ -1155,9 +1185,18 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_eo(AFIELD& v,
 
   real_t *vp = v.ptr(0);
   real_t *wp = const_cast<AFIELD *>(&w)->ptr(0);
-  real_t *yp = m_w1.ptr(0);
   real_t *up = m_Ueo.ptr(0);
   int jeo    = (m_Ieo_origin + ieo) % 2;
+
+  bool use_qdw_path = (m_use_QDW
+                       && v.nin() == m_NinF * 2
+                       && w.nin() == m_NinF * 2);
+  if (use_qdw_path && do_comm_any > 0) {
+    vout.crucial(m_vl, "%s: QDW mode requires do_comm_any == 0 (single process).\n",
+                 class_name.c_str());
+    exit(EXIT_FAILURE);
+  }
+  real_t *yp = use_qdw_path ? m_w1_qdw.ptr(0) : m_w1.ptr(0);
 
   if(do_comm_any > 0 && ith == 0){
     TIMER_comm_recv_start_start;
@@ -1167,7 +1206,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_eo(AFIELD& v,
 
   if (ith == ith_kernel){
 
-    if (do_comm_any > 0) {
+    if (!use_qdw_path && do_comm_any > 0) {
       TIMER_pack_start;
 
       real_t *buf1_xp = (real_t *)chsend_dn[0].ptr();
@@ -1198,7 +1237,11 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_eo(AFIELD& v,
 
   if(ith == ith_kernel){
     TIMER_bulk_start;
-    if(m_impl == "5d"){
+    if (use_qdw_path) {
+      BridgeACC::mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
+                           yp, up, wp, m_Ns, m_bc2,
+                           m_Nsize, do_comm, ieo, jeo, 1);
+    } else if(m_impl == "5d"){
       BridgeACC::mult_domainwall_5din_eo_hopb_dirac_5d(
                            yp, up, wp, m_Ns, m_bc2,
                            m_Nsize, do_comm, ieo, jeo, 1);
@@ -1229,7 +1272,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_eo(AFIELD& v,
   }
 
   if (ith == ith_kernel) {
-    if (do_comm_any > 0) {
+    if (!use_qdw_path && do_comm_any > 0) {
       TIMER_boundary_start;
 
       real_t *buf2_xp = (real_t *)chrecv_up[0].ptr();
@@ -1250,9 +1293,15 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_eo(AFIELD& v,
       TIMER_boundary_stop;
 
     }
-    BridgeACC::mult_domainwall_5din_eo_5dirdag_dirac(
-                            vp, yp, m_mq, m_M0, m_Ns,
-                            &m_b[0], &m_c[0], m_alpha, m_Nsize);
+    if (use_qdw_path) {
+      BridgeACC::mult_domainwall_5din_eo_5dirdag_dirac_qdw(
+                              vp, yp, real_t(m_mq), real_t(m_M0), m_Ns,
+                              &m_b[0], &m_c[0], real_t(m_alpha), m_Nsize);
+    } else {
+      BridgeACC::mult_domainwall_5din_eo_5dirdag_dirac(
+                              vp, yp, m_mq, m_M0, m_Ns,
+                              &m_b[0], &m_c[0], m_alpha, m_Nsize);
+    }
 
   }
   if(do_comm_any > 0 && ith == 0){
@@ -1281,9 +1330,15 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D_ee(AFIELD& v, const AFIELD& w,
     real_t *vp = v.ptr(0);
     real_t *wp = const_cast<AFIELD *>(&w)->ptr(0);
 
-    BridgeACC::mult_domainwall_5din_ee_5dir_dirac(
-                                 vp, wp, m_mq, m_M0, m_Ns,
-                                 &m_b[0], &m_c[0], m_alpha, m_Nsize);
+    if (m_use_QDW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
+      BridgeACC::mult_domainwall_5din_ee_5dir_dirac_qdw(
+                                   vp, wp, real_t(m_mq), real_t(m_M0), m_Ns,
+                                   &m_b[0], &m_c[0], real_t(m_alpha), m_Nsize);
+    } else {
+      BridgeACC::mult_domainwall_5din_ee_5dir_dirac(
+                                   vp, wp, m_mq, m_M0, m_Ns,
+                                   &m_b[0], &m_c[0], m_alpha, m_Nsize);
+    }
   }
 
 #pragma omp barrier
@@ -1303,9 +1358,15 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_ee(AFIELD& v, const AFIELD& w,
     real_t *vp = v.ptr(0);
     real_t *wp = const_cast<AFIELD *>(&w)->ptr(0);
 
-    BridgeACC::mult_domainwall_5din_ee_5dirdag_dirac(
-                                 vp, wp, m_mq, m_M0, m_Ns,
-                                 &m_b[0], &m_c[0], m_alpha, m_Nsize);
+    if (m_use_QDW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
+      BridgeACC::mult_domainwall_5din_ee_5dirdag_dirac_qdw(
+                                   vp, wp, real_t(m_mq), real_t(m_M0), m_Ns,
+                                   &m_b[0], &m_c[0], real_t(m_alpha), m_Nsize);
+    } else {
+      BridgeACC::mult_domainwall_5din_ee_5dirdag_dirac(
+                                   vp, wp, m_mq, m_M0, m_Ns,
+                                   &m_b[0], &m_c[0], m_alpha, m_Nsize);
+    }
   }
 
 #pragma omp barrier
@@ -1435,9 +1496,14 @@ void AFopr_Domainwall_5din_eo<AFIELD>::LU_inv(AFIELD& v, const AFIELD& w)
     real_t *vp = v.ptr(0);
     real_t *wp = const_cast<AFIELD *>(&w)->ptr(0);
 
-    BridgeACC::mult_domainwall_5din_ee_LUinv_dirac(
-                   vp, wp, m_Ns, m_Nsize,
-                   &m_e[0], &m_f[0], &m_dpinv[0], &m_dm[0], m_alpha);
+    if (m_use_QDW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
+      BridgeACC::mult_domainwall_5din_ee_LUinv_dirac_qdw(
+                     vp, wp, m_Ns, m_Nsize, m_alpha);
+    } else {
+      BridgeACC::mult_domainwall_5din_ee_LUinv_dirac(
+                     vp, wp, m_Ns, m_Nsize,
+                     &m_e[0], &m_f[0], &m_dpinv[0], &m_dm[0], m_alpha);
+    }
 
   }
 #pragma omp barrier
@@ -1464,9 +1530,14 @@ void AFopr_Domainwall_5din_eo<AFIELD>::LUdag_inv(AFIELD& v, const AFIELD& w)
     real_t *vp = v.ptr(0);
     real_t *wp = const_cast<AFIELD *>(&w)->ptr(0);
 
-    BridgeACC::mult_domainwall_5din_ee_LUdaginv_dirac(
-                  vp, wp, m_Ns, m_Nsize,
-                  &m_e[0], &m_f[0], &m_dpinv[0], &m_dm[0], m_alpha);
+    if (m_use_QDW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
+      BridgeACC::mult_domainwall_5din_ee_LUdaginv_dirac_qdw(
+                    vp, wp, m_Ns, m_Nsize, m_alpha);
+    } else {
+      BridgeACC::mult_domainwall_5din_ee_LUdaginv_dirac(
+                    vp, wp, m_Ns, m_Nsize,
+                    &m_e[0], &m_f[0], &m_dpinv[0], &m_dm[0], m_alpha);
+    }
 
   }
 #pragma omp barrier

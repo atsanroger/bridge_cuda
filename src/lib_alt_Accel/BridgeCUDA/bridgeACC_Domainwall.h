@@ -260,6 +260,67 @@ void mult_domainwall_5din_tm2_dirac(
                             double * buf,
                             int Ns, int *bc, int *Nsize);
 
+// QDW Domain Wall kernels (double precision only)
+void mult_domainwall_5din_5dir_dirac_qdw(
+        double *vp, double *yp, double *wp,
+        double mq, double M0, int Ns, double *b, double *c, int *Nsize);
+
+void mult_domainwall_5din_hopb_qdw_dirac(
+        double *vp, double *up, double *wp,
+        int Ns, int *bc, int *Nsize, int *do_comm, int flag);
+
+// QDW EO Domain Wall kernels (double precision only)
+void mult_domainwall_5din_ee_5dir_dirac_qdw(
+        double *vp, double *wp, double mq, double M0, int Ns,
+        double *b, double *c, double alpha, int *Nsize);
+
+void mult_domainwall_5din_eo_5dir_dirac_qdw(
+        double *yp, double *wp, double mq, double M0, int Ns,
+        double *b, double *c, double alpha, int *Nsize);
+
+void mult_domainwall_5din_ee_5dirdag_dirac_qdw(
+        double *vp, double *wp, double mq, double M0, int Ns,
+        double *b, double *c, double alpha, int *Nsize);
+
+void mult_domainwall_5din_eo_5dirdag_dirac_qdw(
+        double *vp, double *yp, double mq, double M0, int Ns,
+        double *b, double *c, double alpha, int *Nsize);
+
+void mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
+        double *vp, double *up, double *wp,
+        int Ns, int *bc, int *Nsize, int *do_comm,
+        int ieo, int jeo, int jgm5);
+
+// QDW EO Domain Wall kernels — float stubs (QDW is double-only)
+void mult_domainwall_5din_ee_5dir_dirac_qdw(
+        float *vp, float *wp, float mq, float M0, int Ns,
+        float *b, float *c, float alpha, int *Nsize);
+void mult_domainwall_5din_eo_5dir_dirac_qdw(
+        float *yp, float *wp, float mq, float M0, int Ns,
+        float *b, float *c, float alpha, int *Nsize);
+void mult_domainwall_5din_ee_5dirdag_dirac_qdw(
+        float *vp, float *wp, float mq, float M0, int Ns,
+        float *b, float *c, float alpha, int *Nsize);
+void mult_domainwall_5din_eo_5dirdag_dirac_qdw(
+        float *vp, float *yp, float mq, float M0, int Ns,
+        float *b, float *c, float alpha, int *Nsize);
+void mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
+        float *vp, float *up, float *wp,
+        int Ns, int *bc, int *Nsize, int *do_comm,
+        int ieo, int jeo, int jgm5);
+
+// QDW LU inverse (double only)
+void mult_domainwall_5din_ee_LUinv_dirac_qdw(
+        double* vp, double* wp, int Ns, int *Nsize, double alpha);
+void mult_domainwall_5din_ee_LUdaginv_dirac_qdw(
+        double* vp, double* wp, int Ns, int *Nsize, double alpha);
+
+// QDW LU inverse — float stubs
+void mult_domainwall_5din_ee_LUinv_dirac_qdw(
+        float* vp, float* wp, int Ns, int *Nsize, float alpha);
+void mult_domainwall_5din_ee_LUdaginv_dirac_qdw(
+        float* vp, float* wp, int Ns, int *Nsize, float alpha);
+
 // anchor1
   void set_block_config(double* u, int* Nsize,
                         int* block_size);

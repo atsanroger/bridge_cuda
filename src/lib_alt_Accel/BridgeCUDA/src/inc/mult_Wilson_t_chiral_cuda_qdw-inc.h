@@ -166,7 +166,7 @@
       tmp_prod = qdw_mult_uc(u_val, vt2_c1); QDW_ADD(wt2_c1, wt2_c1, tmp_prod);
       u_val.x = u_dn[IDX2_G_R(2,1,isg)]; u_val.y = -u_dn[IDX2_G_I(2,1,isg)];
       tmp_prod = qdw_mult_uc(u_val, vt1_c2); QDW_ADD(wt1_c1, wt1_c1, tmp_prod);
-      tmp_prod = qdw_mult_uc(u_val, vt2_c1); QDW_ADD(wt2_c1, wt2_c1, tmp_prod);
+      tmp_prod = qdw_mult_uc(u_val, vt2_c2); QDW_ADD(wt2_c1, wt2_c1, tmp_prod);
       // Row 2
       u_val.x = u_dn[IDX2_G_R(0,2,isg)]; u_val.y = -u_dn[IDX2_G_I(0,2,isg)];
       wt1_c2 = qdw_mult_uc(u_val, vt1_c0); wt2_c2 = qdw_mult_uc(u_val, vt2_c0);

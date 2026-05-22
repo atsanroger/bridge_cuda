@@ -2,9 +2,9 @@
 
 Test_Spectrum:
   ## gauge_config_status = {Continue,Cold_start,Hot_start}
-  gauge_config_status      : Cold_start
+  gauge_config_status      : Continue
   ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel}
-  gauge_config_type_input  : Text
+  gauge_config_type_input  : Text_4x4x4x8
   config_filename_input    : ./conf_04040408.txt
   ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library
   random_number_type       : Mseries
@@ -13,7 +13,7 @@ Test_Spectrum:
   verbose_level            : General
 #  expected_result          : 4.24209447645414e-01 # 16x8x8x16 ok
 #  expected_result          : 4.22357801893693e-01 # 32x8x8x8 ok
-#  expected_result          : 4.58304049059966e-01 # 32x8x8x12 ok
+  expected_result          : 4.58304049059966e-01 # 32x8x8x12 ok
 #  expected_result          : 4.24278539207859e-01 # 32x8x8x16 ok
 #  expected_result          : 4.23618364401005e-01  # 32x16x16x16 ok
 #  test in, b=1.5, c=0.5, mq = 0.1 , M0 = 1.6 without smearing 
@@ -28,7 +28,7 @@ Smearing:
   #alpha1        : 0.95
   #alpha2        : 0.76
   #alpha3        : 0.38
-  number_of_smearing  : 3
+  number_of_smearing  : 0
   ## verbose_level = {Crucial,General,Detailed,Paranoiac}
   verbose_level : General
 
@@ -45,7 +45,7 @@ Fopr_ref:
   gamma_matrix_type       : Dirac
   quark_mass              : 0.1
   quark_mass_PauliVillars : 1.0
-  domain_wall_height      : 1.0
+  domain_wall_height      : 1.6
   extent_of_5th_dimension : 8
   boundary_condition      : [1,1,1,-1]
   coefficient_b           : 1.5
@@ -63,7 +63,7 @@ Fopr:
   code_implementation     : 5d
   quark_mass              : 0.1
   quark_mass_PauliVillars : 1.0
-  domain_wall_height      : 1.0
+  domain_wall_height      : 1.6
   extent_of_5th_dimension : 8
   boundary_condition      : [1,1,1,-1]
   coefficient_b           : 1.5
@@ -102,8 +102,8 @@ GaugeFixing:
 Solver:
   ## solver_type = {CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx}
   solver_type                         : CGNR
-  use_QDW                             : false
-  use_QTW                             : false
+  use_QDW                             : False
+  use_QTW                             : true
   maximum_number_of_iteration         : 100
   maximum_number_of_restart           : 40
 #  convergence_criterion_squared       : 1.0e-32

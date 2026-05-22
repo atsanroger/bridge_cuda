@@ -71,7 +71,9 @@ class AFopr_Domainwall_5din_eo : public AFopr<AFIELD>
 
   AFIELD m_Ueo;   //!< copied gauge config. with boundary conditions.
 
-  AFIELD m_w1, m_v1, m_v2;        //!< woking vectors
+  AFIELD m_w1, m_v1, m_v2;        //!< working vectors
+  bool   m_use_QDW;               //!< flag for QDW high-precision arithmetic
+  AFIELD m_w1_qdw;                //!< QDW-sized intermediate for D_eo (2 x m_NinF)
 
   // for preconditioning
   std::vector<real_t> m_dp;
@@ -182,6 +184,10 @@ class AFopr_Domainwall_5din_eo : public AFopr<AFIELD>
 
   void mult_gm5R(AFIELD&, const AFIELD&);
   void mult_R(AFIELD&, const AFIELD&);
+
+  //! enable/disable QDW high-precision arithmetic (double precision only).
+  void set_use_QDW(bool flag);
+  bool get_use_QDW() const { return m_use_QDW; }
 
   //  preconditioner
   void LU_inv(AFIELD&, const AFIELD&);
