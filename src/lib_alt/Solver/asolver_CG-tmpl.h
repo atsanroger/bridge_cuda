@@ -73,8 +73,17 @@ void ASolver_CG<AFIELD>::set_parameters(const Parameters& params)
   set_parameters(Niter2, Stop_cond, init_guess_mode);
 
   m_use_QDW = false;
+  m_use_QTW = false;
   params.fetch_bool("use_QDW", m_use_QDW);
-  m_use_qdw_int = m_use_QDW ? 1 : 0;
+  params.fetch_bool("use_QTW", m_use_QTW);
+
+  if (m_use_QDW) {
+    m_use_qdw_int = 1;
+  } else if (m_use_QTW) {
+    m_use_qdw_int = 2;
+  } else {
+    m_use_qdw_int = 0;
+  }
 
   if (m_use_QDW) {
     int nin = 2 * m_fopr->field_nin();

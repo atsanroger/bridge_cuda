@@ -417,7 +417,7 @@ void axpy(real_t *y, int nv1, real_t a,
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  if (use_qdw) {
+  if (use_qdw == 1) {
     axpy_kernel_qdw<<<nbl, nth>>>(&y_dev[nv1], a, &x_dev[nv2], nin);
   } else {
     size_t sharedMemSize = nth * NWP * sizeof(real_t);
@@ -476,7 +476,7 @@ void axpy(real_t *y, int nv1, real_t ar, real_t ai,
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  if (use_qdw) {
+  if (use_qdw == 1) {
     axpy_kernel_qdw<<<nbl, nth>>>(&y_dev[nv1], ar, ai, &x_dev[nv2], nin);
   } else {
     axpy_kernel<<<nbl, nth>>>(&y_dev[nv1], ar, ai, &x_dev[nv2], nin);
@@ -542,7 +542,7 @@ void aypx(real_t a, real_t *y, int nv1,
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  if (use_qdw) {
+  if (use_qdw == 1) {
     aypx_kernel_qdw<<<nbl, nth>>>(a, &y_dev[nv1], &x_dev[nv2], nin);
   } else {
     aypx_kernel<<<nbl, nth>>>(a, &y_dev[nv1], &x_dev[nv2], nin);
@@ -622,7 +622,7 @@ void aypx(real_t ar, real_t ai, real_t *y, int nv1,
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  if (use_qdw) {
+  if (use_qdw == 1) {
     aypx_kernel_qdw<<<nbl, nth>>>(ar, ai, &y_dev[nv1], &x_dev[nv2], nin);
   } else {
     aypx_kernel<<<nbl, nth>>>(ar, ai, &y_dev[nv1], &x_dev[nv2], nin);
@@ -835,6 +835,20 @@ __global__ void norm2_reduce_fused_kernel(real_t *red,
 }
 
 //====================================================================
+// Generic (real_t-typed) TwoSum/TwoProd for QDW and QTW kernels.
+// For real_t=double: exact error-free arithmetic.
+// For real_t=float:  F32 via __fmaf_rn, giving double-float precision at FP32 throughput.
+__device__ __forceinline__ static void TwoSum_r(real_t a, real_t b, real_t &s, real_t &e) {
+    s = a + b;
+    real_t v = s - a;
+    e = (a - (s - v)) + (b - v);
+}
+__device__ __forceinline__ static void TwoProd_r(real_t a, real_t b, real_t &p, real_t &e) {
+    p = a * b;
+    e = fma(a, b, -p);
+}
+
+//====================================================================
 // QDW-enhanced norm2: Kahan compensated summation in thread-level accumulation
 __global__ void norm2_reduce_fused_kernel_qdw(real_t *red,
                                               const real_t *__restrict__ v1,
@@ -893,32 +907,180 @@ __global__ void norm2_reduce_fused_kernel_qdw(real_t *red,
     }
   }
 
-  sdata[tid] = sum;
+  real_t *sh_hi = sdata;
+  real_t *sh_lo = sdata + blockDim.x;
+  real_t nh, nl;
+  TwoSum_r(sum, comp, nh, nl);
+  sh_hi[tid] = nh;
+  sh_lo[tid] = nl;
   __syncthreads();
 
   for (unsigned int s = blockDim.x / 2; s >= WARP_LENGTH; s >>= 1)
   {
     if (tid < s)
     {
-      sdata[tid] += sdata[tid + s];
+      real_t ah = sh_hi[tid],   al = sh_lo[tid];
+      real_t bh = sh_hi[tid+s], bl = sh_lo[tid+s];
+      real_t rh, t;
+      TwoSum_r(ah, bh, rh, t);
+      sh_hi[tid] = rh;
+      sh_lo[tid] = al + bl + t;
     }
     __syncthreads();
   }
 
   if (tid < WARP_LENGTH)
   {
-    sum = sdata[tid];
+    real_t ah = sh_hi[tid], al = sh_lo[tid];
+    real_t bh, bl;
 
 #pragma unroll
     for (int offset = 16; offset > 0; offset >>= 1)
     {
-      sum += __shfl_down_sync(0xffffffff, sum, offset);
+      bh = __shfl_down_sync(0xffffffff, ah, offset);
+      bl = __shfl_down_sync(0xffffffff, al, offset);
+      real_t rh, t;
+      TwoSum_r(ah, bh, rh, t);
+      ah = rh;
+      al = al + bl + t;
     }
 
     if (tid == 0)
     {
-      red[blockIdx.x] = sum;
+      red[blockIdx.x]                        = ah;
+      red[blockIdx.x + MAX_THREAD_PER_BLOCK] = al;
     }
+  }
+}
+
+//====================================================================
+// QTW-enhanced norm2: dual-word (TwoSum_r/TwoProd_r) thread accumulator.
+// Works in real_t precision: F32-QTW for float, FP64-QTW for double.
+// Outputs high word to red[blockIdx.x], low word to red[blockIdx.x + MAX_THREAD_PER_BLOCK].
+__global__ void norm2_reduce_fused_kernel_qtw(real_t *red,
+                                              const real_t *__restrict__ v1,
+                                              int nin, int nvol, int nex)
+{
+  extern __shared__ real_t sdata[];
+  real_t *sh_hi = sdata;
+  real_t *sh_lo = sdata + blockDim.x;
+
+  const int tid = threadIdx.x;
+  const int ist = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gridSize = blockDim.x * gridDim.x;
+
+  real_t sum_h = 0, sum_l = 0;
+
+  for (int idx = ist; idx < nvol; idx += gridSize)
+  {
+    for (int ex = 0; ex < nex; ++ex)
+    {
+      int ist2 = idx + nvol * ex;
+      for (int in = 0; in < nin; ++in)
+      {
+        real_t vt = v1[IDX2(nin, in, ist2)];
+        real_t p, e;
+        TwoProd_r(vt, vt, p, e);
+        real_t sh, st;
+        TwoSum_r(sum_h, p, sh, st);
+        sum_h = sh;
+        sum_l = sum_l + e + st;
+      }
+    }
+  }
+
+  // Normalize dual-word before storing to shared memory
+  real_t nh, nl;
+  TwoSum_r(sum_h, sum_l, nh, nl);
+  sh_hi[tid] = nh;
+  sh_lo[tid] = nl;
+  __syncthreads();
+
+  for (unsigned int s = blockDim.x / 2; s >= WARP_LENGTH; s >>= 1)
+  {
+    if (tid < s)
+    {
+      real_t ah = sh_hi[tid],   al = sh_lo[tid];
+      real_t bh = sh_hi[tid+s], bl = sh_lo[tid+s];
+      real_t rh, t;
+      TwoSum_r(ah, bh, rh, t);
+      sh_hi[tid] = rh;
+      sh_lo[tid] = al + bl + t;
+    }
+    __syncthreads();
+  }
+
+  if (tid < WARP_LENGTH)
+  {
+    real_t ah = sh_hi[tid], al = sh_lo[tid];
+    real_t bh, bl;
+
+#pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1)
+    {
+      bh = __shfl_down_sync(0xffffffff, ah, offset);
+      bl = __shfl_down_sync(0xffffffff, al, offset);
+      real_t rh, t;
+      TwoSum_r(ah, bh, rh, t);
+      ah = rh;
+      al = al + bl + t;
+    }
+
+    if (tid == 0)
+    {
+      red[blockIdx.x]                        = ah;
+      red[blockIdx.x + MAX_THREAD_PER_BLOCK] = al;
+    }
+  }
+}
+
+//====================================================================
+// Second-pass reducer for QTW dual-word partial sums.
+// hi part: red[0..n-1], lo part: red[MAX_THREAD_PER_BLOCK..MAX_THREAD_PER_BLOCK+n-1].
+__global__ void reduce_kernel_multiblocks_qtw(real_t *red, int n)
+{
+  extern __shared__ real_t sdata[];
+  real_t *sh_hi = sdata;
+  real_t *sh_lo = sdata + blockDim.x;
+
+  const int tid = threadIdx.x;
+  const int gridSize = blockDim.x * gridDim.x;
+
+  real_t sum_h = 0, sum_l = 0;
+
+  for (int i = tid; i < n; i += gridSize)
+  {
+    real_t ah = red[i];
+    real_t al = red[i + MAX_THREAD_PER_BLOCK];
+    real_t rh, t;
+    TwoSum_r(sum_h, ah, rh, t);
+    sum_h = rh;
+    sum_l = sum_l + al + t;
+  }
+
+  real_t nh, nl;
+  TwoSum_r(sum_h, sum_l, nh, nl);
+  sh_hi[tid] = nh;
+  sh_lo[tid] = nl;
+  __syncthreads();
+
+  for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1)
+  {
+    if (tid < s)
+    {
+      real_t ah = sh_hi[tid],   al = sh_lo[tid];
+      real_t bh = sh_hi[tid+s], bl = sh_lo[tid+s];
+      real_t rh, t;
+      TwoSum_r(ah, bh, rh, t);
+      sh_hi[tid] = rh;
+      sh_lo[tid] = al + bl + t;
+    }
+    __syncthreads();
+  }
+
+  if (tid == 0)
+  {
+    red[0] = sh_hi[0] + sh_lo[0];
   }
 }
 
@@ -938,12 +1100,16 @@ real_t norm2(real_t *x1, real_t *red1, int nin, int nvol, int nex, int use_qdw)
   int blocksPerGrid = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
   size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
 
-  if (use_qdw) {
-    norm2_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
+  if (use_qdw == 1) {
+    norm2_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
+  } else if (use_qdw == 2) {
+    norm2_reduce_fused_kernel_qtw<<<blocksPerGrid, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
   } else {
     norm2_reduce_fused_kernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
   }
-  reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
 
   cudaDeviceSynchronize();
 
@@ -1085,31 +1251,126 @@ __global__ void dot_reduce_fused_kernel_qdw(real_t *red,
     }
   }
 
-  sdata[tid] = at;
+  real_t *sh_hi = sdata;
+  real_t *sh_lo = sdata + blockDim.x;
+  real_t nh, nl;
+  TwoSum_r(at, comp, nh, nl);
+  sh_hi[tid] = nh;
+  sh_lo[tid] = nl;
   __syncthreads();
 
   for (int s = blockDim.x / 2; s >= WARP_LENGTH; s >>= 1)
   {
     if (tid < s)
     {
-      sdata[tid] += sdata[tid + s];
+      real_t ah = sh_hi[tid],   al = sh_lo[tid];
+      real_t bh = sh_hi[tid+s], bl = sh_lo[tid+s];
+      real_t rh, t;
+      TwoSum_r(ah, bh, rh, t);
+      sh_hi[tid] = rh;
+      sh_lo[tid] = al + bl + t;
     }
     __syncthreads();
   }
 
   if (tid < WARP_LENGTH)
   {
-    at = sdata[tid];
+    real_t ah = sh_hi[tid], al = sh_lo[tid];
+    real_t bh, bl;
 
 #pragma unroll
     for (int offset = 16; offset > 0; offset >>= 1)
     {
-      at += __shfl_down_sync(0xffffffff, at, offset);
+      bh = __shfl_down_sync(0xffffffff, ah, offset);
+      bl = __shfl_down_sync(0xffffffff, al, offset);
+      real_t rh, t;
+      TwoSum_r(ah, bh, rh, t);
+      ah = rh;
+      al = al + bl + t;
     }
 
     if (tid == 0)
     {
-      red[blockIdx.x] = at;
+      red[blockIdx.x]                        = ah;
+      red[blockIdx.x + MAX_THREAD_PER_BLOCK] = al;
+    }
+  }
+}
+
+//====================================================================
+// QTW-enhanced dot: dual-word thread accumulator for standard double fields.
+__global__ void dot_reduce_fused_kernel_qtw(real_t *red,
+                                            const real_t *__restrict__ v1,
+                                            const real_t *__restrict__ v2,
+                                            int nin, int nvol, int nex)
+{
+  extern __shared__ real_t sdata[];
+  real_t *sh_hi = sdata;
+  real_t *sh_lo = sdata + blockDim.x;
+
+  const int tid = threadIdx.x;
+  const int ist = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gridSize = blockDim.x * gridDim.x;
+
+  real_t sum_h = 0, sum_l = 0;
+
+  for (int idx = ist; idx < nvol; idx += gridSize)
+  {
+    for (int ex = 0; ex < nex; ++ex)
+    {
+      int ist2 = idx + nvol * ex;
+      for (int in = 0; in < nin; ++in)
+      {
+        real_t a = v1[IDX2(nin, in, ist2)];
+        real_t b = v2[IDX2(nin, in, ist2)];
+        real_t p, e;
+        TwoProd_r(a, b, p, e);
+        real_t rh, t;
+        TwoSum_r(sum_h, p, rh, t);
+        sum_h = rh;
+        sum_l = sum_l + e + t;
+      }
+    }
+  }
+
+  real_t nh, nl;
+  TwoSum_r(sum_h, sum_l, nh, nl);
+  sh_hi[tid] = nh;
+  sh_lo[tid] = nl;
+  __syncthreads();
+
+  for (unsigned int s = blockDim.x / 2; s >= WARP_LENGTH; s >>= 1)
+  {
+    if (tid < s)
+    {
+      real_t ah = sh_hi[tid],   al = sh_lo[tid];
+      real_t bh = sh_hi[tid+s], bl = sh_lo[tid+s];
+      real_t rh, t;
+      TwoSum_r(ah, bh, rh, t);
+      sh_hi[tid] = rh;
+      sh_lo[tid] = al + bl + t;
+    }
+    __syncthreads();
+  }
+
+  if (tid < WARP_LENGTH)
+  {
+    real_t ah = sh_hi[tid], al = sh_lo[tid];
+    real_t bh, bl;
+#pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1)
+    {
+      bh = __shfl_down_sync(0xffffffff, ah, offset);
+      bl = __shfl_down_sync(0xffffffff, al, offset);
+      real_t rh, t;
+      TwoSum_r(ah, bh, rh, t);
+      ah = rh;
+      al = al + bl + t;
+    }
+    if (tid == 0)
+    {
+      red[blockIdx.x]                        = ah;
+      red[blockIdx.x + MAX_THREAD_PER_BLOCK] = al;
     }
   }
 }
@@ -1133,17 +1394,23 @@ real_t dot(real_t *x1, real_t *x2, real_t *red1,
   int blocksPerGrid = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
   size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
 
-  if (use_qdw) {
-    dot_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev,
-                                                                                   x1_dev, x2_dev,
-                                                                                   nin, nvol, nex);
+  if (use_qdw == 1) {
+    dot_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, 2*sharedMemSize>>>(red1_dev,
+                                                                                     x1_dev, x2_dev,
+                                                                                     nin, nvol, nex);
+    reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
+  } else if (use_qdw == 2) {
+    dot_reduce_fused_kernel_qtw<<<blocksPerGrid, threadsPerBlock, 2*sharedMemSize>>>(red1_dev,
+                                                                                     x1_dev, x2_dev,
+                                                                                     nin, nvol, nex);
+    reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
   } else {
     dot_reduce_fused_kernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev,
                                                                               x1_dev, x2_dev,
                                                                               nin, nvol, nex);
+    reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
   }
 
-  reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
   cudaDeviceSynchronize();
 
   real_t a;
@@ -1276,13 +1543,15 @@ __global__ void dotc_reduce_fused_kernel_qdw(real_t *red1, real_t *red2,
   const int gridSize = blockDim.x * gridDim.x;
 
   extern __shared__ real_t sdata[];
-  real_t *sh_r = sdata;
-  real_t *sh_i = sdata + blockDim.x;
+  real_t *sh_r_hi = sdata;
+  real_t *sh_r_lo = sdata +     blockDim.x;
+  real_t *sh_i_hi = sdata + 2 * blockDim.x;
+  real_t *sh_i_lo = sdata + 3 * blockDim.x;
 
   const int nin2 = nin / 2;
 
   real_t ar = 0.0, ai = 0.0;
-  real_t comp_r = 0.0, comp_i = 0.0;  // Kahan compensation
+  real_t comp_r = 0.0, comp_i = 0.0;
 
   for (int ist = idx; ist < nvol; ist += gridSize)
   {
@@ -1344,36 +1613,174 @@ __global__ void dotc_reduce_fused_kernel_qdw(real_t *red1, real_t *red2,
     }
   }
 
-  sh_r[tid] = ar;
-  sh_i[tid] = ai;
+  real_t nr_h, nr_l, ni_h, ni_l;
+  TwoSum_r(ar, comp_r, nr_h, nr_l);
+  TwoSum_r(ai, comp_i, ni_h, ni_l);
+  sh_r_hi[tid] = nr_h;
+  sh_r_lo[tid] = nr_l;
+  sh_i_hi[tid] = ni_h;
+  sh_i_lo[tid] = ni_l;
   __syncthreads();
 
   for (int s = blockDim.x / 2; s >= WARP_LENGTH; s >>= 1)
   {
     if (tid < s)
     {
-      sh_r[tid] += sh_r[tid + s];
-      sh_i[tid] += sh_i[tid + s];
+      real_t arh = sh_r_hi[tid], arl = sh_r_lo[tid];
+      real_t brh = sh_r_hi[tid+s], brl = sh_r_lo[tid+s];
+      real_t aih = sh_i_hi[tid], ail = sh_i_lo[tid];
+      real_t bih = sh_i_hi[tid+s], bil = sh_i_lo[tid+s];
+      real_t rh, t;
+      TwoSum_r(arh, brh, rh, t);
+      sh_r_hi[tid] = rh;
+      sh_r_lo[tid] = arl + brl + t;
+      TwoSum_r(aih, bih, rh, t);
+      sh_i_hi[tid] = rh;
+      sh_i_lo[tid] = ail + bil + t;
     }
     __syncthreads();
   }
 
   if (tid < WARP_LENGTH)
   {
-    ar = sh_r[tid];
-    ai = sh_i[tid];
+    real_t arh = sh_r_hi[tid], arl = sh_r_lo[tid];
+    real_t aih = sh_i_hi[tid], ail = sh_i_lo[tid];
+    real_t brh, brl, bih, bil;
 
 #pragma unroll
     for (int offset = 16; offset > 0; offset >>= 1)
     {
-      ar += __shfl_down_sync(0xffffffff, ar, offset);
-      ai += __shfl_down_sync(0xffffffff, ai, offset);
+      brh = __shfl_down_sync(0xffffffff, arh, offset);
+      brl = __shfl_down_sync(0xffffffff, arl, offset);
+      bih = __shfl_down_sync(0xffffffff, aih, offset);
+      bil = __shfl_down_sync(0xffffffff, ail, offset);
+      real_t rh, t;
+      TwoSum_r(arh, brh, rh, t);
+      arh = rh;
+      arl = arl + brl + t;
+      TwoSum_r(aih, bih, rh, t);
+      aih = rh;
+      ail = ail + bil + t;
     }
 
     if (tid == 0)
     {
-      red1[blockIdx.x] = ar;
-      red2[blockIdx.x] = ai;
+      red1[blockIdx.x]                        = arh;
+      red1[blockIdx.x + MAX_THREAD_PER_BLOCK] = arl;
+      red2[blockIdx.x]                        = aih;
+      red2[blockIdx.x + MAX_THREAD_PER_BLOCK] = ail;
+    }
+  }
+}
+
+//====================================================================
+// QTW-enhanced dotc: dual-word thread accumulator for complex dot product.
+__global__ void dotc_reduce_fused_kernel_qtw(real_t *red1, real_t *red2,
+                                             const real_t *__restrict__ v1,
+                                             const real_t *__restrict__ v2,
+                                             int nin, int nvol, int nex)
+{
+  extern __shared__ real_t sdata[];
+  real_t *shr_hi = sdata;
+  real_t *shr_lo = sdata +   blockDim.x;
+  real_t *shi_hi = sdata + 2*blockDim.x;
+  real_t *shi_lo = sdata + 3*blockDim.x;
+
+  const int tid = threadIdx.x;
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gridSize = blockDim.x * gridDim.x;
+  const int nin2 = nin / 2;
+
+  real_t ar_h = 0, ar_l = 0;
+  real_t ai_h = 0, ai_l = 0;
+
+  for (int ist = idx; ist < nvol; ist += gridSize)
+  {
+    for (int ex = 0; ex < nex; ++ex)
+    {
+      int ist2 = ist + nvol * ex;
+      for (int in2 = 0; in2 < nin2; ++in2)
+      {
+        int kr = 2 * in2;
+        int ki = 2 * in2 + 1;
+        real_t v1r = v1[IDX2(nin, kr, ist2)];
+        real_t v1i = v1[IDX2(nin, ki, ist2)];
+        real_t v2r = v2[IDX2(nin, kr, ist2)];
+        real_t v2i = v2[IDX2(nin, ki, ist2)];
+
+        // real part: v1r*v2r + v1i*v2i
+        real_t p1, e1, p2, e2;
+        TwoProd_r(v1r, v2r, p1, e1);
+        TwoProd_r(v1i, v2i, p2, e2);
+        real_t ps, pt;
+        TwoSum_r(p1, p2, ps, pt);
+        real_t rh, rt;
+        TwoSum_r(ar_h, ps, rh, rt);
+        ar_h = rh;
+        ar_l = ar_l + e1 + e2 + pt + rt;
+
+        // imag part: v1r*v2i - v1i*v2r
+        real_t p3, e3, p4, e4;
+        TwoProd_r(v1r,  v2i, p3, e3);
+        TwoProd_r(-v1i, v2r, p4, e4);
+        TwoSum_r(p3, p4, ps, pt);
+        TwoSum_r(ai_h, ps, rh, rt);
+        ai_h = rh;
+        ai_l = ai_l + e3 + e4 + pt + rt;
+      }
+    }
+  }
+
+  real_t nh, nl;
+  TwoSum_r(ar_h, ar_l, nh, nl);
+  shr_hi[tid] = nh;  shr_lo[tid] = nl;
+  TwoSum_r(ai_h, ai_l, nh, nl);
+  shi_hi[tid] = nh;  shi_lo[tid] = nl;
+  __syncthreads();
+
+  for (unsigned int s = blockDim.x / 2; s >= WARP_LENGTH; s >>= 1)
+  {
+    if (tid < s)
+    {
+      real_t ah, al, bh, bl, rh, t;
+      ah = shr_hi[tid];   al = shr_lo[tid];
+      bh = shr_hi[tid+s]; bl = shr_lo[tid+s];
+      TwoSum_r(ah, bh, rh, t);
+      shr_hi[tid] = rh;  shr_lo[tid] = al + bl + t;
+
+      ah = shi_hi[tid];   al = shi_lo[tid];
+      bh = shi_hi[tid+s]; bl = shi_lo[tid+s];
+      TwoSum_r(ah, bh, rh, t);
+      shi_hi[tid] = rh;  shi_lo[tid] = al + bl + t;
+    }
+    __syncthreads();
+  }
+
+  if (tid < WARP_LENGTH)
+  {
+    real_t arh = shr_hi[tid], arl = shr_lo[tid];
+    real_t aih = shi_hi[tid], ail = shi_lo[tid];
+    real_t bh, bl;
+
+#pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1)
+    {
+      real_t rh, t;
+      bh = __shfl_down_sync(0xffffffff, arh, offset);
+      bl = __shfl_down_sync(0xffffffff, arl, offset);
+      TwoSum_r(arh, bh, rh, t);  arh = rh;  arl = arl + bl + t;
+
+      bh = __shfl_down_sync(0xffffffff, aih, offset);
+      bl = __shfl_down_sync(0xffffffff, ail, offset);
+      TwoSum_r(aih, bh, rh, t);  aih = rh;  ail = ail + bl + t;
+    }
+
+    if (tid == 0)
+    {
+      red1[blockIdx.x]                        = arh;
+      red1[blockIdx.x + MAX_THREAD_PER_BLOCK] = arl;
+      red2[blockIdx.x]                        = aih;
+      red2[blockIdx.x + MAX_THREAD_PER_BLOCK] = ail;
     }
   }
 }
@@ -1397,16 +1804,23 @@ void dotc(real_t *ar, real_t *ai, real_t *x1, real_t *x2,
   int blocksPerGrid    = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
   size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
 
-  if (use_qdw) {
-    dotc_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, 2 * sharedMemSize>>>(red1_dev, red2_dev,
+  if (use_qdw == 1) {
+    dotc_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, 4 * sharedMemSize>>>(red1_dev, red2_dev,
                                                                                         x1_dev, x2_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
+    reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red2_dev, blocksPerGrid);
+  } else if (use_qdw == 2) {
+    dotc_reduce_fused_kernel_qtw<<<blocksPerGrid, threadsPerBlock, 4 * sharedMemSize>>>(red1_dev, red2_dev,
+                                                                                        x1_dev, x2_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
+    reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red2_dev, blocksPerGrid);
   } else {
     dotc_reduce_fused_kernel<<<blocksPerGrid, threadsPerBlock, 2 * sharedMemSize>>>(red1_dev, red2_dev,
                                                                                     x1_dev, x2_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
+    reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red2_dev, blocksPerGrid);
   }
 
-  reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
-  reduce_kernel_multiblocks<<<nbl2, threadsPerBlock, sharedMemSize>>>(red2_dev, blocksPerGrid);
   cudaDeviceSynchronize();
 
   real_t atr, ati;
@@ -1422,22 +1836,26 @@ void dotc(real_t *ar, real_t *ai, real_t *x1, real_t *x2,
 //====================================================================
 #ifdef __CUDACC__
 namespace {
-__global__ void normalize_kernel_qdw_actual(double4 *spinor, int nvol)
+__global__ void normalize_kernel_qdw_actual(real_t *spinor, int nin, int nvol)
 {
   const int site = blockIdx.x * blockDim.x + threadIdx.x;
-  if(site >= nvol) return;
+  if (site >= nvol) return;
 
-  for (int id = 0; id < ND; ++id) {
-    for (int ic = 0; ic < NC; ++ic) {
-      int idx = IDX2_QDW(ic, id, site);
-      double4 s = spinor[idx];
-      double sr, er, si, ei;
-      TwoSum(s.x, s.z, sr, er);
-      TwoSum(s.y, s.w, si, ei);
-      s.x = sr; s.z = er;
-      s.y = si; s.w = ei;
-      spinor[idx] = s;
-    }
+  for (int in4 = 0; in4 < nin / 4; ++in4)
+  {
+    real_t h_re = spinor[IDX2(nin, 4*in4+0, site)];
+    real_t h_im = spinor[IDX2(nin, 4*in4+1, site)];
+    real_t l_re = spinor[IDX2(nin, 4*in4+2, site)];
+    real_t l_im = spinor[IDX2(nin, 4*in4+3, site)];
+
+    real_t nh_re, nl_re, nh_im, nl_im;
+    TwoSum_r(h_re, l_re, nh_re, nl_re);
+    TwoSum_r(h_im, l_im, nh_im, nl_im);
+
+    spinor[IDX2(nin, 4*in4+0, site)] = nh_re;
+    spinor[IDX2(nin, 4*in4+1, site)] = nh_im;
+    spinor[IDX2(nin, 4*in4+2, site)] = nl_re;
+    spinor[IDX2(nin, 4*in4+3, site)] = nl_im;
   }
 }
 }
@@ -1445,15 +1863,13 @@ __global__ void normalize_kernel_qdw_actual(double4 *spinor, int nvol)
 
 void normalize(real_t* v, int nin, int nvol, int use_qdw)
 {
-  if (!use_qdw) return;
+  if (use_qdw != 1) return;
 #ifdef __CUDACC__
-  if (sizeof(real_t) == 8) {
-    double4 *v_dev = (double4 *)dev_ptr(v);
-    int nth = VECTOR_LENGTH;
-    int nbl = (nvol + nth - 1) / nth;
-    normalize_kernel_qdw_actual<<<nbl, nth>>>(v_dev, nvol);
-    cudaDeviceSynchronize();
-  }
+  real_t *v_dev = (real_t *)dev_ptr(v);
+  int nth = VECTOR_LENGTH;
+  int nbl = (nvol + nth - 1) / nth;
+  normalize_kernel_qdw_actual<<<nbl, nth>>>(v_dev, nin, nvol);
+  cudaDeviceSynchronize();
 #endif
 }
 

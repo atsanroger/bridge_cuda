@@ -50,7 +50,8 @@ class ASolver_CG : public ASolver<AFIELD>
   AFIELD m_x, m_r, m_p, m_s;
 
   bool m_use_QDW;
-  int m_use_qdw_int;
+  bool m_use_QTW;
+  int m_use_qdw_int;  // 0=standard, 1=QDW, 2=QTW
 
  public:
   //! constructor.
