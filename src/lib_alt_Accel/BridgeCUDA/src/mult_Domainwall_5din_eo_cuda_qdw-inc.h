@@ -9,8 +9,10 @@
 
 // All macros were undef'd by mult_Domainwall_5din_cuda_qdw-inc.h — redefine here.
 
-#define IDX_DWF_QDW(ic, id, is5, Nst_pad_, site_) \
-    IDX2_QDW((ic), (id), (is5) * (Nst_pad_) + (site_))
+// BLAS-compatible flat layout: NC*ND*Ns groups of double4 per NWP block.
+// 4th arg is Ns (not Nst_pad) — matches the BLAS 4*IDX2(nin/4, in4, site) formula.
+#define IDX_DWF_QDW(ic, id, is5, Ns_, site_) \
+    IDX2(NC * ND * (Ns_), (ic) + NC * ((id) + ND * (is5)), (site_))
 
 #define DWF_PROJ_P(res, a, b) \
     dw_add((a).x,(a).z,-(b).y,-(b).w,(res).x,(res).z); \
@@ -182,10 +184,10 @@ void mult_domainwall_5din_ee_5dir_dirac_qdw_kernel(
         double4 tmp;
 
 #define LOAD_SUB_SHop(ic) \
-        double4 wu_##ic##_s0 = wp[IDX_DWF_QDW(ic,0,is_up,Nst_pad,site)]; \
-        double4 wu_##ic##_s1 = wp[IDX_DWF_QDW(ic,1,is_up,Nst_pad,site)]; \
-        double4 wu_##ic##_s2 = wp[IDX_DWF_QDW(ic,2,is_up,Nst_pad,site)]; \
-        double4 wu_##ic##_s3 = wp[IDX_DWF_QDW(ic,3,is_up,Nst_pad,site)]; \
+        double4 wu_##ic##_s0 = wp[IDX_DWF_QDW(ic,0,is_up,Ns,site)]; \
+        double4 wu_##ic##_s1 = wp[IDX_DWF_QDW(ic,1,is_up,Ns,site)]; \
+        double4 wu_##ic##_s2 = wp[IDX_DWF_QDW(ic,2,is_up,Ns,site)]; \
+        double4 wu_##ic##_s3 = wp[IDX_DWF_QDW(ic,3,is_up,Ns,site)]; \
         double4 vt_##ic##_s0, vt_##ic##_s1, vt_##ic##_s2, vt_##ic##_s3; \
         QDW_SUB(tmp,wu_##ic##_s0,wu_##ic##_s2); QDW_SCAL(vt_##ic##_s0,Fup,tmp); \
         QDW_SUB(tmp,wu_##ic##_s1,wu_##ic##_s3); QDW_SCAL(vt_##ic##_s1,Fup,tmp); \
@@ -202,10 +204,10 @@ void mult_domainwall_5din_ee_5dir_dirac_qdw_kernel(
 
 #define ADD_SUM_SHop(ic) \
         { \
-        double4 wd_s0=wp[IDX_DWF_QDW(ic,0,is_dn,Nst_pad,site)]; \
-        double4 wd_s1=wp[IDX_DWF_QDW(ic,1,is_dn,Nst_pad,site)]; \
-        double4 wd_s2=wp[IDX_DWF_QDW(ic,2,is_dn,Nst_pad,site)]; \
-        double4 wd_s3=wp[IDX_DWF_QDW(ic,3,is_dn,Nst_pad,site)]; \
+        double4 wd_s0=wp[IDX_DWF_QDW(ic,0,is_dn,Ns,site)]; \
+        double4 wd_s1=wp[IDX_DWF_QDW(ic,1,is_dn,Ns,site)]; \
+        double4 wd_s2=wp[IDX_DWF_QDW(ic,2,is_dn,Ns,site)]; \
+        double4 wd_s3=wp[IDX_DWF_QDW(ic,3,is_dn,Ns,site)]; \
         QDW_ADD(sum02,wd_s0,wd_s2); QDW_SCAL(tmp,Fdn,sum02); \
         QDW_ADD(vt_##ic##_s0,vt_##ic##_s0,tmp); QDW_ADD(vt_##ic##_s2,vt_##ic##_s2,tmp); \
         QDW_ADD(sum13,wd_s1,wd_s3); QDW_SCAL(tmp,Fdn,sum13); \
@@ -218,10 +220,10 @@ void mult_domainwall_5din_ee_5dir_dirac_qdw_kernel(
         // ---- local diagonal ----
 #define DIAG_AND_STORE(ic) \
         { \
-        double4 w_s0=wp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)]; \
-        double4 w_s1=wp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)]; \
-        double4 w_s2=wp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)]; \
-        double4 w_s3=wp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)]; \
+        double4 w_s0=wp[IDX_DWF_QDW(ic,0,is,Ns,site)]; \
+        double4 w_s1=wp[IDX_DWF_QDW(ic,1,is,Ns,site)]; \
+        double4 w_s2=wp[IDX_DWF_QDW(ic,2,is,Ns,site)]; \
+        double4 w_s3=wp[IDX_DWF_QDW(ic,3,is,Ns,site)]; \
         double4 wt_s0,wt_s1,wt_s2,wt_s3; \
         if (is == 0) { \
             double f1=FF1*0.5*(1.0+alpha), f2=FF1*0.5*(-1.0+alpha); \
@@ -244,10 +246,10 @@ void mult_domainwall_5din_ee_5dir_dirac_qdw_kernel(
         QDW_ADD(wt_s1,wt_s1,vt_##ic##_s1); \
         QDW_ADD(wt_s2,wt_s2,vt_##ic##_s2); \
         QDW_ADD(wt_s3,wt_s3,vt_##ic##_s3); \
-        vp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)]=wt_s0; \
-        vp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)]=wt_s1; \
-        vp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)]=wt_s2; \
-        vp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)]=wt_s3; \
+        vp[IDX_DWF_QDW(ic,0,is,Ns,site)]=wt_s0; \
+        vp[IDX_DWF_QDW(ic,1,is,Ns,site)]=wt_s1; \
+        vp[IDX_DWF_QDW(ic,2,is,Ns,site)]=wt_s2; \
+        vp[IDX_DWF_QDW(ic,3,is,Ns,site)]=wt_s3; \
         }
 
         DIAG_AND_STORE(0) DIAG_AND_STORE(1) DIAG_AND_STORE(2)
@@ -296,10 +298,10 @@ void mult_domainwall_5din_eo_5dir_dirac_qdw_kernel(
         const double Fup = (is == Ns-1) ? -0.5 * mq * c_con[is] : 0.5 * c_con[is] * alpha;
 
 #define LOAD_SUB_EO(ic) \
-        double4 wu_##ic##_s0 = wp[IDX_DWF_QDW(ic,0,is_up,Nst_pad,site)]; \
-        double4 wu_##ic##_s1 = wp[IDX_DWF_QDW(ic,1,is_up,Nst_pad,site)]; \
-        double4 wu_##ic##_s2 = wp[IDX_DWF_QDW(ic,2,is_up,Nst_pad,site)]; \
-        double4 wu_##ic##_s3 = wp[IDX_DWF_QDW(ic,3,is_up,Nst_pad,site)]; \
+        double4 wu_##ic##_s0 = wp[IDX_DWF_QDW(ic,0,is_up,Ns,site)]; \
+        double4 wu_##ic##_s1 = wp[IDX_DWF_QDW(ic,1,is_up,Ns,site)]; \
+        double4 wu_##ic##_s2 = wp[IDX_DWF_QDW(ic,2,is_up,Ns,site)]; \
+        double4 wu_##ic##_s3 = wp[IDX_DWF_QDW(ic,3,is_up,Ns,site)]; \
         double4 vt_##ic##_s0, vt_##ic##_s1, vt_##ic##_s2, vt_##ic##_s3; \
         QDW_SUB(tmp,wu_##ic##_s0,wu_##ic##_s2); QDW_SCAL(vt_##ic##_s0,Fup,tmp); \
         QDW_SUB(tmp,wu_##ic##_s1,wu_##ic##_s3); QDW_SCAL(vt_##ic##_s1,Fup,tmp); \
@@ -316,10 +318,10 @@ void mult_domainwall_5din_eo_5dir_dirac_qdw_kernel(
 
 #define ADD_SUM_EO(ic) \
         { \
-        double4 wd_s0=wp[IDX_DWF_QDW(ic,0,is_dn,Nst_pad,site)]; \
-        double4 wd_s1=wp[IDX_DWF_QDW(ic,1,is_dn,Nst_pad,site)]; \
-        double4 wd_s2=wp[IDX_DWF_QDW(ic,2,is_dn,Nst_pad,site)]; \
-        double4 wd_s3=wp[IDX_DWF_QDW(ic,3,is_dn,Nst_pad,site)]; \
+        double4 wd_s0=wp[IDX_DWF_QDW(ic,0,is_dn,Ns,site)]; \
+        double4 wd_s1=wp[IDX_DWF_QDW(ic,1,is_dn,Ns,site)]; \
+        double4 wd_s2=wp[IDX_DWF_QDW(ic,2,is_dn,Ns,site)]; \
+        double4 wd_s3=wp[IDX_DWF_QDW(ic,3,is_dn,Ns,site)]; \
         QDW_ADD(sum02,wd_s0,wd_s2); QDW_SCAL(tmp,Fdn,sum02); \
         QDW_ADD(vt_##ic##_s0,vt_##ic##_s0,tmp); QDW_ADD(vt_##ic##_s2,vt_##ic##_s2,tmp); \
         QDW_ADD(sum13,wd_s1,wd_s3); QDW_SCAL(tmp,Fdn,sum13); \
@@ -332,10 +334,10 @@ void mult_domainwall_5din_eo_5dir_dirac_qdw_kernel(
         // ---- local B-scaled diagonal ----
 #define DIAG_AND_STORE_EO(ic) \
         { \
-        double4 w_s0=wp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)]; \
-        double4 w_s1=wp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)]; \
-        double4 w_s2=wp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)]; \
-        double4 w_s3=wp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)]; \
+        double4 w_s0=wp[IDX_DWF_QDW(ic,0,is,Ns,site)]; \
+        double4 w_s1=wp[IDX_DWF_QDW(ic,1,is,Ns,site)]; \
+        double4 w_s2=wp[IDX_DWF_QDW(ic,2,is,Ns,site)]; \
+        double4 w_s3=wp[IDX_DWF_QDW(ic,3,is,Ns,site)]; \
         double4 wt_s0,wt_s1,wt_s2,wt_s3; \
         if (is == 0) { \
             double b1=b_con[is]*0.5*(1.0+alpha), b2=b_con[is]*0.5*(-1.0+alpha); \
@@ -362,10 +364,10 @@ void mult_domainwall_5din_eo_5dir_dirac_qdw_kernel(
         QDW_SCAL(wt_s1,-0.5,wt_s1); \
         QDW_SCAL(wt_s2,-0.5,wt_s2); \
         QDW_SCAL(wt_s3,-0.5,wt_s3); \
-        yp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)]=wt_s0; \
-        yp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)]=wt_s1; \
-        yp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)]=wt_s2; \
-        yp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)]=wt_s3; \
+        yp[IDX_DWF_QDW(ic,0,is,Ns,site)]=wt_s0; \
+        yp[IDX_DWF_QDW(ic,1,is,Ns,site)]=wt_s1; \
+        yp[IDX_DWF_QDW(ic,2,is,Ns,site)]=wt_s2; \
+        yp[IDX_DWF_QDW(ic,3,is,Ns,site)]=wt_s3; \
         }
 
         DIAG_AND_STORE_EO(0) DIAG_AND_STORE_EO(1) DIAG_AND_STORE_EO(2)
@@ -412,10 +414,10 @@ void mult_domainwall_5din_ee_5dirdag_dirac_qdw_kernel(
 
         // ---- local diagonal (self-adjoint) ----
 #define DIAG_DAG(ic) \
-        double4 w_##ic##_s0=wp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)]; \
-        double4 w_##ic##_s1=wp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)]; \
-        double4 w_##ic##_s2=wp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)]; \
-        double4 w_##ic##_s3=wp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)]; \
+        double4 w_##ic##_s0=wp[IDX_DWF_QDW(ic,0,is,Ns,site)]; \
+        double4 w_##ic##_s1=wp[IDX_DWF_QDW(ic,1,is,Ns,site)]; \
+        double4 w_##ic##_s2=wp[IDX_DWF_QDW(ic,2,is,Ns,site)]; \
+        double4 w_##ic##_s3=wp[IDX_DWF_QDW(ic,3,is,Ns,site)]; \
         double4 vt_##ic##_s0,vt_##ic##_s1,vt_##ic##_s2,vt_##ic##_s3; \
         if (is == 0) { \
             double f1=B1*0.5*(1.0+alpha), f2=B1*0.5*(-1.0+alpha); \
@@ -446,10 +448,10 @@ void mult_domainwall_5din_ee_5dirdag_dirac_qdw_kernel(
 
 #define ADD_SYM_UP(ic) \
         { \
-        double4 xu_s0=wp[IDX_DWF_QDW(ic,0,is_up,Nst_pad,site)]; \
-        double4 xu_s1=wp[IDX_DWF_QDW(ic,1,is_up,Nst_pad,site)]; \
-        double4 xu_s2=wp[IDX_DWF_QDW(ic,2,is_up,Nst_pad,site)]; \
-        double4 xu_s3=wp[IDX_DWF_QDW(ic,3,is_up,Nst_pad,site)]; \
+        double4 xu_s0=wp[IDX_DWF_QDW(ic,0,is_up,Ns,site)]; \
+        double4 xu_s1=wp[IDX_DWF_QDW(ic,1,is_up,Ns,site)]; \
+        double4 xu_s2=wp[IDX_DWF_QDW(ic,2,is_up,Ns,site)]; \
+        double4 xu_s3=wp[IDX_DWF_QDW(ic,3,is_up,Ns,site)]; \
         QDW_ADD(sum02,xu_s0,xu_s2); QDW_SCAL(tmp,Fup,sum02); \
         QDW_ADD(vt_##ic##_s0,vt_##ic##_s0,tmp); QDW_ADD(vt_##ic##_s2,vt_##ic##_s2,tmp); \
         QDW_ADD(sum13,xu_s1,xu_s3); QDW_SCAL(tmp,Fup,sum13); \
@@ -466,10 +468,10 @@ void mult_domainwall_5din_ee_5dirdag_dirac_qdw_kernel(
 
 #define ADD_ANTISYM_DN(ic) \
         { \
-        double4 xd_s0=wp[IDX_DWF_QDW(ic,0,is_dn,Nst_pad,site)]; \
-        double4 xd_s1=wp[IDX_DWF_QDW(ic,1,is_dn,Nst_pad,site)]; \
-        double4 xd_s2=wp[IDX_DWF_QDW(ic,2,is_dn,Nst_pad,site)]; \
-        double4 xd_s3=wp[IDX_DWF_QDW(ic,3,is_dn,Nst_pad,site)]; \
+        double4 xd_s0=wp[IDX_DWF_QDW(ic,0,is_dn,Ns,site)]; \
+        double4 xd_s1=wp[IDX_DWF_QDW(ic,1,is_dn,Ns,site)]; \
+        double4 xd_s2=wp[IDX_DWF_QDW(ic,2,is_dn,Ns,site)]; \
+        double4 xd_s3=wp[IDX_DWF_QDW(ic,3,is_dn,Ns,site)]; \
         QDW_SUB(sum02,xd_s0,xd_s2); QDW_SCAL(tmp,Fdn,sum02); \
         QDW_ADD(vt_##ic##_s0,vt_##ic##_s0,tmp); QDW_SUB(vt_##ic##_s2,vt_##ic##_s2,tmp); \
         QDW_SUB(sum13,xd_s1,xd_s3); QDW_SCAL(tmp,Fdn,sum13); \
@@ -479,12 +481,12 @@ void mult_domainwall_5din_ee_5dirdag_dirac_qdw_kernel(
         ADD_ANTISYM_DN(0) ADD_ANTISYM_DN(1) ADD_ANTISYM_DN(2)
 #undef ADD_ANTISYM_DN
 
-        vp[IDX_DWF_QDW(0,0,is,Nst_pad,site)]=vt_0_s0; vp[IDX_DWF_QDW(0,1,is,Nst_pad,site)]=vt_0_s1;
-        vp[IDX_DWF_QDW(0,2,is,Nst_pad,site)]=vt_0_s2; vp[IDX_DWF_QDW(0,3,is,Nst_pad,site)]=vt_0_s3;
-        vp[IDX_DWF_QDW(1,0,is,Nst_pad,site)]=vt_1_s0; vp[IDX_DWF_QDW(1,1,is,Nst_pad,site)]=vt_1_s1;
-        vp[IDX_DWF_QDW(1,2,is,Nst_pad,site)]=vt_1_s2; vp[IDX_DWF_QDW(1,3,is,Nst_pad,site)]=vt_1_s3;
-        vp[IDX_DWF_QDW(2,0,is,Nst_pad,site)]=vt_2_s0; vp[IDX_DWF_QDW(2,1,is,Nst_pad,site)]=vt_2_s1;
-        vp[IDX_DWF_QDW(2,2,is,Nst_pad,site)]=vt_2_s2; vp[IDX_DWF_QDW(2,3,is,Nst_pad,site)]=vt_2_s3;
+        vp[IDX_DWF_QDW(0,0,is,Ns,site)]=vt_0_s0; vp[IDX_DWF_QDW(0,1,is,Ns,site)]=vt_0_s1;
+        vp[IDX_DWF_QDW(0,2,is,Ns,site)]=vt_0_s2; vp[IDX_DWF_QDW(0,3,is,Ns,site)]=vt_0_s3;
+        vp[IDX_DWF_QDW(1,0,is,Ns,site)]=vt_1_s0; vp[IDX_DWF_QDW(1,1,is,Ns,site)]=vt_1_s1;
+        vp[IDX_DWF_QDW(1,2,is,Ns,site)]=vt_1_s2; vp[IDX_DWF_QDW(1,3,is,Ns,site)]=vt_1_s3;
+        vp[IDX_DWF_QDW(2,0,is,Ns,site)]=vt_2_s0; vp[IDX_DWF_QDW(2,1,is,Ns,site)]=vt_2_s1;
+        vp[IDX_DWF_QDW(2,2,is,Ns,site)]=vt_2_s2; vp[IDX_DWF_QDW(2,3,is,Ns,site)]=vt_2_s3;
     }
 }
 
@@ -526,10 +528,10 @@ void mult_domainwall_5din_eo_5dirdag_dirac_qdw_kernel(
 
         // ---- local adjoint (adjoint of -0.5*b[is]*B_alpha) ----
 #define LOCAL_DAG_EO(ic) \
-        double4 y_##ic##_s0=yp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)]; \
-        double4 y_##ic##_s1=yp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)]; \
-        double4 y_##ic##_s2=yp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)]; \
-        double4 y_##ic##_s3=yp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)]; \
+        double4 y_##ic##_s0=yp[IDX_DWF_QDW(ic,0,is,Ns,site)]; \
+        double4 y_##ic##_s1=yp[IDX_DWF_QDW(ic,1,is,Ns,site)]; \
+        double4 y_##ic##_s2=yp[IDX_DWF_QDW(ic,2,is,Ns,site)]; \
+        double4 y_##ic##_s3=yp[IDX_DWF_QDW(ic,3,is,Ns,site)]; \
         double4 vt_##ic##_s0,vt_##ic##_s1,vt_##ic##_s2,vt_##ic##_s3; \
         if (is == 0) { \
             double b1=-0.5*b_con[is]*0.5*(1.0+alpha); \
@@ -565,10 +567,10 @@ void mult_domainwall_5din_eo_5dirdag_dirac_qdw_kernel(
 
 #define ADD_DAG_UP(ic) \
         { \
-        double4 yu_s0=yp[IDX_DWF_QDW(ic,0,is_up,Nst_pad,site)]; \
-        double4 yu_s1=yp[IDX_DWF_QDW(ic,1,is_up,Nst_pad,site)]; \
-        double4 yu_s2=yp[IDX_DWF_QDW(ic,2,is_up,Nst_pad,site)]; \
-        double4 yu_s3=yp[IDX_DWF_QDW(ic,3,is_up,Nst_pad,site)]; \
+        double4 yu_s0=yp[IDX_DWF_QDW(ic,0,is_up,Ns,site)]; \
+        double4 yu_s1=yp[IDX_DWF_QDW(ic,1,is_up,Ns,site)]; \
+        double4 yu_s2=yp[IDX_DWF_QDW(ic,2,is_up,Ns,site)]; \
+        double4 yu_s3=yp[IDX_DWF_QDW(ic,3,is_up,Ns,site)]; \
         QDW_ADD(sum02,yu_s0,yu_s2); QDW_SCAL(tmp,Fup_d,sum02); \
         QDW_ADD(vt_##ic##_s0,vt_##ic##_s0,tmp); QDW_ADD(vt_##ic##_s2,vt_##ic##_s2,tmp); \
         QDW_ADD(sum13,yu_s1,yu_s3); QDW_SCAL(tmp,Fup_d,sum13); \
@@ -586,10 +588,10 @@ void mult_domainwall_5din_eo_5dirdag_dirac_qdw_kernel(
 
 #define ADD_DAG_DN(ic) \
         { \
-        double4 yd_s0=yp[IDX_DWF_QDW(ic,0,is_dn,Nst_pad,site)]; \
-        double4 yd_s1=yp[IDX_DWF_QDW(ic,1,is_dn,Nst_pad,site)]; \
-        double4 yd_s2=yp[IDX_DWF_QDW(ic,2,is_dn,Nst_pad,site)]; \
-        double4 yd_s3=yp[IDX_DWF_QDW(ic,3,is_dn,Nst_pad,site)]; \
+        double4 yd_s0=yp[IDX_DWF_QDW(ic,0,is_dn,Ns,site)]; \
+        double4 yd_s1=yp[IDX_DWF_QDW(ic,1,is_dn,Ns,site)]; \
+        double4 yd_s2=yp[IDX_DWF_QDW(ic,2,is_dn,Ns,site)]; \
+        double4 yd_s3=yp[IDX_DWF_QDW(ic,3,is_dn,Ns,site)]; \
         QDW_SUB(sum02,yd_s2,yd_s0); QDW_SCAL(tmp,Fdn_d,sum02); \
         QDW_ADD(vt_##ic##_s0,vt_##ic##_s0,tmp); QDW_SUB(vt_##ic##_s2,vt_##ic##_s2,tmp); \
         QDW_SUB(sum13,yd_s3,yd_s1); QDW_SCAL(tmp,Fdn_d,sum13); \
@@ -599,12 +601,12 @@ void mult_domainwall_5din_eo_5dirdag_dirac_qdw_kernel(
         ADD_DAG_DN(0) ADD_DAG_DN(1) ADD_DAG_DN(2)
 #undef ADD_DAG_DN
 
-        vp[IDX_DWF_QDW(0,0,is,Nst_pad,site)]=vt_0_s0; vp[IDX_DWF_QDW(0,1,is,Nst_pad,site)]=vt_0_s1;
-        vp[IDX_DWF_QDW(0,2,is,Nst_pad,site)]=vt_0_s2; vp[IDX_DWF_QDW(0,3,is,Nst_pad,site)]=vt_0_s3;
-        vp[IDX_DWF_QDW(1,0,is,Nst_pad,site)]=vt_1_s0; vp[IDX_DWF_QDW(1,1,is,Nst_pad,site)]=vt_1_s1;
-        vp[IDX_DWF_QDW(1,2,is,Nst_pad,site)]=vt_1_s2; vp[IDX_DWF_QDW(1,3,is,Nst_pad,site)]=vt_1_s3;
-        vp[IDX_DWF_QDW(2,0,is,Nst_pad,site)]=vt_2_s0; vp[IDX_DWF_QDW(2,1,is,Nst_pad,site)]=vt_2_s1;
-        vp[IDX_DWF_QDW(2,2,is,Nst_pad,site)]=vt_2_s2; vp[IDX_DWF_QDW(2,3,is,Nst_pad,site)]=vt_2_s3;
+        vp[IDX_DWF_QDW(0,0,is,Ns,site)]=vt_0_s0; vp[IDX_DWF_QDW(0,1,is,Ns,site)]=vt_0_s1;
+        vp[IDX_DWF_QDW(0,2,is,Ns,site)]=vt_0_s2; vp[IDX_DWF_QDW(0,3,is,Ns,site)]=vt_0_s3;
+        vp[IDX_DWF_QDW(1,0,is,Ns,site)]=vt_1_s0; vp[IDX_DWF_QDW(1,1,is,Ns,site)]=vt_1_s1;
+        vp[IDX_DWF_QDW(1,2,is,Ns,site)]=vt_1_s2; vp[IDX_DWF_QDW(1,3,is,Ns,site)]=vt_1_s3;
+        vp[IDX_DWF_QDW(2,0,is,Ns,site)]=vt_2_s0; vp[IDX_DWF_QDW(2,1,is,Ns,site)]=vt_2_s1;
+        vp[IDX_DWF_QDW(2,2,is,Ns,site)]=vt_2_s2; vp[IDX_DWF_QDW(2,3,is,Ns,site)]=vt_2_s3;
     }
 }
 
@@ -685,8 +687,8 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
             int isn = ((ix + keo) % Nx) + Nx * iyzt;
             int isg = site + Nst * (ieo + 2*0);
             bc2 = (ix == Nx-1 && keo == 1) ? (double)bc_x : 1.0;
-            DWF_LOAD_PROJ (wp, is, Nst_pad, isn, d0, d3, DWF_PROJ_P)
-            DWF_LOAD_PROJ2(wp, is, Nst_pad, isn, d1, d2, DWF_PROJ_P)
+            DWF_LOAD_PROJ (wp, is, Ns, isn, d0, d3, DWF_PROJ_P)
+            DWF_LOAD_PROJ2(wp, is, Ns, isn, d1, d2, DWF_PROJ_P)
             DWF_GMUL_FWD(u_up, isg)
             DWF_ACCUM_4(v2_c0_s0,v2_c0_s1,v2_c0_s2,v2_c0_s3, wt1_c0,wt2_c0, bc2, DWF_MULT_MI,DWF_MULT_MI)
             DWF_ACCUM_4(v2_c1_s0,v2_c1_s1,v2_c1_s2,v2_c1_s3, wt1_c1,wt2_c1, bc2, DWF_MULT_MI,DWF_MULT_MI)
@@ -699,8 +701,8 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
             int isn = ix2 + Nx * iyzt;
             int isg = isn + Nst * (1-ieo + 2*0);
             bc2 = (ix == 0 && keo == 0) ? (double)bc_x : 1.0;
-            DWF_LOAD_PROJ (wp, is, Nst_pad, isn, d0, d3, DWF_PROJ_M)
-            DWF_LOAD_PROJ2(wp, is, Nst_pad, isn, d1, d2, DWF_PROJ_M)
+            DWF_LOAD_PROJ (wp, is, Ns, isn, d0, d3, DWF_PROJ_M)
+            DWF_LOAD_PROJ2(wp, is, Ns, isn, d1, d2, DWF_PROJ_M)
             DWF_GMUL_BCK(u_dn, isg)
             DWF_ACCUM_4(v2_c0_s0,v2_c0_s1,v2_c0_s2,v2_c0_s3, wt1_c0,wt2_c0, bc2, DWF_MULT_PI,DWF_MULT_PI)
             DWF_ACCUM_4(v2_c1_s0,v2_c1_s1,v2_c1_s2,v2_c1_s3, wt1_c1,wt2_c1, bc2, DWF_MULT_PI,DWF_MULT_PI)
@@ -712,8 +714,8 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
             int isn = ix + Nx * (((iy+1)%Ny) + Ny*izt);
             int isg = site + Nst * (ieo + 2*1);
             bc2 = (iy == Ny-1) ? (double)bc_y : 1.0;
-            DWF_LOAD_PROJ (wp, is, Nst_pad, isn, d0, d3, DWF_PROJ_P)
-            DWF_LOAD_PROJ2(wp, is, Nst_pad, isn, d1, d2, DWF_PROJ_M)
+            DWF_LOAD_PROJ (wp, is, Ns, isn, d0, d3, DWF_PROJ_P)
+            DWF_LOAD_PROJ2(wp, is, Ns, isn, d1, d2, DWF_PROJ_M)
             DWF_GMUL_FWD(u_up, isg)
             DWF_ACCUM_4(v2_c0_s0,v2_c0_s1,v2_c0_s2,v2_c0_s3, wt1_c0,wt2_c0, bc2, DWF_MULT_PI,DWF_MULT_MI)
             DWF_ACCUM_4(v2_c1_s0,v2_c1_s1,v2_c1_s2,v2_c1_s3, wt1_c1,wt2_c1, bc2, DWF_MULT_PI,DWF_MULT_MI)
@@ -725,8 +727,8 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
             int isn = ix + Nx * (((iy-1+Ny)%Ny) + Ny*izt);
             int isg = isn + Nst * (1-ieo + 2*1);
             bc2 = (iy == 0) ? (double)bc_y : 1.0;
-            DWF_LOAD_PROJ (wp, is, Nst_pad, isn, d0, d3, DWF_PROJ_M)
-            DWF_LOAD_PROJ2(wp, is, Nst_pad, isn, d1, d2, DWF_PROJ_P)
+            DWF_LOAD_PROJ (wp, is, Ns, isn, d0, d3, DWF_PROJ_M)
+            DWF_LOAD_PROJ2(wp, is, Ns, isn, d1, d2, DWF_PROJ_P)
             DWF_GMUL_BCK(u_dn, isg)
             DWF_ACCUM_4(v2_c0_s0,v2_c0_s1,v2_c0_s2,v2_c0_s3, wt1_c0,wt2_c0, bc2, DWF_MULT_MI,DWF_MULT_PI)
             DWF_ACCUM_4(v2_c1_s0,v2_c1_s1,v2_c1_s2,v2_c1_s3, wt1_c1,wt2_c1, bc2, DWF_MULT_MI,DWF_MULT_PI)
@@ -738,8 +740,8 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
             int isn = ixy + Nxy * (((iz+1)%Nz) + Nz*it);
             int isg = site + Nst * (ieo + 2*2);
             bc2 = (iz == Nz-1) ? (double)bc_z : 1.0;
-            DWF_LOAD_PROJ (wp, is, Nst_pad, isn, d0, d2, DWF_PROJ_P)
-            DWF_LOAD_PROJ2(wp, is, Nst_pad, isn, d1, d3, DWF_PROJ_M)
+            DWF_LOAD_PROJ (wp, is, Ns, isn, d0, d2, DWF_PROJ_P)
+            DWF_LOAD_PROJ2(wp, is, Ns, isn, d1, d3, DWF_PROJ_M)
             DWF_GMUL_FWD(u_up, isg)
             DWF_ACCUM_4_SW(v2_c0_s0,v2_c0_s1,v2_c0_s2,v2_c0_s3, wt1_c0,wt2_c0, bc2, DWF_MULT_MI,DWF_MULT_PI)
             DWF_ACCUM_4_SW(v2_c1_s0,v2_c1_s1,v2_c1_s2,v2_c1_s3, wt1_c1,wt2_c1, bc2, DWF_MULT_MI,DWF_MULT_PI)
@@ -751,8 +753,8 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
             int isn = ixy + Nxy * (((iz-1+Nz)%Nz) + Nz*it);
             int isg = isn + Nst * (1-ieo + 2*2);
             bc2 = (iz == 0) ? (double)bc_z : 1.0;
-            DWF_LOAD_PROJ (wp, is, Nst_pad, isn, d0, d2, DWF_PROJ_M)
-            DWF_LOAD_PROJ2(wp, is, Nst_pad, isn, d1, d3, DWF_PROJ_P)
+            DWF_LOAD_PROJ (wp, is, Ns, isn, d0, d2, DWF_PROJ_M)
+            DWF_LOAD_PROJ2(wp, is, Ns, isn, d1, d3, DWF_PROJ_P)
             DWF_GMUL_BCK(u_dn, isg)
             DWF_ACCUM_4_SW(v2_c0_s0,v2_c0_s1,v2_c0_s2,v2_c0_s3, wt1_c0,wt2_c0, bc2, DWF_MULT_PI,DWF_MULT_MI)
             DWF_ACCUM_4_SW(v2_c1_s0,v2_c1_s1,v2_c1_s2,v2_c1_s3, wt1_c1,wt2_c1, bc2, DWF_MULT_PI,DWF_MULT_MI)
@@ -764,7 +766,7 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
             int isn = ixyz + Nxyz * ((it+1)%Nt);
             int isg = site + Nst * (ieo + 2*3);
             bc2 = (it == Nt-1) ? (double)bc_t : 1.0;
-            DWF_LOAD_PROJ_T(wp, is, Nst_pad, isn, d2, d3)
+            DWF_LOAD_PROJ_T(wp, is, Ns, isn, d2, d3)
             DWF_GMUL_FWD(u_up, isg)
             DWF_ACCUM_TP(v2_c0_s2,v2_c0_s3, wt1_c0,wt2_c0, bc2)
             DWF_ACCUM_TP(v2_c1_s2,v2_c1_s3, wt1_c1,wt2_c1, bc2)
@@ -776,19 +778,19 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
             int isn = ixyz + Nxyz * ((it-1+Nt)%Nt);
             int isg = isn + Nst * (1-ieo + 2*3);
             bc2 = (it == 0) ? (double)bc_t : 1.0;
-            DWF_LOAD_PROJ_T(wp, is, Nst_pad, isn, d0, d1)
+            DWF_LOAD_PROJ_T(wp, is, Ns, isn, d0, d1)
             DWF_GMUL_BCK(u_dn, isg)
             DWF_ACCUM_TM(v2_c0_s0,v2_c0_s1, wt1_c0,wt2_c0, bc2)
             DWF_ACCUM_TM(v2_c1_s0,v2_c1_s1, wt1_c1,wt2_c1, bc2)
             DWF_ACCUM_TM(v2_c2_s0,v2_c2_s1, wt1_c2,wt2_c2, bc2)
         }
 
-        vp[IDX_DWF_QDW(0,0,is,Nst_pad,site)]=v2_c0_s0; vp[IDX_DWF_QDW(0,1,is,Nst_pad,site)]=v2_c0_s1;
-        vp[IDX_DWF_QDW(0,2,is,Nst_pad,site)]=v2_c0_s2; vp[IDX_DWF_QDW(0,3,is,Nst_pad,site)]=v2_c0_s3;
-        vp[IDX_DWF_QDW(1,0,is,Nst_pad,site)]=v2_c1_s0; vp[IDX_DWF_QDW(1,1,is,Nst_pad,site)]=v2_c1_s1;
-        vp[IDX_DWF_QDW(1,2,is,Nst_pad,site)]=v2_c1_s2; vp[IDX_DWF_QDW(1,3,is,Nst_pad,site)]=v2_c1_s3;
-        vp[IDX_DWF_QDW(2,0,is,Nst_pad,site)]=v2_c2_s0; vp[IDX_DWF_QDW(2,1,is,Nst_pad,site)]=v2_c2_s1;
-        vp[IDX_DWF_QDW(2,2,is,Nst_pad,site)]=v2_c2_s2; vp[IDX_DWF_QDW(2,3,is,Nst_pad,site)]=v2_c2_s3;
+        vp[IDX_DWF_QDW(0,0,is,Ns,site)]=v2_c0_s0; vp[IDX_DWF_QDW(0,1,is,Ns,site)]=v2_c0_s1;
+        vp[IDX_DWF_QDW(0,2,is,Ns,site)]=v2_c0_s2; vp[IDX_DWF_QDW(0,3,is,Ns,site)]=v2_c0_s3;
+        vp[IDX_DWF_QDW(1,0,is,Ns,site)]=v2_c1_s0; vp[IDX_DWF_QDW(1,1,is,Ns,site)]=v2_c1_s1;
+        vp[IDX_DWF_QDW(1,2,is,Ns,site)]=v2_c1_s2; vp[IDX_DWF_QDW(1,3,is,Ns,site)]=v2_c1_s3;
+        vp[IDX_DWF_QDW(2,0,is,Ns,site)]=v2_c2_s0; vp[IDX_DWF_QDW(2,1,is,Ns,site)]=v2_c2_s1;
+        vp[IDX_DWF_QDW(2,2,is,Ns,site)]=v2_c2_s2; vp[IDX_DWF_QDW(2,3,is,Ns,site)]=v2_c2_s3;
     }
 }
 

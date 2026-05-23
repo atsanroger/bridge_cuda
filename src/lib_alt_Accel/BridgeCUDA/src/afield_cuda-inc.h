@@ -378,32 +378,34 @@ __global__ void axpy_kernel_qdw(real_t *v, real_t a, real_t *w, int nin)
   const int site = blockIdx.x * blockDim.x + threadIdx.x;
   double a_d = (double)a;
 
-  for (int in4 = 0; in4 < nin / 4; ++in4)
+  const int nin4 = nin / 4;
+  for (int in4 = 0; in4 < nin4; ++in4)
   {
-    double wh_re = (double)w[IDX2(nin, 4 * in4 + 0, site)];
-    double wh_im = (double)w[IDX2(nin, 4 * in4 + 1, site)];
-    double wl_re = (double)w[IDX2(nin, 4 * in4 + 2, site)];
-    double wl_im = (double)w[IDX2(nin, 4 * in4 + 3, site)];
-    
-    double vh_re = (double)v[IDX2(nin, 4 * in4 + 0, site)];
-    double vh_im = (double)v[IDX2(nin, 4 * in4 + 1, site)];
-    double vl_re = (double)v[IDX2(nin, 4 * in4 + 2, site)];
-    double vl_im = (double)v[IDX2(nin, 4 * in4 + 3, site)];
+    int base = 4 * IDX2(nin4, in4, site);
+    double wh_re = (double)w[base + 0];
+    double wh_im = (double)w[base + 1];
+    double wl_re = (double)w[base + 2];
+    double wl_im = (double)w[base + 3];
+
+    double vh_re = (double)v[base + 0];
+    double vh_im = (double)v[base + 1];
+    double vl_re = (double)v[base + 2];
+    double vl_im = (double)v[base + 3];
 
     double th_re, tl_re;
     dw_scal(a_d, wh_re, wl_re, th_re, tl_re);
     double th_im, tl_im;
     dw_scal(a_d, wh_im, wl_im, th_im, tl_im);
-    
+
     double out_h_re, out_l_re;
     dw_add(vh_re, vl_re, th_re, tl_re, out_h_re, out_l_re);
     double out_h_im, out_l_im;
     dw_add(vh_im, vl_im, th_im, tl_im, out_h_im, out_l_im);
-    
-    v[IDX2(nin, 4 * in4 + 0, site)] = (real_t)out_h_re;
-    v[IDX2(nin, 4 * in4 + 1, site)] = (real_t)out_h_im;
-    v[IDX2(nin, 4 * in4 + 2, site)] = (real_t)out_l_re;
-    v[IDX2(nin, 4 * in4 + 3, site)] = (real_t)out_l_im;
+
+    v[base + 0] = (real_t)out_h_re;
+    v[base + 1] = (real_t)out_h_im;
+    v[base + 2] = (real_t)out_l_re;
+    v[base + 3] = (real_t)out_l_im;
   }
 }
 
@@ -503,32 +505,34 @@ __global__ void aypx_kernel_qdw(real_t a, real_t *v, real_t *w, int nin)
   const int site = blockIdx.x * blockDim.x + threadIdx.x;
   double a_d = (double)a;
 
-  for (int in4 = 0; in4 < nin / 4; ++in4)
+  const int nin4 = nin / 4;
+  for (int in4 = 0; in4 < nin4; ++in4)
   {
-    double vh_re = (double)v[IDX2(nin, 4 * in4 + 0, site)];
-    double vh_im = (double)v[IDX2(nin, 4 * in4 + 1, site)];
-    double vl_re = (double)v[IDX2(nin, 4 * in4 + 2, site)];
-    double vl_im = (double)v[IDX2(nin, 4 * in4 + 3, site)];
-    
-    double wh_re = (double)w[IDX2(nin, 4 * in4 + 0, site)];
-    double wh_im = (double)w[IDX2(nin, 4 * in4 + 1, site)];
-    double wl_re = (double)w[IDX2(nin, 4 * in4 + 2, site)];
-    double wl_im = (double)w[IDX2(nin, 4 * in4 + 3, site)];
+    int base = 4 * IDX2(nin4, in4, site);
+    double vh_re = (double)v[base + 0];
+    double vh_im = (double)v[base + 1];
+    double vl_re = (double)v[base + 2];
+    double vl_im = (double)v[base + 3];
+
+    double wh_re = (double)w[base + 0];
+    double wh_im = (double)w[base + 1];
+    double wl_re = (double)w[base + 2];
+    double wl_im = (double)w[base + 3];
 
     double th_re, tl_re;
     dw_scal(a_d, vh_re, vl_re, th_re, tl_re);
     double th_im, tl_im;
     dw_scal(a_d, vh_im, vl_im, th_im, tl_im);
-    
+
     double out_h_re, out_l_re;
     dw_add(wh_re, wl_re, th_re, tl_re, out_h_re, out_l_re);
     double out_h_im, out_l_im;
     dw_add(wh_im, wl_im, th_im, tl_im, out_h_im, out_l_im);
-    
-    v[IDX2(nin, 4 * in4 + 0, site)] = (real_t)out_h_re;
-    v[IDX2(nin, 4 * in4 + 1, site)] = (real_t)out_h_im;
-    v[IDX2(nin, 4 * in4 + 2, site)] = (real_t)out_l_re;
-    v[IDX2(nin, 4 * in4 + 3, site)] = (real_t)out_l_im;
+
+    v[base + 0] = (real_t)out_h_re;
+    v[base + 1] = (real_t)out_h_im;
+    v[base + 2] = (real_t)out_l_re;
+    v[base + 3] = (real_t)out_l_im;
   }
 }
 
@@ -869,13 +873,14 @@ __global__ void norm2_reduce_fused_kernel_qdw(real_t *red,
     {
       int ist2 = idx + nvol * ex;
       
-      // QDW variables are loaded 4 floats contiguous (1 double4)
-      for (int in4 = 0; in4 < nin / 4; ++in4)
+      const int nin4 = nin / 4;
+      for (int in4 = 0; in4 < nin4; ++in4)
       {
-        double h_re = (double)v1[IDX2(nin, 4 * in4 + 0, ist2)];
-        double h_im = (double)v1[IDX2(nin, 4 * in4 + 1, ist2)];
-        double l_re = (double)v1[IDX2(nin, 4 * in4 + 2, ist2)];
-        double l_im = (double)v1[IDX2(nin, 4 * in4 + 3, ist2)];
+        int base = 4 * IDX2(nin4, in4, ist2);
+        double h_re = (double)v1[base + 0];
+        double h_im = (double)v1[base + 1];
+        double l_re = (double)v1[base + 2];
+        double l_im = (double)v1[base + 3];
         
         // Exact real square
         double p1, e1;
@@ -1216,17 +1221,19 @@ __global__ void dot_reduce_fused_kernel_qdw(real_t *red,
     for (int ex = 0; ex < nex; ++ex)
     {
       int ist2 = idx + nvol * ex;
-      for (int in4 = 0; in4 < nin / 4; ++in4)
+      const int nin4 = nin / 4;
+      for (int in4 = 0; in4 < nin4; ++in4)
       {
-        double v1h_re = (double)v1[IDX2(nin, 4 * in4 + 0, ist2)];
-        double v1h_im = (double)v1[IDX2(nin, 4 * in4 + 1, ist2)];
-        double v1l_re = (double)v1[IDX2(nin, 4 * in4 + 2, ist2)];
-        double v1l_im = (double)v1[IDX2(nin, 4 * in4 + 3, ist2)];
-        
-        double v2h_re = (double)v2[IDX2(nin, 4 * in4 + 0, ist2)];
-        double v2h_im = (double)v2[IDX2(nin, 4 * in4 + 1, ist2)];
-        double v2l_re = (double)v2[IDX2(nin, 4 * in4 + 2, ist2)];
-        double v2l_im = (double)v2[IDX2(nin, 4 * in4 + 3, ist2)];
+        int base = 4 * IDX2(nin4, in4, ist2);
+        double v1h_re = (double)v1[base + 0];
+        double v1h_im = (double)v1[base + 1];
+        double v1l_re = (double)v1[base + 2];
+        double v1l_im = (double)v1[base + 3];
+
+        double v2h_re = (double)v2[base + 0];
+        double v2h_im = (double)v2[base + 1];
+        double v2l_re = (double)v2[base + 2];
+        double v2l_im = (double)v2[base + 3];
 
         // Real dot product part: v1.re * v2.re + v1.im * v2.im
         double p1_r, e1_r, p2_r, e2_r;
@@ -1559,17 +1566,19 @@ __global__ void dotc_reduce_fused_kernel_qdw(real_t *red1, real_t *red2,
     {
       int ist2 = ist + nvol * ex;
 
-      for (int in4 = 0; in4 < nin / 4; ++in4)
+      const int nin4 = nin / 4;
+      for (int in4 = 0; in4 < nin4; ++in4)
       {
-        double v1h_re = (double)v1[IDX2(nin, 4 * in4 + 0, ist2)];
-        double v1h_im = (double)v1[IDX2(nin, 4 * in4 + 1, ist2)];
-        double v1l_re = (double)v1[IDX2(nin, 4 * in4 + 2, ist2)];
-        double v1l_im = (double)v1[IDX2(nin, 4 * in4 + 3, ist2)];
-        
-        double v2h_re = (double)v2[IDX2(nin, 4 * in4 + 0, ist2)];
-        double v2h_im = (double)v2[IDX2(nin, 4 * in4 + 1, ist2)];
-        double v2l_re = (double)v2[IDX2(nin, 4 * in4 + 2, ist2)];
-        double v2l_im = (double)v2[IDX2(nin, 4 * in4 + 3, ist2)];
+        int base = 4 * IDX2(nin4, in4, ist2);
+        double v1h_re = (double)v1[base + 0];
+        double v1h_im = (double)v1[base + 1];
+        double v1l_re = (double)v1[base + 2];
+        double v1l_im = (double)v1[base + 3];
+
+        double v2h_re = (double)v2[base + 0];
+        double v2h_im = (double)v2[base + 1];
+        double v2l_re = (double)v2[base + 2];
+        double v2l_im = (double)v2[base + 3];
 
         // Real part: v1.re * v2.re + v1.im * v2.im
         double p1_r, e1_r, p2_r, e2_r;
@@ -1841,21 +1850,23 @@ __global__ void normalize_kernel_qdw_actual(real_t *spinor, int nin, int nvol)
   const int site = blockIdx.x * blockDim.x + threadIdx.x;
   if (site >= nvol) return;
 
-  for (int in4 = 0; in4 < nin / 4; ++in4)
+  const int nin4 = nin / 4;
+  for (int in4 = 0; in4 < nin4; ++in4)
   {
-    real_t h_re = spinor[IDX2(nin, 4*in4+0, site)];
-    real_t h_im = spinor[IDX2(nin, 4*in4+1, site)];
-    real_t l_re = spinor[IDX2(nin, 4*in4+2, site)];
-    real_t l_im = spinor[IDX2(nin, 4*in4+3, site)];
+    int base = 4 * IDX2(nin4, in4, site);
+    real_t h_re = spinor[base + 0];
+    real_t h_im = spinor[base + 1];
+    real_t l_re = spinor[base + 2];
+    real_t l_im = spinor[base + 3];
 
     real_t nh_re, nl_re, nh_im, nl_im;
     TwoSum_r(h_re, l_re, nh_re, nl_re);
     TwoSum_r(h_im, l_im, nh_im, nl_im);
 
-    spinor[IDX2(nin, 4*in4+0, site)] = nh_re;
-    spinor[IDX2(nin, 4*in4+1, site)] = nh_im;
-    spinor[IDX2(nin, 4*in4+2, site)] = nl_re;
-    spinor[IDX2(nin, 4*in4+3, site)] = nl_im;
+    spinor[base + 0] = nh_re;
+    spinor[base + 1] = nh_im;
+    spinor[base + 2] = nl_re;
+    spinor[base + 3] = nl_im;
   }
 }
 }
