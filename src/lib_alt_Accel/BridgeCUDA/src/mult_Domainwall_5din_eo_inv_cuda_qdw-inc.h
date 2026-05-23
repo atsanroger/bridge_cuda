@@ -10,9 +10,10 @@
 
 #include "../inline/constant_memory_inline.h"
 
-// IDX_DWF_QDW: earlier QDW EO include undefines this macro — redefine here.
-#define IDX_DWF_QDW(ic, id, is5, Nst_pad_, site_) \
-    IDX2_QDW((ic), (id), (is5) * (Nst_pad_) + (site_))
+// IDX_DWF_QDW: BLAS-compatible flat layout — matches 4*IDX2(nin/4, in4, site)+k in BLAS.
+// 4th arg is Ns (not Nst_pad) — same flat ordering as afield_cuda-inc.h QDW kernels.
+#define IDX_DWF_QDW(ic, id, is5, Ns_, site_) \
+    IDX2(NC * ND * (Ns_), (ic) + NC * ((id) + ND * (is5)), (site_))
 
 // ===================================================================
 // LU_inv QDW kernel
@@ -41,14 +42,14 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_qdw_kernel(
     // === Forward sweep: L^{-1} ===
 
     // is = 0
-    vt0 = wp[IDX_DWF_QDW(ic,0,0,Nst_pad,site)];
-    vt1 = wp[IDX_DWF_QDW(ic,1,0,Nst_pad,site)];
-    vt2 = wp[IDX_DWF_QDW(ic,2,0,Nst_pad,site)];
-    vt3 = wp[IDX_DWF_QDW(ic,3,0,Nst_pad,site)];
-    vp[IDX_DWF_QDW(ic,0,0,Nst_pad,site)] = vt0;
-    vp[IDX_DWF_QDW(ic,1,0,Nst_pad,site)] = vt1;
-    vp[IDX_DWF_QDW(ic,2,0,Nst_pad,site)] = vt2;
-    vp[IDX_DWF_QDW(ic,3,0,Nst_pad,site)] = vt3;
+    vt0 = wp[IDX_DWF_QDW(ic,0,0,Ns,site)];
+    vt1 = wp[IDX_DWF_QDW(ic,1,0,Ns,site)];
+    vt2 = wp[IDX_DWF_QDW(ic,2,0,Ns,site)];
+    vt3 = wp[IDX_DWF_QDW(ic,3,0,Ns,site)];
+    vp[IDX_DWF_QDW(ic,0,0,Ns,site)] = vt0;
+    vp[IDX_DWF_QDW(ic,1,0,Ns,site)] = vt1;
+    vp[IDX_DWF_QDW(ic,2,0,Ns,site)] = vt2;
+    vp[IDX_DWF_QDW(ic,3,0,Ns,site)] = vt3;
     QDW_SCAL(yt0, e_con[0], vt0);
     QDW_SCAL(yt1, e_con[0], vt1);
     QDW_SCAL(yt2, e_con[0], vt2);
@@ -59,19 +60,19 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_qdw_kernel(
         const double a   = 0.5 * dm_con[is] * dpinv_con[is-1];
         const double eis = e_con[is];
         xt0 = vt0; xt1 = vt1; xt2 = vt2; xt3 = vt3;
-        vt0 = wp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)];
-        vt1 = wp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)];
-        vt2 = wp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)];
-        vt3 = wp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)];
+        vt0 = wp[IDX_DWF_QDW(ic,0,is,Ns,site)];
+        vt1 = wp[IDX_DWF_QDW(ic,1,is,Ns,site)];
+        vt2 = wp[IDX_DWF_QDW(ic,2,is,Ns,site)];
+        vt3 = wp[IDX_DWF_QDW(ic,3,is,Ns,site)];
         // vt[s0] += a*(xt[s0]+xt[s2]),  vt[s2] += same  (symmetric)
         QDW_ADD(sum, xt0, xt2); QDW_SCAL(tmp, a, sum);
         QDW_ADD(vt0, vt0, tmp); QDW_ADD(vt2, vt2, tmp);
         QDW_ADD(sum, xt1, xt3); QDW_SCAL(tmp, a, sum);
         QDW_ADD(vt1, vt1, tmp); QDW_ADD(vt3, vt3, tmp);
-        vp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)] = vt0;
-        vp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)] = vt1;
-        vp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)] = vt2;
-        vp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)] = vt3;
+        vp[IDX_DWF_QDW(ic,0,is,Ns,site)] = vt0;
+        vp[IDX_DWF_QDW(ic,1,is,Ns,site)] = vt1;
+        vp[IDX_DWF_QDW(ic,2,is,Ns,site)] = vt2;
+        vp[IDX_DWF_QDW(ic,3,is,Ns,site)] = vt3;
         QDW_SCAL(tmp, eis, vt0); QDW_ADD(yt0, yt0, tmp);
         QDW_SCAL(tmp, eis, vt1); QDW_ADD(yt1, yt1, tmp);
         QDW_SCAL(tmp, eis, vt2); QDW_ADD(yt2, yt2, tmp);
@@ -83,10 +84,10 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_qdw_kernel(
         const int is     = Ns-1;
         const double a_l = 0.5 * dm_con[is] * dpinv_con[is-1];
         xt0 = vt0; xt1 = vt1; xt2 = vt2; xt3 = vt3;
-        vt0 = wp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)];
-        vt1 = wp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)];
-        vt2 = wp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)];
-        vt3 = wp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)];
+        vt0 = wp[IDX_DWF_QDW(ic,0,is,Ns,site)];
+        vt1 = wp[IDX_DWF_QDW(ic,1,is,Ns,site)];
+        vt2 = wp[IDX_DWF_QDW(ic,2,is,Ns,site)];
+        vt3 = wp[IDX_DWF_QDW(ic,3,is,Ns,site)];
         // a*(xt[s0]+xt[s2]) symmetric correction
         QDW_ADD(sum, xt0, xt2); QDW_SCAL(tmp, a_l, sum);
         QDW_ADD(vt0, vt0, tmp); QDW_ADD(vt2, vt2, tmp);
@@ -97,10 +98,10 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_qdw_kernel(
         QDW_SUB(vt0, vt0, tmp); QDW_ADD(vt2, vt2, tmp);
         QDW_SUB(diff, yt1, yt3); QDW_SCAL(tmp, 0.5, diff);
         QDW_SUB(vt1, vt1, tmp); QDW_ADD(vt3, vt3, tmp);
-        vp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)] = vt0;
-        vp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)] = vt1;
-        vp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)] = vt2;
-        vp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)] = vt3;
+        vp[IDX_DWF_QDW(ic,0,is,Ns,site)] = vt0;
+        vp[IDX_DWF_QDW(ic,1,is,Ns,site)] = vt1;
+        vp[IDX_DWF_QDW(ic,2,is,Ns,site)] = vt2;
+        vp[IDX_DWF_QDW(ic,3,is,Ns,site)] = vt3;
     }
     // L^{-1} completed
 
@@ -113,19 +114,19 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_qdw_kernel(
         const double f1 = 0.5 * (1.0 + alpha);
         const double f2 = 0.5 * (-1.0 + alpha);
         double4 p0, p1, p2, p3, t;
-        p0 = vp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)];
-        p1 = vp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)];
-        p2 = vp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)];
-        p3 = vp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)];
+        p0 = vp[IDX_DWF_QDW(ic,0,is,Ns,site)];
+        p1 = vp[IDX_DWF_QDW(ic,1,is,Ns,site)];
+        p2 = vp[IDX_DWF_QDW(ic,2,is,Ns,site)];
+        p3 = vp[IDX_DWF_QDW(ic,3,is,Ns,site)];
         // vt[0] = aa*(f1*p0 + f2*p2)
         QDW_SCAL(vt0,f1,p0); QDW_SCAL(t,f2,p2); QDW_ADD(vt0,vt0,t); QDW_SCAL(vt0,aa,vt0);
         QDW_SCAL(vt1,f1,p1); QDW_SCAL(t,f2,p3); QDW_ADD(vt1,vt1,t); QDW_SCAL(vt1,aa,vt1);
         QDW_SCAL(vt2,f1,p2); QDW_SCAL(t,f2,p0); QDW_ADD(vt2,vt2,t); QDW_SCAL(vt2,aa,vt2);
         QDW_SCAL(vt3,f1,p3); QDW_SCAL(t,f2,p1); QDW_ADD(vt3,vt3,t); QDW_SCAL(vt3,aa,vt3);
-        vp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)] = vt0;
-        vp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)] = vt1;
-        vp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)] = vt2;
-        vp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)] = vt3;
+        vp[IDX_DWF_QDW(ic,0,is,Ns,site)] = vt0;
+        vp[IDX_DWF_QDW(ic,1,is,Ns,site)] = vt1;
+        vp[IDX_DWF_QDW(ic,2,is,Ns,site)] = vt2;
+        vp[IDX_DWF_QDW(ic,3,is,Ns,site)] = vt3;
         // yt[id] = 0.5*(vt[id]+vt[id_mirror])  — both mirror values equal
         QDW_ADD(sum, vt0, vt2); QDW_SCAL(yt0, 0.5, sum); yt2 = yt0;
         QDW_ADD(sum, vt1, vt3); QDW_SCAL(yt1, 0.5, sum); yt3 = yt1;
@@ -137,10 +138,10 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_qdw_kernel(
         const double f_is = f_con[is];
         const double aa_is = dpinv_con[is];
         xt0 = vt0; xt1 = vt1; xt2 = vt2; xt3 = vt3;
-        vt0 = vp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)];
-        vt1 = vp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)];
-        vt2 = vp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)];
-        vt3 = vp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)];
+        vt0 = vp[IDX_DWF_QDW(ic,0,is,Ns,site)];
+        vt1 = vp[IDX_DWF_QDW(ic,1,is,Ns,site)];
+        vt2 = vp[IDX_DWF_QDW(ic,2,is,Ns,site)];
+        vt3 = vp[IDX_DWF_QDW(ic,3,is,Ns,site)];
         // vt[0] += a*(xt[0]-xt[2])  (antisymmetric)
         QDW_SUB(diff, xt0, xt2); QDW_SCAL(tmp, a, diff);
         QDW_ADD(vt0, vt0, tmp);  QDW_SUB(vt2, vt2, tmp);
@@ -165,15 +166,15 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_qdw_kernel(
             QDW_SCAL(r1,ff1,vt1); QDW_SCAL(t,ff2,vt3); QDW_ADD(r1,r1,t);
             QDW_SCAL(r2,ff1,vt2); QDW_SCAL(t,ff2,vt0); QDW_ADD(r2,r2,t);
             QDW_SCAL(r3,ff1,vt3); QDW_SCAL(t,ff2,vt1); QDW_ADD(r3,r3,t);
-            vp[IDX_DWF_QDW(ic,0,0,Nst_pad,site)] = r0;
-            vp[IDX_DWF_QDW(ic,1,0,Nst_pad,site)] = r1;
-            vp[IDX_DWF_QDW(ic,2,0,Nst_pad,site)] = r2;
-            vp[IDX_DWF_QDW(ic,3,0,Nst_pad,site)] = r3;
+            vp[IDX_DWF_QDW(ic,0,0,Ns,site)] = r0;
+            vp[IDX_DWF_QDW(ic,1,0,Ns,site)] = r1;
+            vp[IDX_DWF_QDW(ic,2,0,Ns,site)] = r2;
+            vp[IDX_DWF_QDW(ic,3,0,Ns,site)] = r3;
         } else {
-            vp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)] = vt0;
-            vp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)] = vt1;
-            vp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)] = vt2;
-            vp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)] = vt3;
+            vp[IDX_DWF_QDW(ic,0,is,Ns,site)] = vt0;
+            vp[IDX_DWF_QDW(ic,1,is,Ns,site)] = vt1;
+            vp[IDX_DWF_QDW(ic,2,is,Ns,site)] = vt2;
+            vp[IDX_DWF_QDW(ic,3,is,Ns,site)] = vt3;
         }
     }
 }
@@ -209,18 +210,18 @@ __global__ void mult_domainwall_5din_ee_LUdaginv_dirac_qdw_kernel(
         const double f1  = 0.5 * (1.0 + alpha);
         const double f2  = 0.5 * (1.0 - alpha);
         double4 w0, w1, w2, w3, t;
-        w0 = wp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)];
-        w1 = wp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)];
-        w2 = wp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)];
-        w3 = wp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)];
+        w0 = wp[IDX_DWF_QDW(ic,0,is,Ns,site)];
+        w1 = wp[IDX_DWF_QDW(ic,1,is,Ns,site)];
+        w2 = wp[IDX_DWF_QDW(ic,2,is,Ns,site)];
+        w3 = wp[IDX_DWF_QDW(ic,3,is,Ns,site)];
         QDW_SCAL(vt0,f1,w0); QDW_SCAL(t,f2,w2); QDW_ADD(vt0,vt0,t); QDW_SCAL(vt0,a0,vt0);
         QDW_SCAL(vt1,f1,w1); QDW_SCAL(t,f2,w3); QDW_ADD(vt1,vt1,t); QDW_SCAL(vt1,a0,vt1);
         QDW_SCAL(vt2,f1,w2); QDW_SCAL(t,f2,w0); QDW_ADD(vt2,vt2,t); QDW_SCAL(vt2,a0,vt2);
         QDW_SCAL(vt3,f1,w3); QDW_SCAL(t,f2,w1); QDW_ADD(vt3,vt3,t); QDW_SCAL(vt3,a0,vt3);
-        vp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)] = vt0;
-        vp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)] = vt1;
-        vp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)] = vt2;
-        vp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)] = vt3;
+        vp[IDX_DWF_QDW(ic,0,is,Ns,site)] = vt0;
+        vp[IDX_DWF_QDW(ic,1,is,Ns,site)] = vt1;
+        vp[IDX_DWF_QDW(ic,2,is,Ns,site)] = vt2;
+        vp[IDX_DWF_QDW(ic,3,is,Ns,site)] = vt3;
         // yt = f[0] * vt
         QDW_SCAL(yt0, f_con[0], vt0);
         QDW_SCAL(yt1, f_con[0], vt1);
@@ -234,10 +235,10 @@ __global__ void mult_domainwall_5din_ee_LUdaginv_dirac_qdw_kernel(
         const double aa   = dpinv_con[is];
         const double f_is = f_con[is];
         xt0 = vt0; xt1 = vt1; xt2 = vt2; xt3 = vt3;
-        vt0 = wp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)];
-        vt1 = wp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)];
-        vt2 = wp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)];
-        vt3 = wp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)];
+        vt0 = wp[IDX_DWF_QDW(ic,0,is,Ns,site)];
+        vt1 = wp[IDX_DWF_QDW(ic,1,is,Ns,site)];
+        vt2 = wp[IDX_DWF_QDW(ic,2,is,Ns,site)];
+        vt3 = wp[IDX_DWF_QDW(ic,3,is,Ns,site)];
         // vt[0] += a*(xt[0]-xt[2])  (antisymmetric)
         QDW_SUB(diff, xt0, xt2); QDW_SCAL(tmp, a, diff);
         QDW_ADD(vt0, vt0, tmp);  QDW_SUB(vt2, vt2, tmp);
@@ -248,10 +249,10 @@ __global__ void mult_domainwall_5din_ee_LUdaginv_dirac_qdw_kernel(
         QDW_SCAL(vt1, aa, vt1);
         QDW_SCAL(vt2, aa, vt2);
         QDW_SCAL(vt3, aa, vt3);
-        vp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)] = vt0;
-        vp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)] = vt1;
-        vp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)] = vt2;
-        vp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)] = vt3;
+        vp[IDX_DWF_QDW(ic,0,is,Ns,site)] = vt0;
+        vp[IDX_DWF_QDW(ic,1,is,Ns,site)] = vt1;
+        vp[IDX_DWF_QDW(ic,2,is,Ns,site)] = vt2;
+        vp[IDX_DWF_QDW(ic,3,is,Ns,site)] = vt3;
         QDW_SCAL(tmp, f_is, vt0); QDW_ADD(yt0, yt0, tmp);
         QDW_SCAL(tmp, f_is, vt1); QDW_ADD(yt1, yt1, tmp);
         QDW_SCAL(tmp, f_is, vt2); QDW_ADD(yt2, yt2, tmp);
@@ -266,10 +267,10 @@ __global__ void mult_domainwall_5din_ee_LUdaginv_dirac_qdw_kernel(
         const double ff1 = 0.5 * (1.0 + alpha);
         const double ff2 = 0.5 * (-1.0 + alpha);
         xt0 = vt0; xt1 = vt1; xt2 = vt2; xt3 = vt3;
-        vt0 = wp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)];
-        vt1 = wp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)];
-        vt2 = wp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)];
-        vt3 = wp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)];
+        vt0 = wp[IDX_DWF_QDW(ic,0,is,Ns,site)];
+        vt1 = wp[IDX_DWF_QDW(ic,1,is,Ns,site)];
+        vt2 = wp[IDX_DWF_QDW(ic,2,is,Ns,site)];
+        vt3 = wp[IDX_DWF_QDW(ic,3,is,Ns,site)];
         // vt[0] += a*(xt[0]-xt[2])  (antisymmetric)
         QDW_SUB(diff, xt0, xt2); QDW_SCAL(tmp, a_l, diff);
         QDW_ADD(vt0, vt0, tmp);  QDW_SUB(vt2, vt2, tmp);
@@ -292,10 +293,10 @@ __global__ void mult_domainwall_5din_ee_LUdaginv_dirac_qdw_kernel(
         QDW_SCAL(r2,ff1,vt2); QDW_SCAL(t,ff2,vt0); QDW_ADD(r2,r2,t);
         QDW_SCAL(r3,ff1,vt3); QDW_SCAL(t,ff2,vt1); QDW_ADD(r3,r3,t);
         vt0=r0; vt1=r1; vt2=r2; vt3=r3;
-        vp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)] = vt0;
-        vp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)] = vt1;
-        vp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)] = vt2;
-        vp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)] = vt3;
+        vp[IDX_DWF_QDW(ic,0,is,Ns,site)] = vt0;
+        vp[IDX_DWF_QDW(ic,1,is,Ns,site)] = vt1;
+        vp[IDX_DWF_QDW(ic,2,is,Ns,site)] = vt2;
+        vp[IDX_DWF_QDW(ic,3,is,Ns,site)] = vt3;
         // yt[id] = 0.5*(vt[id]-vt[id_mirror])  (antisymmetric)
         QDW_SUB(diff, vt0, vt2); QDW_SCAL(yt0,  0.5, diff);
         QDW_NEG(yt2, yt0);
@@ -309,10 +310,10 @@ __global__ void mult_domainwall_5din_ee_LUdaginv_dirac_qdw_kernel(
         const double a    = 0.5 * dm_con[is+1] * dpinv_con[is];
         const double e_is = e_con[is];
         xt0 = vt0; xt1 = vt1; xt2 = vt2; xt3 = vt3;
-        vt0 = vp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)];
-        vt1 = vp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)];
-        vt2 = vp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)];
-        vt3 = vp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)];
+        vt0 = vp[IDX_DWF_QDW(ic,0,is,Ns,site)];
+        vt1 = vp[IDX_DWF_QDW(ic,1,is,Ns,site)];
+        vt2 = vp[IDX_DWF_QDW(ic,2,is,Ns,site)];
+        vt3 = vp[IDX_DWF_QDW(ic,3,is,Ns,site)];
         // vt[0] += a*(xt[0]+xt[2]) - e_is*yt[0]  (symmetric hopping)
         QDW_ADD(sum, xt0, xt2); QDW_SCAL(tmp, a, sum);
         QDW_ADD(vt0, vt0, tmp); QDW_ADD(vt2, vt2, tmp);
@@ -322,10 +323,10 @@ __global__ void mult_domainwall_5din_ee_LUdaginv_dirac_qdw_kernel(
         QDW_SCAL(tmp, e_is, yt1); QDW_SUB(vt1, vt1, tmp);
         QDW_SCAL(tmp, e_is, yt2); QDW_SUB(vt2, vt2, tmp);
         QDW_SCAL(tmp, e_is, yt3); QDW_SUB(vt3, vt3, tmp);
-        vp[IDX_DWF_QDW(ic,0,is,Nst_pad,site)] = vt0;
-        vp[IDX_DWF_QDW(ic,1,is,Nst_pad,site)] = vt1;
-        vp[IDX_DWF_QDW(ic,2,is,Nst_pad,site)] = vt2;
-        vp[IDX_DWF_QDW(ic,3,is,Nst_pad,site)] = vt3;
+        vp[IDX_DWF_QDW(ic,0,is,Ns,site)] = vt0;
+        vp[IDX_DWF_QDW(ic,1,is,Ns,site)] = vt1;
+        vp[IDX_DWF_QDW(ic,2,is,Ns,site)] = vt2;
+        vp[IDX_DWF_QDW(ic,3,is,Ns,site)] = vt3;
     }
 }
 
