@@ -91,11 +91,11 @@ class AFopr
     return std::string();
   }
 
-  //! sets the QDW flag for high-precision arithmetic.
-  virtual void set_use_QDW(bool flag) {}
+  //! multiword arithmetic mode: FP = standard, DW = double-word, TW = triple-word.
+  enum class MWMode : int { FP = 0, DW = 1, TW = 2 };
 
-  //! gets the QDW flag for high-precision arithmetic.
-  virtual bool get_use_QDW() const { return false; }
+  virtual void set_mw_mode(MWMode mode) {}
+  virtual MWMode get_mw_mode() const { return MWMode::FP; }
 
   //! multiplies fermion operator to a given field.
   virtual void mult(AFIELD&, const AFIELD&)

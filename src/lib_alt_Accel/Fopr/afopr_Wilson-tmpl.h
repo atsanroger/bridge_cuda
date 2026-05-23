@@ -183,8 +183,7 @@ void AFopr_Wilson<AFIELD>::set_parameters(const Parameters& params)
  }
 
   //- fetch optimization flags
-  m_use_QDW = false;
-  m_use_QTW = false;
+  m_mw_mode = MWMode::FP;
 
 
   //- setting gamma matrix representation
@@ -417,7 +416,7 @@ void AFopr_Wilson<AFIELD>::mult_gm5(AFIELD &v, const AFIELD &w)
   real_t* vp = v.ptr(0);
   real_t* wp = const_cast<AFIELD*>(&w)->ptr(0);
 
-  if(m_use_QDW && v.nin() == 4 * CommonParameters::Nc() * CommonParameters::Nd() && w.nin() == 4 * CommonParameters::Nc() * CommonParameters::Nd()){
+  if(m_mw_mode == MWMode::DW && v.nin() == 4 * CommonParameters::Nc() * CommonParameters::Nd() && w.nin() == 4 * CommonParameters::Nc() * CommonParameters::Nd()){
     if(m_repr == DIRAC){
       BridgeACC::mult_wilson_qdw_gm5_dirac(vp, wp, m_Nsize, CommonParameters::Nc());
     }else{
@@ -495,7 +494,7 @@ void AFopr_Wilson<AFIELD>::mult_D(AFIELD &v, const AFIELD &w)
     chset_send.start();
 
     // bulk part
-    if(m_use_QDW && v.nin() == 4 * CommonParameters::Nc() * CommonParameters::Nd() && w.nin() == 4 * CommonParameters::Nc() * CommonParameters::Nd()){
+    if(m_mw_mode == MWMode::DW && v.nin() == 4 * CommonParameters::Nc() * CommonParameters::Nd() && w.nin() == 4 * CommonParameters::Nc() * CommonParameters::Nd()){
       if(m_repr == DIRAC){
         BridgeACC::mult_wilson_qdw_D_dirac(v2, u, v1, m_Nsize, m_bc2, m_CKs);
       }else{

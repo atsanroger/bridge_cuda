@@ -90,15 +90,16 @@ void ASolver_CGNR<AFIELD>::solve(AFIELD& xq, const AFIELD& b,
 
 #pragma omp barrier
 
-  bool use_qdw_flag = m_fopr->get_use_QDW();
-  if (use_qdw_flag) {
-    m_fopr->set_use_QDW(false);
+  using MWMode = typename AFopr<AFIELD>::MWMode;
+  MWMode saved_mode = m_fopr->get_mw_mode();
+  if (saved_mode != MWMode::FP) {
+    m_fopr->set_mw_mode(MWMode::FP);
   }
 
   m_fopr->mult_dag(m_b2, b);
 
-  if (use_qdw_flag) {
-    m_fopr->set_use_QDW(true);
+  if (saved_mode != MWMode::FP) {
+    m_fopr->set_mw_mode(saved_mode);
   }
 
   if (ith == 0) {

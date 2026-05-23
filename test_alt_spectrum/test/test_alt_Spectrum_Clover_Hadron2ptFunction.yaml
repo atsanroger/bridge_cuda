@@ -60,8 +60,7 @@ GaugeFixing:
 Solver:
   ## solver_type = {CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx}
   solver_type                         : BiCGStab_Cmplx
-  use_QDW                             : false
-  use_QTW                             : false
+  multiword_mode                      : FP
 #  solver_type                         : BiCGStab
 #  solver_type                         : CGNR
 #  maximum_number_of_iteration         : 100

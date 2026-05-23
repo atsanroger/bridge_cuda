@@ -1,6 +1,8 @@
 # this is a sample parameter file
 
 Test_Spectrum:
+  ## field_type = {double_eo, float_eo, double, float}
+  field_type               : double_eo
   ## gauge_config_status = {Continue,Cold_start,Hot_start}
   gauge_config_status      : Continue
   ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel}
@@ -102,8 +104,7 @@ GaugeFixing:
 Solver:
   ## solver_type = {CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx}
   solver_type                         : CGNR
-  use_QDW                             : False
-  use_QTW                             : true
+  multiword_mode                      : DW
   maximum_number_of_iteration         : 100
   maximum_number_of_restart           : 40
 #  convergence_criterion_squared       : 1.0e-32

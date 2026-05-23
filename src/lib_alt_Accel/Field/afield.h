@@ -166,10 +166,10 @@ public:
     void copy(const int ex,
               const AField<real_t, ACCEL>& w, const int ex_w);
 
-    void axpy(const real_t, const AField<real_t, ACCEL>&, const int use_qdw = 0);
+    void axpy(const real_t, const AField<real_t, ACCEL>&, const int mode = 0);
 
     void axpy(const int ex, const real_t a, 
-              const AField<real_t, ACCEL>& w, const int ex_w, const int use_qdw = 0);
+              const AField<real_t, ACCEL>& w, const int ex_w, const int mode = 0);
 
     //! complex version of axpy: real and imaginary parts in order.
     void axpy(const real_t a_r, const real_t a_i,
@@ -187,26 +187,26 @@ public:
     void axpy(const complex_t a,
               const AField<real_t, ACCEL>& w);
 
-    void aypx(const real_t, const AField<real_t, ACCEL>&, const int use_qdw = 0);
+    void aypx(const real_t, const AField<real_t, ACCEL>&, const int mode = 0);
 
     void aypx(const int ex, const real_t,
-              const AField<real_t, ACCEL>& w, const int ex_w, const int use_qdw = 0);
+              const AField<real_t, ACCEL>& w, const int ex_w, const int mode = 0);
 
     //! complex version of aypx: real and imaginary parts in order.
     void aypx(const real_t a_r, const real_t a_i,
-              const AField<real_t, ACCEL>&, const int use_qdw = 0);
+              const AField<real_t, ACCEL>&, const int mode = 0);
 
     //! complex version of aypx: real and imaginary parts in order.
     void aypx(const int ex, const real_t a_r, const real_t a_i,
-              const AField<real_t, ACCEL>& w, const int ex_w, const int use_qdw = 0);
+              const AField<real_t, ACCEL>& w, const int ex_w, const int mode = 0);
 
     //! complex version of aypx: complex_t is set by ComplexTraits.
     void aypx(const complex_t a,
-              const AField<real_t, ACCEL>& w, const int use_qdw = 0);
+              const AField<real_t, ACCEL>& w, const int mode = 0);
 
     //! complex version of aypx: complex_t is set by ComplexTraits.
     void aypx(const int ex, const complex_t a,
-              const AField<real_t, ACCEL>& w, const int ex_w, const int use_qdw = 0);
+              const AField<real_t, ACCEL>& w, const int ex_w, const int mode = 0);
 
     void scal(const real_t);
 
@@ -216,19 +216,19 @@ public:
 
     void scal(const complex_t, const int ex);
 
-    real_t dot(const AField<real_t, ACCEL>&, const int use_qdw = 0);
+    real_t dot(const AField<real_t, ACCEL>&, const int mode = 0);
 
     //! complex inner-product: real and imaginary parts in order.
-    void dotc(real_t&, real_t&, const AField<real_t, ACCEL>&, const int use_qdw = 0) const;
+    void dotc(real_t&, real_t&, const AField<real_t, ACCEL>&, const int mode = 0) const;
 
     //! square norm squared (|v|^2).
-    real_t norm2(const int use_qdw = 0) const;
+    real_t norm2(const int mode = 0) const;
 
     //! square norm squared (|v|^2).
     real_t norm2_host(void) const;
 
     //! normalize QDW/QTW drift
-    void normalize(const int use_qdw = 0);
+    void normalize(const int mode = 0);
 
     //! multiplying imaginary unit.
     void xI();

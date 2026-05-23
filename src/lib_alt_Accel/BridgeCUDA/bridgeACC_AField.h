@@ -149,29 +149,29 @@ void copy(double *v, double *w, int nin, int nvol);
 void copy(double *v, int nv1, double *w, int nv2, int nin, int nvol);
 
 void axpy(double* v, int nv1, double a,
-          double* w, int nv2, int nin, int nvol, int use_qdw = 0);
+          double* w, int nv2, int nin, int nvol, int mode = 0);
 void axpy(double* v, int nv1, double ar, double ai,
-          double* w, int nv2, int nin, int nvol, int use_qdw = 0);
+          double* w, int nv2, int nin, int nvol, int mode = 0);
 
 void aypx(double a, double* v, int nv1,
-          double* w, int nv2, int nin, int nvol, int use_qdw = 0);
+          double* w, int nv2, int nin, int nvol, int mode = 0);
 void aypx(double ar, double ai, double* v, int nv1,
-          double* w, int nv2, int nin, int nvol, int use_qdw = 0);
+          double* w, int nv2, int nin, int nvol, int mode = 0);
 
 void scal(double* v, int nv1, double a, int nin, int nvol);
 void scal(double* v, int nv1, double ar, double ai, int nin, int nvol);
 
-double norm2(double* v1, double* red, int nin, int nvol, int nex, int use_qdw = 0);
+double norm2(double* v1, double* red, int nin, int nvol, int nex, int mode = 0);
 
-double dot(double* v1, double* v2, double* red, int nin, int nvol, int nex, int use_qdw = 0);
+double dot(double* v1, double* v2, double* red, int nin, int nvol, int nex, int mode = 0);
 
 void dotc(double* ar, double* ai, double* v1, double* v2,
-          double* red1, double* red2, int nin, int nvol, int nex, int use_qdw = 0);
+          double* red1, double* red2, int nin, int nvol, int nex, int mode = 0);
 
 void xI(double* v1, int nin, int nvol);
 void conjg(double* v1, int nin, int nvol);
 
-void normalize(double* v, int nin, int nvol, int use_qdw = 0);
+void normalize(double* v, int nin, int nvol, int mode = 0);
 
 // real_t = float
 
@@ -195,29 +195,29 @@ void copy(float *v, float *w, int nin, int nvol);
 void copy(float *v, int nv1, float *w, int nv2, int nin, int nvol);
 
 void axpy(float* v, int nv1, float a,
-              float* w, int nv2, int nin, int nvol, int use_qdw = 0);
+              float* w, int nv2, int nin, int nvol, int mode = 0);
 void axpy(float* v, int nv1, float ar, float ai,
-              float* w, int nv2, int nin, int nvol, int use_qdw = 0);
+              float* w, int nv2, int nin, int nvol, int mode = 0);
 
 void aypx(float a, float* v, int nv1,
-          float* w, int nv2, int nin, int nvol, int use_qdw = 0);
+          float* w, int nv2, int nin, int nvol, int mode = 0);
 void aypx(float ar, float ai, float* v, int nv1,
-          float* w, int nv2, int nin, int nvol, int use_qdw = 0);
+          float* w, int nv2, int nin, int nvol, int mode = 0);
 
 void scal(float* v, int nv1, float a, int nin, int nvol);
 void scal(float* v, int nv1, float ar, float ai, int nin, int nvol);
 
-float norm2(float* v1, float* red, int nin, int nvol, int nex, int use_qdw = 0);
+float norm2(float* v1, float* red, int nin, int nvol, int nex, int mode = 0);
 
-float dot(float* v1, float* v2, float* red, int nin, int nvol, int nex, int use_qdw = 0);
+float dot(float* v1, float* v2, float* red, int nin, int nvol, int nex, int mode = 0);
 
 void dotc(float* ar, float* ai, float* v1, float* v2,
-          float* red1, float* red2, int nin, int nvol, int nex, int use_qdw = 0);
+          float* red1, float* red2, int nin, int nvol, int nex, int mode = 0);
 
 void xI(float* v1, int nin, int nvol);
 void conjg(float* v1, int nin, int nvol);
 
-void normalize(float* v, int nin, int nvol, int use_qdw = 0);
+void normalize(float* v, int nin, int nvol, int mode = 0);
 
 // copy with double/float conversion
 

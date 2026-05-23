@@ -177,7 +177,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::init(const Parameters& params)
     vout.general("do_comm[%d] = %d\n", mu, do_comm[mu]);
   }
 
-  m_use_QDW = false;
+  m_mw_mode = MWMode::FP;
 
   m_Ns = 0; // temporary set
   set_parameters(params);
@@ -469,10 +469,10 @@ void AFopr_Domainwall_5din_eo<AFIELD>::set_parameters(
 
 //====================================================================
 template<typename AFIELD>
-void AFopr_Domainwall_5din_eo<AFIELD>::set_use_QDW(bool flag)
+void AFopr_Domainwall_5din_eo<AFIELD>::set_mw_mode(MWMode mode)
 {
-  m_use_QDW = flag;
-  if (flag && m_NinF > 0) {
+  m_mw_mode = mode;
+  if (mode == MWMode::DW && m_NinF > 0) {
     m_w1_qdw.reset(m_NinF * 2, m_Nst2, 1);
   }
 }
@@ -1037,7 +1037,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D_eo(AFIELD& v,
   real_t *up = m_Ueo.ptr(0);
   int jeo    = (m_Ieo_origin + ieo) % 2;
 
-  bool use_qdw_path = (m_use_QDW
+  bool use_qdw_path = (m_mw_mode == MWMode::DW
                        && v.nin() == m_NinF * 2
                        && w.nin() == m_NinF * 2);
   if (use_qdw_path && do_comm_any > 0) {
@@ -1188,7 +1188,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_eo(AFIELD& v,
   real_t *up = m_Ueo.ptr(0);
   int jeo    = (m_Ieo_origin + ieo) % 2;
 
-  bool use_qdw_path = (m_use_QDW
+  bool use_qdw_path = (m_mw_mode == MWMode::DW
                        && v.nin() == m_NinF * 2
                        && w.nin() == m_NinF * 2);
   if (use_qdw_path && do_comm_any > 0) {
@@ -1330,7 +1330,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D_ee(AFIELD& v, const AFIELD& w,
     real_t *vp = v.ptr(0);
     real_t *wp = const_cast<AFIELD *>(&w)->ptr(0);
 
-    if (m_use_QDW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
+    if (m_mw_mode == MWMode::DW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
       BridgeACC::mult_domainwall_5din_ee_5dir_dirac_qdw(
                                    vp, wp, real_t(m_mq), real_t(m_M0), m_Ns,
                                    &m_b[0], &m_c[0], real_t(m_alpha), m_Nsize);
@@ -1358,7 +1358,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_ee(AFIELD& v, const AFIELD& w,
     real_t *vp = v.ptr(0);
     real_t *wp = const_cast<AFIELD *>(&w)->ptr(0);
 
-    if (m_use_QDW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
+    if (m_mw_mode == MWMode::DW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
       BridgeACC::mult_domainwall_5din_ee_5dirdag_dirac_qdw(
                                    vp, wp, real_t(m_mq), real_t(m_M0), m_Ns,
                                    &m_b[0], &m_c[0], real_t(m_alpha), m_Nsize);
@@ -1496,7 +1496,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::LU_inv(AFIELD& v, const AFIELD& w)
     real_t *vp = v.ptr(0);
     real_t *wp = const_cast<AFIELD *>(&w)->ptr(0);
 
-    if (m_use_QDW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
+    if (m_mw_mode == MWMode::DW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
       BridgeACC::mult_domainwall_5din_ee_LUinv_dirac_qdw(
                      vp, wp, m_Ns, m_Nsize, m_alpha);
     } else {
@@ -1530,7 +1530,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::LUdag_inv(AFIELD& v, const AFIELD& w)
     real_t *vp = v.ptr(0);
     real_t *wp = const_cast<AFIELD *>(&w)->ptr(0);
 
-    if (m_use_QDW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
+    if (m_mw_mode == MWMode::DW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
       BridgeACC::mult_domainwall_5din_ee_LUdaginv_dirac_qdw(
                     vp, wp, m_Ns, m_Nsize, m_alpha);
     } else {

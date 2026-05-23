@@ -49,9 +49,8 @@ class ASolver_CG : public ASolver<AFIELD>
   //! working vectors.
   AFIELD m_x, m_r, m_p, m_s;
 
-  bool m_use_QDW;
-  bool m_use_QTW;
-  int m_use_qdw_int;  // 0=standard, 1=QDW, 2=QTW
+  using MWMode = typename AFopr<AFIELD>::MWMode;
+  MWMode m_mw_mode;
 
  public:
   //! constructor.

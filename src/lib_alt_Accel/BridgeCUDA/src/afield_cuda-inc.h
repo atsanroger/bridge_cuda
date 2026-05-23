@@ -409,7 +409,7 @@ __global__ void axpy_kernel_qdw(real_t *v, real_t a, real_t *w, int nin)
 
 //====================================================================
 void axpy(real_t *y, int nv1, real_t a,
-          real_t *x, int nv2, int nin, int nvol, int use_qdw)
+          real_t *x, int nv2, int nin, int nvol, int mode)
 {
   real_t *y_dev = (real_t *)dev_ptr(y);
   real_t *x_dev = (real_t *)dev_ptr(x);
@@ -417,7 +417,7 @@ void axpy(real_t *y, int nv1, real_t a,
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  if (use_qdw == 1) {
+  if (mode == 1) {
     axpy_kernel_qdw<<<nbl, nth>>>(&y_dev[nv1], a, &x_dev[nv2], nin);
   } else {
     size_t sharedMemSize = nth * NWP * sizeof(real_t);
@@ -468,7 +468,7 @@ __global__ void axpy_kernel_qdw(real_t *v, real_t ar, real_t ai,
 
 //====================================================================
 void axpy(real_t *y, int nv1, real_t ar, real_t ai,
-          real_t *x, int nv2, int nin, int nvol, int use_qdw)
+          real_t *x, int nv2, int nin, int nvol, int mode)
 {
   real_t *y_dev = (real_t *)dev_ptr(y);
   real_t *x_dev = (real_t *)dev_ptr(x);
@@ -476,7 +476,7 @@ void axpy(real_t *y, int nv1, real_t ar, real_t ai,
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  if (use_qdw == 1) {
+  if (mode == 1) {
     axpy_kernel_qdw<<<nbl, nth>>>(&y_dev[nv1], ar, ai, &x_dev[nv2], nin);
   } else {
     axpy_kernel<<<nbl, nth>>>(&y_dev[nv1], ar, ai, &x_dev[nv2], nin);
@@ -534,7 +534,7 @@ __global__ void aypx_kernel_qdw(real_t a, real_t *v, real_t *w, int nin)
 
 //====================================================================
 void aypx(real_t a, real_t *y, int nv1,
-          real_t *x, int nv2, int nin, int nvol, int use_qdw)
+          real_t *x, int nv2, int nin, int nvol, int mode)
 {
   real_t *y_dev = (real_t *)dev_ptr(y);
   real_t *x_dev = (real_t *)dev_ptr(x);
@@ -542,7 +542,7 @@ void aypx(real_t a, real_t *y, int nv1,
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  if (use_qdw == 1) {
+  if (mode == 1) {
     aypx_kernel_qdw<<<nbl, nth>>>(a, &y_dev[nv1], &x_dev[nv2], nin);
   } else {
     aypx_kernel<<<nbl, nth>>>(a, &y_dev[nv1], &x_dev[nv2], nin);
@@ -614,7 +614,7 @@ __global__ void aypx_kernel_qdw(real_t ar, real_t ai, real_t *v, real_t *w, int 
 
 //====================================================================
 void aypx(real_t ar, real_t ai, real_t *y, int nv1,
-          real_t *x, int nv2, int nin, int nvol, int use_qdw)
+          real_t *x, int nv2, int nin, int nvol, int mode)
 {
   real_t *y_dev = (real_t *)dev_ptr(y);
   real_t *x_dev = (real_t *)dev_ptr(x);
@@ -622,7 +622,7 @@ void aypx(real_t ar, real_t ai, real_t *y, int nv1,
   int nth = VECTOR_LENGTH;
   int nbl = nvol / nth;
 
-  if (use_qdw == 1) {
+  if (mode == 1) {
     aypx_kernel_qdw<<<nbl, nth>>>(ar, ai, &y_dev[nv1], &x_dev[nv2], nin);
   } else {
     aypx_kernel<<<nbl, nth>>>(ar, ai, &y_dev[nv1], &x_dev[nv2], nin);
@@ -1085,7 +1085,7 @@ __global__ void reduce_kernel_multiblocks_qtw(real_t *red, int n)
 }
 
 //====================================================================
-real_t norm2(real_t *x1, real_t *red1, int nin, int nvol, int nex, int use_qdw)
+real_t norm2(real_t *x1, real_t *red1, int nin, int nvol, int nex, int mode)
 {
   real_t *x1_dev = (real_t *)dev_ptr(x1);
   real_t *red1_dev = (real_t *)dev_ptr(red1);
@@ -1100,10 +1100,10 @@ real_t norm2(real_t *x1, real_t *red1, int nin, int nvol, int nex, int use_qdw)
   int blocksPerGrid = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
   size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
 
-  if (use_qdw == 1) {
+  if (mode == 1) {
     norm2_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
     reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
-  } else if (use_qdw == 2) {
+  } else if (mode == 2) {
     norm2_reduce_fused_kernel_qtw<<<blocksPerGrid, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
     reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
   } else {
@@ -1377,7 +1377,7 @@ __global__ void dot_reduce_fused_kernel_qtw(real_t *red,
 
 //====================================================================
 real_t dot(real_t *x1, real_t *x2, real_t *red1,
-           int nin, int nvol, int nex, int use_qdw)
+           int nin, int nvol, int nex, int mode)
 {
   real_t *x1_dev = (real_t *)dev_ptr(x1);
   real_t *x2_dev = (real_t *)dev_ptr(x2);
@@ -1394,12 +1394,12 @@ real_t dot(real_t *x1, real_t *x2, real_t *red1,
   int blocksPerGrid = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
   size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
 
-  if (use_qdw == 1) {
+  if (mode == 1) {
     dot_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, 2*sharedMemSize>>>(red1_dev,
                                                                                      x1_dev, x2_dev,
                                                                                      nin, nvol, nex);
     reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
-  } else if (use_qdw == 2) {
+  } else if (mode == 2) {
     dot_reduce_fused_kernel_qtw<<<blocksPerGrid, threadsPerBlock, 2*sharedMemSize>>>(red1_dev,
                                                                                      x1_dev, x2_dev,
                                                                                      nin, nvol, nex);
@@ -1787,7 +1787,7 @@ __global__ void dotc_reduce_fused_kernel_qtw(real_t *red1, real_t *red2,
 
 //====================================================================
 void dotc(real_t *ar, real_t *ai, real_t *x1, real_t *x2,
-          real_t *red1, real_t *red2, int nin, int nvol, int nex, int use_qdw)
+          real_t *red1, real_t *red2, int nin, int nvol, int nex, int mode)
 {
   real_t *x1_dev = (real_t *)dev_ptr(x1);
   real_t *x2_dev = (real_t *)dev_ptr(x2);
@@ -1804,12 +1804,12 @@ void dotc(real_t *ar, real_t *ai, real_t *x1, real_t *x2,
   int blocksPerGrid    = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
   size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
 
-  if (use_qdw == 1) {
+  if (mode == 1) {
     dotc_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, 4 * sharedMemSize>>>(red1_dev, red2_dev,
                                                                                         x1_dev, x2_dev, nin, nvol, nex);
     reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
     reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red2_dev, blocksPerGrid);
-  } else if (use_qdw == 2) {
+  } else if (mode == 2) {
     dotc_reduce_fused_kernel_qtw<<<blocksPerGrid, threadsPerBlock, 4 * sharedMemSize>>>(red1_dev, red2_dev,
                                                                                         x1_dev, x2_dev, nin, nvol, nex);
     reduce_kernel_multiblocks_qtw<<<nbl2, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
@@ -1861,9 +1861,9 @@ __global__ void normalize_kernel_qdw_actual(real_t *spinor, int nin, int nvol)
 }
 #endif
 
-void normalize(real_t* v, int nin, int nvol, int use_qdw)
+void normalize(real_t* v, int nin, int nvol, int mode)
 {
-  if (use_qdw != 1) return;
+  if (mode != 1) return;
 #ifdef __CUDACC__
   real_t *v_dev = (real_t *)dev_ptr(v);
   int nth = VECTOR_LENGTH;

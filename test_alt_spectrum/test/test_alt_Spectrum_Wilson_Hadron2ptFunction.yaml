@@ -65,8 +65,7 @@ Solver:
 #  solver_type                         : BiCGStab_Cmplx
 #  solver_type                         : BiCGStab
   solver_type                         : CGNR
-  use_QDW                             : false
-  use_QTW                             : true
+  multiword_mode                      : TW
 #  maximum_number_of_iteration         : 100
   maximum_number_of_iteration         : 10
   maximum_number_of_restart           : 40

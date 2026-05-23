@@ -72,20 +72,20 @@ void ASolver_CG<AFIELD>::set_parameters(const Parameters& params)
   int Niter2 = Niter * Nrestart;
   set_parameters(Niter2, Stop_cond, init_guess_mode);
 
-  m_use_QDW = false;
-  m_use_QTW = false;
-  params.fetch_bool("use_QDW", m_use_QDW);
-  params.fetch_bool("use_QTW", m_use_QTW);
-
-  if (m_use_QDW) {
-    m_use_qdw_int = 1;
-  } else if (m_use_QTW) {
-    m_use_qdw_int = 2;
-  } else {
-    m_use_qdw_int = 0;
+  m_mw_mode = MWMode::FP;
+  std::string mw_mode_str = "FP";
+  params.fetch_string("multiword_mode", mw_mode_str);
+  if (mw_mode_str == "DW") {
+    m_mw_mode = MWMode::DW;
+  } else if (mw_mode_str == "TW") {
+    m_mw_mode = MWMode::TW;
+  } else if (mw_mode_str != "FP") {
+    vout.crucial(m_vl, "Error at %s: unknown multiword_mode '%s' (use FP/DW/TW)\n",
+                 class_name.c_str(), mw_mode_str.c_str());
+    exit(EXIT_FAILURE);
   }
 
-  if (m_use_QDW) {
+  if (m_mw_mode == MWMode::DW) {
     int nin = 2 * m_fopr->field_nin();
     int nvol = m_fopr->field_nvol();
     int nex = m_fopr->field_nex();
@@ -96,7 +96,7 @@ void ASolver_CG<AFIELD>::set_parameters(const Parameters& params)
   }
 
   if (m_fopr) {
-    m_fopr->set_use_QDW(m_use_QDW);
+    m_fopr->set_mw_mode(m_mw_mode);
   }
 }
 
@@ -139,7 +139,7 @@ void ASolver_CG<AFIELD>::solve(AFIELD& xq, const AFIELD& b,
 {
   copy(m_s, b);
 
-  real_t sr    = m_s.norm2(m_use_qdw_int);
+  real_t sr    = m_s.norm2(static_cast<int>(m_mw_mode));
   real_t snorm = 1.0 / sr;
   vout.detailed(m_vl, "  snorm = %22.15e\n", snorm);
 
@@ -209,11 +209,11 @@ void ASolver_CG<AFIELD>::solve_CG_init(real_t& rrp, real_t& rr)
     m_fopr->set_mode("DdagD");
     vout.general(m_vl, "ASolver_CG solve_CG_init: m_x.nin() = %d, m_s.nin() = %d\n", m_x.nin(), m_s.nin());
     m_fopr->mult(m_s, m_x);
-    m_s.normalize(m_use_qdw_int);
-    m_r.axpy(real_t(-1.0), m_s, m_use_qdw_int);
-    m_r.normalize(m_use_qdw_int);
+    m_s.normalize(static_cast<int>(m_mw_mode));
+    m_r.axpy(real_t(-1.0), m_s, static_cast<int>(m_mw_mode));
+    m_r.normalize(static_cast<int>(m_mw_mode));
     copy(m_p, m_r);
-    rr  = m_r.norm2(m_use_qdw_int);
+    rr  = m_r.norm2(static_cast<int>(m_mw_mode));
     rrp = rr;
   } else if (m_initial_mode == InitialGuess::GIVEN) {
     vout.crucial("%s: InitialGuess::GIVEN is not yet ready\n", class_name.c_str());
@@ -226,7 +226,7 @@ void ASolver_CG<AFIELD>::solve_CG_init(real_t& rrp, real_t& rr)
     m_s.set(0.0);
     m_x.set(0.0);
     copy(m_p, m_r);
-    rr  = m_r.norm2(m_use_qdw_int);
+    rr  = m_r.norm2(static_cast<int>(m_mw_mode));
     rrp = rr;
   } else {
     vout.crucial("%s: unkown init guess mode\n", class_name.c_str());
@@ -242,23 +242,23 @@ void ASolver_CG<AFIELD>::solve_CG_step(real_t& rrp, real_t& rr)
   using complex_t = typename AFIELD::complex_t;
 
   m_fopr->mult(m_s, m_p);
-  m_s.normalize(m_use_qdw_int);
+  m_s.normalize(static_cast<int>(m_mw_mode));
 
-  real_t pap = m_s.dot(m_p, m_use_qdw_int);
+  real_t pap = m_s.dot(m_p, static_cast<int>(m_mw_mode));
   //    m_fopr->mult_normA_dev(pap, m_s, m_p);
   real_t cr = rrp / pap;
 
-  m_x.axpy(cr, m_p, m_use_qdw_int);
-  m_x.normalize(m_use_qdw_int);
+  m_x.axpy(cr, m_p, static_cast<int>(m_mw_mode));
+  m_x.normalize(static_cast<int>(m_mw_mode));
 
-  m_r.axpy(-cr, m_s, m_use_qdw_int);
-  m_r.normalize(m_use_qdw_int);
-  rr = m_r.norm2(m_use_qdw_int);
+  m_r.axpy(-cr, m_s, static_cast<int>(m_mw_mode));
+  m_r.normalize(static_cast<int>(m_mw_mode));
+  rr = m_r.norm2(static_cast<int>(m_mw_mode));
 
   real_t bk = rr / rrp;
 
-  aypx(bk, m_p, m_r, m_use_qdw_int);
-  m_p.normalize(m_use_qdw_int);
+  aypx(bk, m_p, m_r, static_cast<int>(m_mw_mode));
+  m_p.normalize(static_cast<int>(m_mw_mode));
 
   rrp = rr;
 }

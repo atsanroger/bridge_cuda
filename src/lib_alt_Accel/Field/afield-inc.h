@@ -78,18 +78,18 @@ void axpy(AField<REALTYPE, ACCEL>& v, const int ex,
 //====================================================================
 template <typename REALTYPE>
 void aypx(const REALTYPE a, AField<REALTYPE, ACCEL>& v,
-          const AField<REALTYPE, ACCEL>& w, const int use_qdw = 0)
+          const AField<REALTYPE, ACCEL>& w, const int mode = 0)
 {
-  v.aypx(a, w, use_qdw);
+  v.aypx(a, w, mode);
 }
 
 //====================================================================
 template <typename REALTYPE>
 void aypx(const typename ComplexTraits<REALTYPE>::complex_t a,
           AField<REALTYPE, ACCEL>& v,
-          const AField<REALTYPE, ACCEL>& w, const int use_qdw = 0)
+          const AField<REALTYPE, ACCEL>& w, const int mode = 0)
 {
-  v.aypx(a, w, use_qdw);
+  v.aypx(a, w, mode);
 }
 
 //====================================================================
