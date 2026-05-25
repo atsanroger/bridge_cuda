@@ -168,71 +168,67 @@ void reverse(double *y, real_t *x, int nin, int nvol, int nvol_pad)
 }
 
 //====================================================================
-__global__ void copy_to_qdw_kernel(double4 *qdw, const real_t *std_v, int nvol)
+// General FP→QDW conversion for fields with nin4 complex components per site.
+// Works for both 4D (nin4=NC*ND=12) and 5D EO (nin4=NC*ND*Ns=96) fields.
+// FP layout:  IDX2(2*nin4, 2*in4+{0,1}, site)  for {re,im}
+// QDW layout: 4*IDX2(nin4, in4, site)+{0,1,2,3} for {hi_re,hi_im,lo_re,lo_im}
+__global__ void copy_to_qdw_kernel(real_t *qdw, const real_t *std_v, int nin4, int nvol)
 {
   const int site = blockIdx.x * blockDim.x + threadIdx.x;
-  if(site >= nvol) return;
+  if (site >= nvol) return;
 
-  for(int id=0; id<ND; ++id) {
-    for(int ic=0; ic<NC; ++ic) {
-       int qdw_idx = IDX2_QDW(ic, id, site);
-       int r_idx = IDX2_SP_R(ic, id, site);
-       int i_idx = IDX2_SP_I(ic, id, site);
-       
-       double4 v;
-       v.x = std_v[r_idx];
-       v.y = std_v[i_idx];
-       v.z = 0.0;
-       v.w = 0.0;
-       qdw[qdw_idx] = v;
-    }
+  for (int in4 = 0; in4 < nin4; ++in4) {
+    int base  = 4 * IDX2(nin4,    in4,     site);
+    int r_idx =     IDX2(2*nin4,  2*in4,   site);
+    int i_idx =     IDX2(2*nin4,  2*in4+1, site);
+    qdw[base + 0] = std_v[r_idx];
+    qdw[base + 1] = std_v[i_idx];
+    qdw[base + 2] = real_t(0);
+    qdw[base + 3] = real_t(0);
   }
 }
 
 //====================================================================
-__global__ void copy_from_qdw_kernel(real_t *std_v, const double4 *qdw, int nvol)
+// General QDW→FP conversion (inverse of copy_to_qdw_kernel).
+__global__ void copy_from_qdw_kernel(real_t *std_v, const real_t *qdw, int nin4, int nvol)
 {
   const int site = blockIdx.x * blockDim.x + threadIdx.x;
-  if(site >= nvol) return;
+  if (site >= nvol) return;
 
-  for(int id=0; id<ND; ++id) {
-    for(int ic=0; ic<NC; ++ic) {
-       int qdw_idx = IDX2_QDW(ic, id, site);
-       int r_idx = IDX2_SP_R(ic, id, site);
-       int i_idx = IDX2_SP_I(ic, id, site);
-       
-       double4 v = qdw[qdw_idx];
-       std_v[r_idx] = v.x + v.z;
-       std_v[i_idx] = v.y + v.w;
-    }
+  for (int in4 = 0; in4 < nin4; ++in4) {
+    int base  = 4 * IDX2(nin4,   in4,     site);
+    int r_idx =     IDX2(2*nin4, 2*in4,   site);
+    int i_idx =     IDX2(2*nin4, 2*in4+1, site);
+    std_v[r_idx] = qdw[base + 0] + qdw[base + 2];  // hi_re + lo_re
+    std_v[i_idx] = qdw[base + 1] + qdw[base + 3];  // hi_im + lo_im
   }
 }
 
 //====================================================================
-void copy_to_qdw(real_t* qdw_v, const real_t* std_v, int nvol)
+void copy_to_qdw(real_t* qdw_v, const real_t* std_v, int nvol, int nin4)
 {
-  double4* qdw_dev = (double4*)dev_ptr(qdw_v);
-  real_t* std_dev  = (real_t*)dev_ptr(const_cast<real_t*>(std_v));
+  real_t* qdw_dev = (real_t*)dev_ptr(qdw_v);
+  real_t* std_dev = (real_t*)dev_ptr(const_cast<real_t*>(std_v));
 
   int nth = VECTOR_LENGTH;
-  int nbl = CEIL_NWP(nvol) / nth; 
+  int nbl = CEIL_NWP(nvol) / nth;
   if (nbl == 0) nbl = 1;
 
-  copy_to_qdw_kernel<<<nbl, nth>>>(qdw_dev, std_dev, nvol);
+  copy_to_qdw_kernel<<<nbl, nth>>>(qdw_dev, std_dev, nin4, nvol);
   cudaDeviceSynchronize();
 }
 
 //====================================================================
-void copy_from_qdw(real_t* std_v, const real_t* qdw_v, int nvol)
+void copy_from_qdw(real_t* std_v, const real_t* qdw_v, int nvol, int nin4)
 {
-  real_t* std_dev  = (real_t*)dev_ptr(std_v);
-  double4* qdw_dev = (double4*)dev_ptr(const_cast<real_t*>(qdw_v));
+  real_t* std_dev = (real_t*)dev_ptr(std_v);
+  real_t* qdw_dev = (real_t*)dev_ptr(const_cast<real_t*>(qdw_v));
 
   int nth = VECTOR_LENGTH;
-  int nbl = CEIL_NWP(nvol) / nth; 
+  int nbl = CEIL_NWP(nvol) / nth;
   if (nbl == 0) nbl = 1;
 
-  copy_from_qdw_kernel<<<nbl, nth>>>(std_dev, qdw_dev, nvol);
+  copy_from_qdw_kernel<<<nbl, nth>>>(std_dev, qdw_dev, nin4, nvol);
   cudaDeviceSynchronize();
 }
 

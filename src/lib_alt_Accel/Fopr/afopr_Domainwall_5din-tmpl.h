@@ -30,8 +30,8 @@ void AFopr_Domainwall_5din<AFIELD>::init(const Parameters& params)
 {
   ThreadManager::assert_single_thread(class_name);
 
-  int req_comm = 1;  // set 1 if communication forced any time
-  //int req_comm = 0;  // set 1 if communication forced any time
+  // int req_comm = 1;  // set 1 if communication forced any time
+  int req_comm = 0;  // set 1 if communication forced any time
 
   std::string vlevel;
   if (!params.fetch_string("verbose_level", vlevel)) {
@@ -41,7 +41,6 @@ void AFopr_Domainwall_5din<AFIELD>::init(const Parameters& params)
   }
 
   vout.general(m_vl, "%s: construction\n", class_name.c_str());
-
 
   m_repr = "Dirac";  // now only the Dirac repr is available.
 

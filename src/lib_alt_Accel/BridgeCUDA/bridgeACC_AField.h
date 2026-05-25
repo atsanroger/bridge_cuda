@@ -139,8 +139,8 @@ void copy_to_device(double *v, int nv1, int nv);
 void copy_from_device(double *v, int nv);
 void copy_from_device(double *v, int nv1, int nv);
 
-void copy_to_qdw(double* qdw_v, const double* std_v, int nvol);
-void copy_from_qdw(double* std_v, const double* qdw_v, int nvol);
+void copy_to_qdw(double* qdw_v, const double* std_v, int nvol, int nin4);
+void copy_from_qdw(double* std_v, const double* qdw_v, int nvol, int nin4);
 
 void convert(double *v, double *w, int nin, int nvol, int nvol_pad);
 void reverse(double *v, double *w, int nin, int nvol, int nvol_pad);
@@ -185,8 +185,8 @@ void copy_to_device(float *v, int nv1, int nv);
 void copy_from_device(float *v, int nv);
 void copy_from_device(float *v, int nv1, int nv);
 
-void copy_to_qdw(float* qdw_v, const float* std_v, int nvol);
-void copy_from_qdw(float* std_v, const float* qdw_v, int nvol);
+void copy_to_qdw(float* qdw_v, const float* std_v, int nvol, int nin4);
+void copy_from_qdw(float* std_v, const float* qdw_v, int nvol, int nin4);
 
 void convert(float *v, double *w, int nin, int nvol, int nvol_pad);
 void reverse(double *v, float *w, int nin, int nvol, int nvol_pad);

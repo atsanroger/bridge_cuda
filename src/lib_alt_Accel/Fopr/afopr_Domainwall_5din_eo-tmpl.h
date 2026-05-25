@@ -474,6 +474,11 @@ void AFopr_Domainwall_5din_eo<AFIELD>::set_mw_mode(MWMode mode)
   m_mw_mode = mode;
   if (mode == MWMode::DW && m_NinF > 0) {
     m_w1_qdw.reset(m_NinF * 2, m_Nst2, 1);
+    m_v1.reset(m_NinF * 2, m_Nst2, 1);
+    m_v2.reset(m_NinF * 2, m_Nst2, 1);
+  } else if (mode == MWMode::FP && m_NinF > 0) {
+    m_v1.reset(m_NinF, m_Nst2, 1);
+    m_v2.reset(m_NinF, m_Nst2, 1);
   }
 }
 
@@ -643,17 +648,38 @@ void AFopr_Domainwall_5din_eo<AFIELD>::convert(AFIELD& v, const Field& w)
   int ith, nth, isite, nsite;
   set_threadtask_afopr(ith, nth, isite, nsite, Nst);
 
-  AIndex_lex<real_t, AFIELD::IMPL> index;
-
-  for (int site = isite; site < nsite; ++site) {
-    for (int is = 0; is < m_Ns; ++is) {
-      for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-         int in_alt = ivcd + NVCD * is;
-         real_t vt = real_t(w.cmp(ivcd, site, is));
-         v.set_host(index.idx(in_alt, m_NinF, site, 0), vt);
+  if (m_mw_mode == MWMode::DW) {
+    // QDW mode: store FP values as the hi part of each double4, with lo = 0.
+    // Layout: double4[IDX2(NC*ND*m_Ns, ic+NC*(id+ND*is5), site)] = {hi_re,hi_im,lo_re,lo_im}
+    for (int site = isite; site < nsite; ++site) {
+      for (int is5 = 0; is5 < m_Ns; ++is5) {
+        for (int id = 0; id < ND; ++id) {
+          for (int ic = 0; ic < NC; ++ic) {
+            int k4    = ic + NC * (id + ND * is5);
+            int idx4  = IDX2(NC * ND * m_Ns, k4, site);
+            int ivcd_re = 2 * ic + NVC * id;
+            real_t vt_re = real_t(w.cmp(ivcd_re,     site, is5));
+            real_t vt_im = real_t(w.cmp(ivcd_re + 1, site, is5));
+            v.set_host(4 * idx4 + 0, vt_re);        // hi_re
+            v.set_host(4 * idx4 + 1, vt_im);        // hi_im
+            v.set_host(4 * idx4 + 2, real_t(0.0));  // lo_re
+            v.set_host(4 * idx4 + 3, real_t(0.0));  // lo_im
+          }
+        }
       }
     }
-  } // site-llop
+  } else {
+    AIndex_lex<real_t, AFIELD::IMPL> index;
+    for (int site = isite; site < nsite; ++site) {
+      for (int is = 0; is < m_Ns; ++is) {
+        for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
+           int in_alt = ivcd + NVCD * is;
+           real_t vt = real_t(w.cmp(ivcd, site, is));
+           v.set_host(index.idx(in_alt, m_NinF, site, 0), vt);
+        }
+      }
+    }
+  }
 
   v.update_device();
 
@@ -677,17 +703,35 @@ void AFopr_Domainwall_5din_eo<AFIELD>::reverse(Field& v, const AFIELD& w)
 
   w.update_host();
 
-  AIndex_lex<real_t, AFIELD::IMPL> index;
-
-  for (int site = isite; site < nsite; ++site) {
-    for (int is = 0; is < m_Ns; ++is) {
-      for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-        int in_alt = ivcd + NVCD * is;
-        double vt = double(w.cmp_host(index.idx(in_alt, m_NinF, site, 0)));
-        v.set(ivcd, site, is, vt);
+  if (m_mw_mode == MWMode::DW) {
+    // QDW mode: extract hi part from double4 layout back to FP Field.
+    for (int site = isite; site < nsite; ++site) {
+      for (int is5 = 0; is5 < m_Ns; ++is5) {
+        for (int id = 0; id < ND; ++id) {
+          for (int ic = 0; ic < NC; ++ic) {
+            int k4   = ic + NC * (id + ND * is5);
+            int idx4 = IDX2(NC * ND * m_Ns, k4, site);
+            int ivcd_re = 2 * ic + NVC * id;
+            double vt_re = double(w.cmp_host(4 * idx4 + 0));  // hi_re
+            double vt_im = double(w.cmp_host(4 * idx4 + 1));  // hi_im
+            v.set(ivcd_re,     site, is5, vt_re);
+            v.set(ivcd_re + 1, site, is5, vt_im);
+          }
+        }
       }
     }
-  } // site-loop
+  } else {
+    AIndex_lex<real_t, AFIELD::IMPL> index;
+    for (int site = isite; site < nsite; ++site) {
+      for (int is = 0; is < m_Ns; ++is) {
+        for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
+          int in_alt = ivcd + NVCD * is;
+          double vt = double(w.cmp_host(index.idx(in_alt, m_NinF, site, 0)));
+          v.set(ivcd, site, is, vt);
+        }
+      }
+    }
+  }
 
 #pragma omp barrier
 }
@@ -959,16 +1003,43 @@ template<typename AFIELD>
 void AFopr_Domainwall_5din_eo<AFIELD>::mult_gm5(AFIELD& v,
                                                 const AFIELD& w)
 {
-  real_t *vp = v.ptr(0);
-  real_t *wp = const_cast<AFIELD *>(&w)->ptr(0);
-
 #pragma omp barrier
 
   int ith = ThreadManager::get_thread_id();
 
-  if (ith == 0)
-    BridgeACC::mult_domainwall_5din_mult_gm5_dirac(
-                                              vp, wp, m_Ns, m_Nsize);
+  if (ith == 0) {
+    if (m_mw_mode == MWMode::DW) {
+      // QDW gamma5 (Dirac basis): swap spinor pairs d=0↔d=2, d=1↔d=3
+      // as complete double4 units {hi_re, hi_im, lo_re, lo_im}.
+      const_cast<AFIELD*>(&w)->update_host();
+      real_t *vp_h = v.ptr(0);
+      real_t *wp_h = const_cast<AFIELD *>(&w)->ptr(0);
+      int Ns  = m_Ns;
+      int Nst = m_Nst2;
+      int nin5_4 = NC * ND * Ns;  // number of double4 per site
+      for (int site = 0; site < Nst; ++site) {
+        for (int is5 = 0; is5 < Ns; ++is5) {
+          for (int ic = 0; ic < NC; ++ic) {
+            int i0 = IDX2(nin5_4, ic + NC * (0 + ND * is5), site);
+            int i1 = IDX2(nin5_4, ic + NC * (1 + ND * is5), site);
+            int i2 = IDX2(nin5_4, ic + NC * (2 + ND * is5), site);
+            int i3 = IDX2(nin5_4, ic + NC * (3 + ND * is5), site);
+            for (int c = 0; c < 4; ++c) {
+              vp_h[4 * i0 + c] = wp_h[4 * i2 + c];
+              vp_h[4 * i1 + c] = wp_h[4 * i3 + c];
+              vp_h[4 * i2 + c] = wp_h[4 * i0 + c];
+              vp_h[4 * i3 + c] = wp_h[4 * i1 + c];
+            }
+          }
+        }
+      }
+      v.update_device();
+    } else {
+      real_t *vp = v.ptr(0);
+      real_t *wp = const_cast<AFIELD *>(&w)->ptr(0);
+      BridgeACC::mult_domainwall_5din_mult_gm5_dirac(vp, wp, m_Ns, m_Nsize);
+    }
+  }
 
 #pragma omp barrier
 }

@@ -28,32 +28,50 @@
 #define DWF_MULT_PI(res, a) \
     (res).x=-(a).y; (res).y= (a).x; (res).z=-(a).w; (res).w= (a).z;
 
+// Y-direction (gamma_2) helpers: combine two complex DD numbers with REAL
+// +/-1, and reconstruct with REAL +/-1 (gamma_2 is real, unlike X/Z which use +/-i).
+#define DWF_PROJ_RP(res, a, b) \
+    dw_add((a).x,(a).z, (b).x, (b).z,(res).x,(res).z); \
+    dw_add((a).y,(a).w, (b).y, (b).w,(res).y,(res).w);
+
+#define DWF_PROJ_RM(res, a, b) \
+    dw_add((a).x,(a).z,-(b).x,-(b).z,(res).x,(res).z); \
+    dw_add((a).y,(a).w,-(b).y,-(b).w,(res).y,(res).w);
+
+#define DWF_MULT_R1(res, a) \
+    (res).x= (a).x; (res).y= (a).y; (res).z= (a).z; (res).w= (a).w;
+
+#define DWF_MULT_RM1(res, a) \
+    (res).x=-(a).x; (res).y=-(a).y; (res).z=-(a).z; (res).w=-(a).w;
+
 #define DWF_PROJ_2(res, a) \
     dw_scal(2.0,(a).x,(a).z,(res).x,(res).z); \
     dw_scal(2.0,(a).y,(a).w,(res).y,(res).w);
 
+// NOTE: gauge is contracted column-major (output[c] = sum_j U(j,c) vt[j]) to
+// match the corelib FP hopb convention (forward link, plain U).
 #define DWF_GMUL_FWD(u_ptr, isg_) \
 { \
     double2 _u; double4 _t; \
     _u.x=(u_ptr)[IDX2_G_R(0,0,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(0,0,(isg_))]; \
     wt1_c0=qdw_mult_uc(_u,vt1_c0); wt2_c0=qdw_mult_uc(_u,vt2_c0); \
-    _u.x=(u_ptr)[IDX2_G_R(0,1,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(0,1,(isg_))]; \
+    _u.x=(u_ptr)[IDX2_G_R(1,0,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(1,0,(isg_))]; \
     _t=qdw_mult_uc(_u,vt1_c1); QDW_ADD(wt1_c0,wt1_c0,_t); \
     _t=qdw_mult_uc(_u,vt2_c1); QDW_ADD(wt2_c0,wt2_c0,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(0,2,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(0,2,(isg_))]; \
+    _u.x=(u_ptr)[IDX2_G_R(2,0,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(2,0,(isg_))]; \
     _t=qdw_mult_uc(_u,vt1_c2); QDW_ADD(wt1_c0,wt1_c0,_t); \
     _t=qdw_mult_uc(_u,vt2_c2); QDW_ADD(wt2_c0,wt2_c0,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(1,0,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(1,0,(isg_))]; \
+    _u.x=(u_ptr)[IDX2_G_R(0,1,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(0,1,(isg_))]; \
     wt1_c1=qdw_mult_uc(_u,vt1_c0); wt2_c1=qdw_mult_uc(_u,vt2_c0); \
     _u.x=(u_ptr)[IDX2_G_R(1,1,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(1,1,(isg_))]; \
     _t=qdw_mult_uc(_u,vt1_c1); QDW_ADD(wt1_c1,wt1_c1,_t); \
     _t=qdw_mult_uc(_u,vt2_c1); QDW_ADD(wt2_c1,wt2_c1,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(1,2,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(1,2,(isg_))]; \
+    _u.x=(u_ptr)[IDX2_G_R(2,1,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(2,1,(isg_))]; \
     _t=qdw_mult_uc(_u,vt1_c2); QDW_ADD(wt1_c1,wt1_c1,_t); \
     _t=qdw_mult_uc(_u,vt2_c2); QDW_ADD(wt2_c1,wt2_c1,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(2,0,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(2,0,(isg_))]; \
+    _u.x=(u_ptr)[IDX2_G_R(0,2,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(0,2,(isg_))]; \
     wt1_c2=qdw_mult_uc(_u,vt1_c0); wt2_c2=qdw_mult_uc(_u,vt2_c0); \
-    _u.x=(u_ptr)[IDX2_G_R(2,1,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(2,1,(isg_))]; \
+    _u.x=(u_ptr)[IDX2_G_R(1,2,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(1,2,(isg_))]; \
     _t=qdw_mult_uc(_u,vt1_c1); QDW_ADD(wt1_c2,wt1_c2,_t); \
     _t=qdw_mult_uc(_u,vt2_c1); QDW_ADD(wt2_c2,wt2_c2,_t); \
     _u.x=(u_ptr)[IDX2_G_R(2,2,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(2,2,(isg_))]; \
@@ -61,28 +79,30 @@
     _t=qdw_mult_uc(_u,vt2_c2); QDW_ADD(wt2_c2,wt2_c2,_t); \
 }
 
+// NOTE: gauge contracted row-major + conjugate (output[c] = sum_j conj(U(c,j)) vt[j])
+// to match the corelib FP hopb convention (backward link, U^dagger).
 #define DWF_GMUL_BCK(u_ptr, isg_) \
 { \
     double2 _u; double4 _t; \
     _u.x=(u_ptr)[IDX2_G_R(0,0,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(0,0,(isg_))]; \
     wt1_c0=qdw_mult_uc(_u,vt1_c0); wt2_c0=qdw_mult_uc(_u,vt2_c0); \
-    _u.x=(u_ptr)[IDX2_G_R(1,0,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(1,0,(isg_))]; \
+    _u.x=(u_ptr)[IDX2_G_R(0,1,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(0,1,(isg_))]; \
     _t=qdw_mult_uc(_u,vt1_c1); QDW_ADD(wt1_c0,wt1_c0,_t); \
     _t=qdw_mult_uc(_u,vt2_c1); QDW_ADD(wt2_c0,wt2_c0,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(2,0,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(2,0,(isg_))]; \
+    _u.x=(u_ptr)[IDX2_G_R(0,2,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(0,2,(isg_))]; \
     _t=qdw_mult_uc(_u,vt1_c2); QDW_ADD(wt1_c0,wt1_c0,_t); \
     _t=qdw_mult_uc(_u,vt2_c2); QDW_ADD(wt2_c0,wt2_c0,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(0,1,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(0,1,(isg_))]; \
+    _u.x=(u_ptr)[IDX2_G_R(1,0,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(1,0,(isg_))]; \
     wt1_c1=qdw_mult_uc(_u,vt1_c0); wt2_c1=qdw_mult_uc(_u,vt2_c0); \
     _u.x=(u_ptr)[IDX2_G_R(1,1,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(1,1,(isg_))]; \
     _t=qdw_mult_uc(_u,vt1_c1); QDW_ADD(wt1_c1,wt1_c1,_t); \
     _t=qdw_mult_uc(_u,vt2_c1); QDW_ADD(wt2_c1,wt2_c1,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(2,1,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(2,1,(isg_))]; \
+    _u.x=(u_ptr)[IDX2_G_R(1,2,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(1,2,(isg_))]; \
     _t=qdw_mult_uc(_u,vt1_c2); QDW_ADD(wt1_c1,wt1_c1,_t); \
     _t=qdw_mult_uc(_u,vt2_c2); QDW_ADD(wt2_c1,wt2_c1,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(0,2,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(0,2,(isg_))]; \
+    _u.x=(u_ptr)[IDX2_G_R(2,0,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(2,0,(isg_))]; \
     wt1_c2=qdw_mult_uc(_u,vt1_c0); wt2_c2=qdw_mult_uc(_u,vt2_c0); \
-    _u.x=(u_ptr)[IDX2_G_R(1,2,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(1,2,(isg_))]; \
+    _u.x=(u_ptr)[IDX2_G_R(2,1,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(2,1,(isg_))]; \
     _t=qdw_mult_uc(_u,vt1_c1); QDW_ADD(wt1_c2,wt1_c2,_t); \
     _t=qdw_mult_uc(_u,vt2_c1); QDW_ADD(wt2_c2,wt2_c2,_t); \
     _u.x=(u_ptr)[IDX2_G_R(2,2,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(2,2,(isg_))]; \
@@ -714,12 +734,12 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
             int isn = ix + Nx * (((iy+1)%Ny) + Ny*izt);
             int isg = site + Nst * (ieo + 2*1);
             bc2 = (iy == Ny-1) ? (double)bc_y : 1.0;
-            DWF_LOAD_PROJ (wp, is, Ns, isn, d0, d3, DWF_PROJ_P)
-            DWF_LOAD_PROJ2(wp, is, Ns, isn, d1, d2, DWF_PROJ_M)
+            DWF_LOAD_PROJ (wp, is, Ns, isn, d0, d3, DWF_PROJ_RP)
+            DWF_LOAD_PROJ2(wp, is, Ns, isn, d1, d2, DWF_PROJ_RM)
             DWF_GMUL_FWD(u_up, isg)
-            DWF_ACCUM_4(v2_c0_s0,v2_c0_s1,v2_c0_s2,v2_c0_s3, wt1_c0,wt2_c0, bc2, DWF_MULT_PI,DWF_MULT_MI)
-            DWF_ACCUM_4(v2_c1_s0,v2_c1_s1,v2_c1_s2,v2_c1_s3, wt1_c1,wt2_c1, bc2, DWF_MULT_PI,DWF_MULT_MI)
-            DWF_ACCUM_4(v2_c2_s0,v2_c2_s1,v2_c2_s2,v2_c2_s3, wt1_c2,wt2_c2, bc2, DWF_MULT_PI,DWF_MULT_MI)
+            DWF_ACCUM_4(v2_c0_s0,v2_c0_s1,v2_c0_s2,v2_c0_s3, wt1_c0,wt2_c0, bc2, DWF_MULT_RM1,DWF_MULT_R1)
+            DWF_ACCUM_4(v2_c1_s0,v2_c1_s1,v2_c1_s2,v2_c1_s3, wt1_c1,wt2_c1, bc2, DWF_MULT_RM1,DWF_MULT_R1)
+            DWF_ACCUM_4(v2_c2_s0,v2_c2_s1,v2_c2_s2,v2_c2_s3, wt1_c2,wt2_c2, bc2, DWF_MULT_RM1,DWF_MULT_R1)
         }
 
         // Y-
@@ -727,12 +747,12 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
             int isn = ix + Nx * (((iy-1+Ny)%Ny) + Ny*izt);
             int isg = isn + Nst * (1-ieo + 2*1);
             bc2 = (iy == 0) ? (double)bc_y : 1.0;
-            DWF_LOAD_PROJ (wp, is, Ns, isn, d0, d3, DWF_PROJ_M)
-            DWF_LOAD_PROJ2(wp, is, Ns, isn, d1, d2, DWF_PROJ_P)
+            DWF_LOAD_PROJ (wp, is, Ns, isn, d0, d3, DWF_PROJ_RM)
+            DWF_LOAD_PROJ2(wp, is, Ns, isn, d1, d2, DWF_PROJ_RP)
             DWF_GMUL_BCK(u_dn, isg)
-            DWF_ACCUM_4(v2_c0_s0,v2_c0_s1,v2_c0_s2,v2_c0_s3, wt1_c0,wt2_c0, bc2, DWF_MULT_MI,DWF_MULT_PI)
-            DWF_ACCUM_4(v2_c1_s0,v2_c1_s1,v2_c1_s2,v2_c1_s3, wt1_c1,wt2_c1, bc2, DWF_MULT_MI,DWF_MULT_PI)
-            DWF_ACCUM_4(v2_c2_s0,v2_c2_s1,v2_c2_s2,v2_c2_s3, wt1_c2,wt2_c2, bc2, DWF_MULT_MI,DWF_MULT_PI)
+            DWF_ACCUM_4(v2_c0_s0,v2_c0_s1,v2_c0_s2,v2_c0_s3, wt1_c0,wt2_c0, bc2, DWF_MULT_R1,DWF_MULT_RM1)
+            DWF_ACCUM_4(v2_c1_s0,v2_c1_s1,v2_c1_s2,v2_c1_s3, wt1_c1,wt2_c1, bc2, DWF_MULT_R1,DWF_MULT_RM1)
+            DWF_ACCUM_4(v2_c2_s0,v2_c2_s1,v2_c2_s2,v2_c2_s3, wt1_c2,wt2_c2, bc2, DWF_MULT_R1,DWF_MULT_RM1)
         }
 
         // Z+

@@ -228,6 +228,8 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_D(Field& xq, const Field& b,
   AIndex_lex<real_t, AFIELD::IMPL> index_alt;
   AIndex_eo<real_t, AFIELD::IMPL>  index_eo;
 
+  bool is_qdw = (m_fopr->get_mw_mode() == AFopr<AFIELD>::MWMode::DW);
+
 #pragma omp parallel
   {
     if (m_fopr->needs_convert()) {
@@ -238,7 +240,7 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_D(Field& xq, const Field& b,
       convert(index_alt, abq, b);
     }
 #pragma omp barrier
-    index_eo.split(be, bo, abq);
+    index_eo.split(be, bo, abq, is_qdw);
   }
 
   invert_De(xe, xo, be, bo, nconv, diff);
@@ -247,7 +249,7 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_D(Field& xq, const Field& b,
 
 #pragma omp parallel
   {
-    index_eo.merge(axq, xe, xo);
+    index_eo.merge(axq, xe, xo, is_qdw);
 #pragma omp barrier
 
     if (m_fopr->needs_convert()) {
@@ -291,6 +293,8 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_DdagD(Field& xq, const Field& b,
   AIndex_lex<real_t, AFIELD::IMPL> index_alt;
   AIndex_eo<real_t, AFIELD::IMPL>  index_eo;
 
+  bool is_qdw = (m_fopr->get_mw_mode() == AFopr<AFIELD>::MWMode::DW);
+
 #pragma omp parallel
   {
     if (m_fopr->needs_convert()) {
@@ -302,7 +306,7 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_DdagD(Field& xq, const Field& b,
     }
 #pragma omp barrier
 
-    index_eo.split(be, bo, abq);
+    index_eo.split(be, bo, abq, is_qdw);
 #pragma omp barrier
 
     m_fopr->mult_gm5(y1, be);
@@ -329,7 +333,7 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_DdagD(Field& xq, const Field& b,
 
 #pragma omp parallel
   {
-    index_eo.merge(axq, xe, xo);
+    index_eo.merge(axq, xe, xo, is_qdw);
 #pragma omp barrier
 
     if (m_fopr->needs_convert()) {
@@ -367,16 +371,18 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_D(AFIELD& xq, const AFIELD& b,
 
   AIndex_eo<real_t, AFIELD::IMPL> index_eo;
 
+  bool is_qdw = (m_fopr->get_mw_mode() == AFopr<AFIELD>::MWMode::DW);
+
 #pragma omp parallel
   {
-    index_eo.split(be, bo, b);
+    index_eo.split(be, bo, b, is_qdw);
   }
 
   invert_De(xe, xo, be, bo, nconv, diff);
 
 #pragma omp parallel
   {
-    index_eo.merge(xq, xe, xo);
+    index_eo.merge(xq, xe, xo, is_qdw);
   }
 
   m_timer.stop();
@@ -458,9 +464,11 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_DdagD(AFIELD& xq, const AFIELD& b,
 
   AIndex_eo<real_t, AFIELD::IMPL> index_eo;
 
+  bool is_qdw = (m_fopr->get_mw_mode() == AFopr<AFIELD>::MWMode::DW);
+
 #pragma omp parallel
   {
-    index_eo.split(be, bo, b);
+    index_eo.split(be, bo, b, is_qdw);
 #pragma omp barrier
 
     m_fopr->mult_gm5(y1, be);
@@ -487,7 +495,7 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_DdagD(AFIELD& xq, const AFIELD& b,
 
 #pragma omp parallel
   {
-    index_eo.merge(xq, xe, xo);
+    index_eo.merge(xq, xe, xo, is_qdw);
   }
 
   m_timer.stop();

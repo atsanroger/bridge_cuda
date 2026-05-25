@@ -159,13 +159,13 @@ class AIndex_eo<REALTYPE, VECTOR>{
   { return m_ieo_origin; }
 
   template <typename AFIELD>
-  void split(AFIELD& v_e, AFIELD& v_o, const AFIELD& v);
+  void split(AFIELD& v_e, AFIELD& v_o, const AFIELD& v, bool qdw = false);
 
   template <typename AFIELD>
   void split_gauge(AFIELD& ueo, const AFIELD& ulex);
 
   template <typename AFIELD>
-  void merge(AFIELD& v, const AFIELD& v_e, const AFIELD& v_o);
+  void merge(AFIELD& v, const AFIELD& v_e, const AFIELD& v_o, bool qdw = false);
 
 };
 

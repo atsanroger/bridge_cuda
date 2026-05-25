@@ -193,7 +193,7 @@ class AFopr_Domainwall_5din_eo : public AFopr<AFIELD>
   void LU_inv(AFIELD&, const AFIELD&);
   void LUdag_inv(AFIELD&, const AFIELD&);
 
-  int field_nin() { return m_NinF; }
+  int field_nin() { return (m_mw_mode == MWMode::DW) ? m_NinF * 2 : m_NinF; }
   int field_nvol() { return m_Nst2; }
   int field_nex() { return 1; }
 

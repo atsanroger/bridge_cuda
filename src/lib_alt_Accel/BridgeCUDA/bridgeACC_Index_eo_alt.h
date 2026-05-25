@@ -30,6 +30,26 @@ void merge(float* v,
            float* we, float* wo, int ieo_origin,
            int nin, int* Nsize, int nvol2_pad, int nvol_pad);
 
+// QDW-aware split/merge: the QDW field is double4-contiguous
+// (4*IDX2(nin/4, c, site)+k), NOT the real NWP-strided IDX2(nin,...) layout.
+// real_t = double
+void split_qdw(double* ve, double* vo,
+               double* w, int ieo_origin,
+               int nin, int* Nsize, int nvol2_pad, int nvol_pad);
+
+void merge_qdw(double* v,
+               double* we, double* wo, int ieo_origin,
+               int nin, int* Nsize, int nvol2_pad, int nvol_pad);
+
+// real_t = float
+void split_qdw(float* ve, float* vo,
+               float* w, int ieo_origin,
+               int nin, int* Nsize, int nvol2_pad, int nvol_pad);
+
+void merge_qdw(float* v,
+               float* we, float* wo, int ieo_origin,
+               int nin, int* Nsize, int nvol2_pad, int nvol_pad);
+
 }
 
 //============================================================END=====

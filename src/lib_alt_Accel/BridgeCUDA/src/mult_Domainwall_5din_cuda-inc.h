@@ -24,7 +24,11 @@ void mult_domainwall_5din_5dir_dirac_kernel(
   const real_t *b_con = const_b;
   const real_t *c_con = const_c;
 
-  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize){
+  // Each thread handles one full site (all NVCD*Ns components are processed
+  // in the inner loops below), so the grid-stride range is the site count.
+  // Note: idx is used directly as the site index in IDX2, hence the bound is
+  // Nst_pad, not Nst_pad*NVC (the latter would index NVC-fold out of bounds).
+  for (int idx = ist; idx < Nst_pad; idx += GridSize){
 
       for (int is = 0; is < Ns; ++is){
 

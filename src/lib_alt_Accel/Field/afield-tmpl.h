@@ -291,9 +291,9 @@ void AField<REALTYPE,ACCEL>::copy(const AField<REALTYPE,ACCEL>& w)
       int nvex = m_nsize_pad/m_nin;
       BridgeACC::copy(m_field, w.m_field, m_nin, nvex);
     } else if (m_nin == 2 * w.nin()) {
-      BridgeACC::copy_to_qdw(m_field, w.m_field, m_nvol_pad);
+      BridgeACC::copy_to_qdw(m_field, w.m_field, m_nvol_pad, m_nin / 4);
     } else if (m_nin * 2 == w.nin()) {
-      BridgeACC::copy_from_qdw(m_field, w.m_field, m_nvol_pad);
+      BridgeACC::copy_from_qdw(m_field, w.m_field, m_nvol_pad, w.m_nin / 4);
     } else {
       assert(false);
     }

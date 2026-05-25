@@ -85,6 +85,22 @@ void ASolver_CG<AFIELD>::set_parameters(const Parameters& params)
     exit(EXIT_FAILURE);
   }
 
+  // Multiword is only implemented by even-odd fopr. Fopr that do not override
+  // set_mw_mode (e.g. lexical Domainwall_5din) keep the base no-op and keep
+  // reporting FP; driving them with enlarged QDW solver fields produces
+  // illegal device access (CUDA 700). Probe support and fall back to FP.
+  if (m_mw_mode != MWMode::FP && m_fopr) {
+    m_fopr->set_mw_mode(m_mw_mode);
+    const bool supported = (m_fopr->get_mw_mode() == m_mw_mode);
+    m_fopr->set_mw_mode(MWMode::FP);  // restore so field_nin() reports FP size
+    if (!supported) {
+      vout.general(m_vl, "%s: fopr does not support multiword_mode=%s; "
+                   "falling back to FP.\n", class_name.c_str(),
+                   mw_mode_str.c_str());
+      m_mw_mode = MWMode::FP;
+    }
+  }
+
   if (m_mw_mode == MWMode::DW) {
     int nin = 2 * m_fopr->field_nin();
     int nvol = m_fopr->field_nvol();
