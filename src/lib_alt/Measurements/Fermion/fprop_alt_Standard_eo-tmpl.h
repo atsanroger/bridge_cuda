@@ -273,9 +273,25 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_D(Field& xq, const Field& b,
     AFIELD Mxe(nin, nvol2, nex), Mxo(nin, nvol2, nex), tt(nin, nvol2, nex);
     AFIELD re(nin, nvol2, nex),  ro(nin, nvol2, nex);
     AFIELD dxe(nin, nvol2, nex), dxo(nin, nvol2, nex);
+
+    // Source norm, to test the relative residual. Once the base solve is at its
+    // floor, r = b - Mx is pure underflow noise (~1e-37); refining it makes the
+    // inner CG normalize by 1/||r|| on denormals -> NaN. Stop when ||r||^2/||b||^2
+    // drops below this (i.e. nothing left to correct). When kappa is large (small
+    // quark mass) the residual stays well above this and refinement proceeds.
+    const real_t rr_rel_floor = real_t(1.0e-22);
+    real_t bnorm = 0;
+#pragma omp parallel
+    {
+      real_t bn = be0.norm2(mw_mode) + bo.norm2(mw_mode);
+#pragma omp master
+      bnorm = bn;
+    }
+
     for (int ir = 0; ir < n_full; ++ir) {
       int    nc_r = 0;
       double df_r = 0.0;
+      real_t rnorm = 0;
 #pragma omp parallel
       {
         m_fopr->mult(Mxe, xe, "Dee");
@@ -292,6 +308,17 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_D(Field& xq, const Field& b,
 #pragma omp barrier
         re.copy(be0); re.axpy(real_t(-1.0), Mxe, mw_mode);   // re = be - (Mx)_e
         ro.copy(bo);  ro.axpy(real_t(-1.0), Mxo, mw_mode);   // ro = bo - (Mx)_o
+#pragma omp barrier
+        real_t rn = re.norm2(mw_mode) + ro.norm2(mw_mode);
+#pragma omp master
+        rnorm = rn;
+      }
+      if (rnorm < rr_rel_floor * bnorm) {
+#pragma omp master
+        vout.general(m_vl, "  full-refine: ||r||^2/||b||^2=%.3e below floor, "
+                     "solve already converged; stopping.\n",
+                     double(bnorm > 0 ? rnorm / bnorm : 0.0));
+        break;
       }
       invert_De(dxe, dxo, re, ro, nc_r, df_r);  // M dx = r
 #pragma omp parallel
