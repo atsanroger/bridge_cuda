@@ -284,9 +284,63 @@ __device__ __forceinline__ void qtw_gmult_bck_3x3(
     }
 }
 
+// Runtime-toggled via the YAML `su3_reconstruction` flag (-> kernel template arg
+// RECON, so when OFF this code is dead-stripped and the fast path is unchanged).
+// Measured on RTX 3080 it REGRESSED the TW solve ~17% (64.3 -> 75.5 s): the hopping
+// kernel is register/occupancy-limited, not purely bandwidth-limited, so trading
+// 33% gauge-read BW for +18 registers and ~24 tw_mul/link lost more occupancy than
+// it saved. Useful on a more bandwidth-bound GPU; exposed as a runtime option.
+// SU(3) 3rd-column reconstruction in triple-word: skip reading column 2 of each
+// link from DRAM (the last 6 of 18 reals/link, ~33% of gauge read BW) and rebuild
+// it on-chip from columns 0,1 via U(:,2) = conj(U(:,0) x U(:,1)). Matches the FP
+// EXT_IMG_R/I convention: U(i,2) = conj(U(p,0)U(q,1) - U(q,0)U(p,1)), p=(i+1)%3,
+// q=(i+2)%3. Arithmetic is hidden under the memory-bound hopping.
+template<typename T>
+__device__ __forceinline__ void qtw_recon_col2_tw(
+    const T* __restrict__ uh, const T* __restrict__ um, const T* __restrict__ ul,
+    int isg,
+    T c2r_h[3], T c2r_m[3], T c2r_l[3], T c2i_h[3], T c2i_m[3], T c2i_l[3])
+{
+    for (int i = 0; i < 3; ++i) {
+        const int p = (i + 1) % 3;
+        const int q = (i + 2) % 3;
+        // v1=U(p,0) v2=U(q,0) w1=U(p,1) w2=U(q,1)  (columns 0,1 only)
+        T v1r_H=uh[IDX2_G_R(p,0,isg)],v1r_M=um[IDX2_G_R(p,0,isg)],v1r_L=ul[IDX2_G_R(p,0,isg)];
+        T v1i_H=uh[IDX2_G_I(p,0,isg)],v1i_M=um[IDX2_G_I(p,0,isg)],v1i_L=ul[IDX2_G_I(p,0,isg)];
+        T v2r_H=uh[IDX2_G_R(q,0,isg)],v2r_M=um[IDX2_G_R(q,0,isg)],v2r_L=ul[IDX2_G_R(q,0,isg)];
+        T v2i_H=uh[IDX2_G_I(q,0,isg)],v2i_M=um[IDX2_G_I(q,0,isg)],v2i_L=ul[IDX2_G_I(q,0,isg)];
+        T w1r_H=uh[IDX2_G_R(p,1,isg)],w1r_M=um[IDX2_G_R(p,1,isg)],w1r_L=ul[IDX2_G_R(p,1,isg)];
+        T w1i_H=uh[IDX2_G_I(p,1,isg)],w1i_M=um[IDX2_G_I(p,1,isg)],w1i_L=ul[IDX2_G_I(p,1,isg)];
+        T w2r_H=uh[IDX2_G_R(q,1,isg)],w2r_M=um[IDX2_G_R(q,1,isg)],w2r_L=ul[IDX2_G_R(q,1,isg)];
+        T w2i_H=uh[IDX2_G_I(q,1,isg)],w2i_M=um[IDX2_G_I(q,1,isg)],w2i_L=ul[IDX2_G_I(q,1,isg)];
+        // p1 = v1*w2 , p2 = v2*w1 ; diff = p1 - p2 ; U(i,2) = conj(diff)
+        T p1r_h,p1r_m,p1r_l,p1i_h,p1i_m,p1i_l, p2r_h,p2r_m,p2r_l,p2i_h,p2i_m,p2i_l;
+        T t_h,t_m,t_l,u_h,u_m,u_l;
+        // p1 = v1*w2
+        tw_mul(v1r_H,v1r_M,v1r_L, w2r_H,w2r_M,w2r_L, t_h,t_m,t_l);
+        tw_mul(v1i_H,v1i_M,v1i_L, w2i_H,w2i_M,w2i_L, u_h,u_m,u_l);
+        tw_add(t_h,t_m,t_l, -u_h,-u_m,-u_l, p1r_h,p1r_m,p1r_l);            // Re
+        tw_mul(v1r_H,v1r_M,v1r_L, w2i_H,w2i_M,w2i_L, t_h,t_m,t_l);
+        tw_mul(v1i_H,v1i_M,v1i_L, w2r_H,w2r_M,w2r_L, u_h,u_m,u_l);
+        tw_add(t_h,t_m,t_l, u_h,u_m,u_l, p1i_h,p1i_m,p1i_l);              // Im
+        // p2 = v2*w1
+        tw_mul(v2r_H,v2r_M,v2r_L, w1r_H,w1r_M,w1r_L, t_h,t_m,t_l);
+        tw_mul(v2i_H,v2i_M,v2i_L, w1i_H,w1i_M,w1i_L, u_h,u_m,u_l);
+        tw_add(t_h,t_m,t_l, -u_h,-u_m,-u_l, p2r_h,p2r_m,p2r_l);
+        tw_mul(v2r_H,v2r_M,v2r_L, w1i_H,w1i_M,w1i_L, t_h,t_m,t_l);
+        tw_mul(v2i_H,v2i_M,v2i_L, w1r_H,w1r_M,w1r_L, u_h,u_m,u_l);
+        tw_add(t_h,t_m,t_l, u_h,u_m,u_l, p2i_h,p2i_m,p2i_l);
+        // diff = p1 - p2 ; conj -> imag negated
+        tw_add(p1r_h,p1r_m,p1r_l, -p2r_h,-p2r_m,-p2r_l, c2r_h[i],c2r_m[i],c2r_l[i]);
+        T di_h,di_m,di_l;
+        tw_add(p1i_h,p1i_m,p1i_l, -p2i_h,-p2i_m,-p2i_l, di_h,di_m,di_l);
+        c2i_h[i] = -di_h; c2i_m[i] = -di_m; c2i_l[i] = -di_l;            // conjugate
+    }
+}
+
 // Same but with full TW gauge link (h, m, l) loaded from u_h / u_m / u_l arrays.
 // Used when extended_precision pushes 3-word gauge links into separate arrays.
-template<typename T>
+template<bool RECON, typename T>
 __device__ __forceinline__ void qtw_gmult_fwd_3x3_tw(
     const T* __restrict__ uh, const T* __restrict__ um, const T* __restrict__ ul,
     int isg,
@@ -294,16 +348,27 @@ __device__ __forceinline__ void qtw_gmult_fwd_3x3_tw(
     const T in_rl[3], const T in_il[3],
     T out_rh[3], T out_ih[3], T out_rm[3], T out_im[3], T out_rl[3], T out_il[3])
 {
+    T c2r_h[3], c2r_m[3], c2r_l[3], c2i_h[3], c2i_m[3], c2i_l[3];
+    if (RECON) {
+        qtw_recon_col2_tw(uh, um, ul, isg, c2r_h, c2r_m, c2r_l, c2i_h, c2i_m, c2i_l);
+    }
     for (int c = 0; c < NC; ++c) {
         T ar_h = 0, ar_m = 0, ar_l = 0;
         T ai_h = 0, ai_m = 0, ai_l = 0;
         for (int j = 0; j < NC; ++j) {
-            T ur_h = uh[IDX2_G_R(j, c, isg)];
-            T ur_m = um[IDX2_G_R(j, c, isg)];
-            T ur_l = ul[IDX2_G_R(j, c, isg)];
-            T ui_h = uh[IDX2_G_I(j, c, isg)];
-            T ui_m = um[IDX2_G_I(j, c, isg)];
-            T ui_l = ul[IDX2_G_I(j, c, isg)];
+            T ur_h, ur_m, ur_l, ui_h, ui_m, ui_l;
+            if (RECON && c == 2) {  // column 2: use reconstructed (not read from DRAM)
+                ur_h = c2r_h[j]; ur_m = c2r_m[j]; ur_l = c2r_l[j];
+                ui_h = c2i_h[j]; ui_m = c2i_m[j]; ui_l = c2i_l[j];
+            } else
+            {
+                ur_h = uh[IDX2_G_R(j, c, isg)];
+                ur_m = um[IDX2_G_R(j, c, isg)];
+                ur_l = ul[IDX2_G_R(j, c, isg)];
+                ui_h = uh[IDX2_G_I(j, c, isg)];
+                ui_m = um[IDX2_G_I(j, c, isg)];
+                ui_l = ul[IDX2_G_I(j, c, isg)];
+            }
             T tr_h, tr_m, tr_l, ti_h, ti_m, ti_l, nh, nm, nl;
             tw_mul_sloppy(ur_h, ur_m, ur_l, in_rh[j], in_rm[j], in_rl[j], tr_h, tr_m, tr_l);
             tw_mul_sloppy(ui_h, ui_m, ui_l, in_ih[j], in_im[j], in_il[j], ti_h, ti_m, ti_l);
@@ -323,7 +388,7 @@ __device__ __forceinline__ void qtw_gmult_fwd_3x3_tw(
     }
 }
 
-template<typename T>
+template<bool RECON, typename T>
 __device__ __forceinline__ void qtw_gmult_bck_3x3_tw(
     const T* __restrict__ uh, const T* __restrict__ um, const T* __restrict__ ul,
     int isg,
@@ -331,16 +396,27 @@ __device__ __forceinline__ void qtw_gmult_bck_3x3_tw(
     const T in_rl[3], const T in_il[3],
     T out_rh[3], T out_ih[3], T out_rm[3], T out_im[3], T out_rl[3], T out_il[3])
 {
+    T c2r_h[3], c2r_m[3], c2r_l[3], c2i_h[3], c2i_m[3], c2i_l[3];
+    if (RECON) {
+        qtw_recon_col2_tw(uh, um, ul, isg, c2r_h, c2r_m, c2r_l, c2i_h, c2i_m, c2i_l);
+    }
     for (int c = 0; c < NC; ++c) {
         T ar_h = 0, ar_m = 0, ar_l = 0;
         T ai_h = 0, ai_m = 0, ai_l = 0;
         for (int j = 0; j < NC; ++j) {
-            T ur_h =  uh[IDX2_G_R(c, j, isg)];
-            T ur_m =  um[IDX2_G_R(c, j, isg)];
-            T ur_l =  ul[IDX2_G_R(c, j, isg)];
-            T ui_h = -uh[IDX2_G_I(c, j, isg)];
-            T ui_m = -um[IDX2_G_I(c, j, isg)];
-            T ui_l = -ul[IDX2_G_I(c, j, isg)];
+            T ur_h, ur_m, ur_l, ui_h, ui_m, ui_l;
+            if (RECON && j == 2) {  // column 2 = reconstructed; conj negates imag
+                ur_h =  c2r_h[c]; ur_m =  c2r_m[c]; ur_l =  c2r_l[c];
+                ui_h = -c2i_h[c]; ui_m = -c2i_m[c]; ui_l = -c2i_l[c];
+            } else
+            {
+                ur_h =  uh[IDX2_G_R(c, j, isg)];
+                ur_m =  um[IDX2_G_R(c, j, isg)];
+                ur_l =  ul[IDX2_G_R(c, j, isg)];
+                ui_h = -uh[IDX2_G_I(c, j, isg)];
+                ui_m = -um[IDX2_G_I(c, j, isg)];
+                ui_l = -ul[IDX2_G_I(c, j, isg)];
+            }
             T tr_h, tr_m, tr_l, ti_h, ti_m, ti_l, nh, nm, nl;
             tw_mul_sloppy(ur_h, ur_m, ur_l, in_rh[j], in_rm[j], in_rl[j], tr_h, tr_m, tr_l);
             tw_mul_sloppy(ui_h, ui_m, ui_l, in_ih[j], in_im[j], in_il[j], ti_h, ti_m, ti_l);
@@ -969,11 +1045,14 @@ void mult_domainwall_5din_eo_5dirdag_dirac_qtw(
 // Reuses QDW gauge-stencil structure; vector ops use TW arithmetic, gauge
 // link can be plain T (up_mid==nullptr) or full TW (up_mid != nullptr).
 //====================================================================
-__global__
 // NOTE: do NOT add __launch_bounds__ to cap registers here. Measured: forcing
 // 168->128 regs (25%->33% occupancy) made DdagD SLOWER (7.46->8.23 ms). This
 // kernel is ILP/arithmetic-bound, not occupancy-bound; the extra registers buy
 // instruction-level parallelism that hides the TW dependency chains.
+// RECON (template) = SU(3) 3rd-column reconstruction (YAML su3_reconstruction);
+// when false the recon code is dead-stripped so the fast path is unchanged.
+template<bool RECON>
+__global__
 void mult_domainwall_5din_eo_hopb_qtw_dirac_5d_kernel(
     real_t * __restrict__ vp, real_t * __restrict__ up,
     real_t * __restrict__ up_mid, real_t * __restrict__ up_lo,
@@ -1107,8 +1186,8 @@ void mult_domainwall_5din_eo_hopb_qtw_dirac_5d_kernel(
         real_t _in_il[3] = { VTPRE##_c0_il, VTPRE##_c1_il, VTPRE##_c2_il }; \
         real_t _o_rh[3], _o_ih[3], _o_rm[3], _o_im[3], _o_rl[3], _o_il[3]; \
         if (use_tw_link) { \
-            if (is_fwd) qtw_gmult_fwd_3x3_tw(up, up_mid, up_lo, (isg_), _in_rh,_in_ih,_in_rm,_in_im,_in_rl,_in_il, _o_rh,_o_ih,_o_rm,_o_im,_o_rl,_o_il); \
-            else        qtw_gmult_bck_3x3_tw(up, up_mid, up_lo, (isg_), _in_rh,_in_ih,_in_rm,_in_im,_in_rl,_in_il, _o_rh,_o_ih,_o_rm,_o_im,_o_rl,_o_il); \
+            if (is_fwd) qtw_gmult_fwd_3x3_tw<RECON>(up, up_mid, up_lo, (isg_), _in_rh,_in_ih,_in_rm,_in_im,_in_rl,_in_il, _o_rh,_o_ih,_o_rm,_o_im,_o_rl,_o_il); \
+            else        qtw_gmult_bck_3x3_tw<RECON>(up, up_mid, up_lo, (isg_), _in_rh,_in_ih,_in_rm,_in_im,_in_rl,_in_il, _o_rh,_o_ih,_o_rm,_o_im,_o_rl,_o_il); \
         } else { \
             if (is_fwd) qtw_gmult_fwd_3x3(up, (isg_), _in_rh,_in_ih,_in_rm,_in_im,_in_rl,_in_il, _o_rh,_o_ih,_o_rm,_o_im,_o_rl,_o_il); \
             else        qtw_gmult_bck_3x3(up, (isg_), _in_rh,_in_ih,_in_rm,_in_im,_in_rl,_in_il, _o_rh,_o_ih,_o_rm,_o_im,_o_rl,_o_il); \
@@ -1286,9 +1365,10 @@ void mult_domainwall_5din_eo_hopb_qtw_dirac_5d_kernel(
 }
 
 // up_mid/up_lo: when non-null, gauge link is full TW; when null, FP gauge link.
+// recon: SU(3) 3rd-column reconstruction (YAML su3_reconstruction).
 void mult_domainwall_5din_eo_hopb_qtw_dirac_5d(
     real_t *vp, real_t *up, real_t *up_mid, real_t *up_lo, real_t *wp, int Ns, int *bc,
-    int *Nsize, int *do_comm, int ieo, int jeo, int jgm5)
+    int *Nsize, int *do_comm, int ieo, int jeo, int jgm5, bool recon)
 {
     int Nx=Nsize[0], Ny=Nsize[1], Nz=Nsize[2], Nt=Nsize[3];
     int Nst     = Nx*Ny*Nz*Nt;
@@ -1304,13 +1384,23 @@ void mult_domainwall_5din_eo_hopb_qtw_dirac_5d(
     // 5D-parallel: one thread per 5D site (Nst_pad*Ns), grid-stride inside.
     int gridSize  = (Nst_pad * Ns + blockSize - 1) / blockSize;
     QTW_PROF_BEGIN();
-    mult_domainwall_5din_eo_hopb_qtw_dirac_5d_kernel<<<gridSize, blockSize>>>(
+    if (recon) {
+      mult_domainwall_5din_eo_hopb_qtw_dirac_5d_kernel<true><<<gridSize, blockSize>>>(
         vp_dev, up_dev, up_mid_dev, up_lo_dev, wp_dev, Ns,
         bc[0], bc[1], bc[2], bc[3],
         Nx, Ny, Nz, Nt,
         ieo, jeo,
         do_comm[0], do_comm[1], do_comm[2], do_comm[3],
         Nst, Nst_pad, jgm5);
+    } else {
+      mult_domainwall_5din_eo_hopb_qtw_dirac_5d_kernel<false><<<gridSize, blockSize>>>(
+        vp_dev, up_dev, up_mid_dev, up_lo_dev, wp_dev, Ns,
+        bc[0], bc[1], bc[2], bc[3],
+        Nx, Ny, Nz, Nt,
+        ieo, jeo,
+        do_comm[0], do_comm[1], do_comm[2], do_comm[3],
+        Nst, Nst_pad, jgm5);
+    }
     QTW_PROF_END("hopb_qtw_gauge");
 
     CHECK(cudaDeviceSynchronize());

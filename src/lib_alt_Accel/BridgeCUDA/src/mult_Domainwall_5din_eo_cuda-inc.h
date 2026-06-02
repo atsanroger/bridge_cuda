@@ -1005,8 +1005,8 @@ void mult_domainwall_5din_eo_hopb_dirac_5D_kernel(
 }
 
 void mult_domainwall_5din_eo_hopb_dirac_5d(
-    real_t *vp, real_t *up, real_t *wp, int Ns, int *bc, 
-    int *Nsize, int *do_comm, int ieo, int jeo, int jgm5)
+    real_t *vp, real_t *up, real_t *wp, int Ns, int *bc,
+    int *Nsize, int *do_comm, int ieo, int jeo, int jgm5, bool recon)
 {
   int Nx = Nsize[0];
   int Ny = Nsize[1];
@@ -1028,8 +1028,9 @@ void mult_domainwall_5din_eo_hopb_dirac_5d(
   int do_comm_z = do_comm[2];
   int do_comm_t = do_comm[3];
 
-#ifdef USE_5D_HOPB_V2
-  if (Ns % NS_PER_BLOCK == 0 && (Nst_pad % NWP == 0)) {
+  // su3_reconstruction (YAML) -> v2 kernel: caches 12 gauge reals in shared memory
+  // and rebuilds column 2 (SU3_3RD_ROW_RECONST). recon=false uses v1 (full link).
+  if (recon && Ns % NS_PER_BLOCK == 0 && (Nst_pad % NWP == 0)) {
     dim3 block(NWP, NS_PER_BLOCK);
     dim3 grid (Nst_pad / NWP, Ns / NS_PER_BLOCK);
     mult_domainwall_5din_eo_hopb_dirac_5D_v2_kernel<<<grid, block>>>(
@@ -1042,8 +1043,6 @@ void mult_domainwall_5din_eo_hopb_dirac_5d(
     cudaDeviceSynchronize();
     return;
   }
-  // fallthrough: v2 requirements not met
-#endif
 
   int blockSize = VECTOR_LENGTH;
   int gridSize  = (Nst_pad * Ns + blockSize - 1) / blockSize;

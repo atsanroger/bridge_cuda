@@ -99,9 +99,9 @@ void mult_domainwall_5din_eo_hopb_dirac_4d(
     int jgm5);
 
 void mult_domainwall_5din_eo_hopb_dirac_5d(
-    double *vp, double *up, double *wp, int Ns, int *bc, 
+    double *vp, double *up, double *wp, int Ns, int *bc,
     int *Nsize, int *do_comm, int ieo, int jeo,
-    int jgm5);
+    int jgm5, bool recon);
 
 void mult_domainwall_5din_eo_hop1_dirac(
         double * buf1_xp, double * buf1_xm,
@@ -305,7 +305,7 @@ void mult_domainwall_5din_eo_5dirdag_dirac_qdw(
 void mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
         double *vp, double *up, double *up_lo, double *wp,
         int Ns, int *bc, int *Nsize, int *do_comm,
-        int ieo, int jeo, int jgm5);
+        int ieo, int jeo, int jgm5, bool recon);
 
 // QDW EO Domain Wall kernels — float overloads (vector is float-float;
 // scalar args stay double so extended_precision can promote coefficients).
@@ -324,7 +324,7 @@ void mult_domainwall_5din_eo_5dirdag_dirac_qdw(
 void mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
         float *vp, float *up, float *up_lo, float *wp,
         int Ns, int *bc, int *Nsize, int *do_comm,
-        int ieo, int jeo, int jgm5);
+        int ieo, int jeo, int jgm5, bool recon);
 
 // QDW LU inverse (alpha promotable to double via extended_precision)
 void mult_domainwall_5din_ee_LUinv_dirac_qdw(
@@ -355,7 +355,7 @@ void mult_domainwall_5din_eo_5dirdag_dirac_qtw(
 void mult_domainwall_5din_eo_hopb_qtw_dirac_5d(
         double *vp, double *up, double *up_mid, double *up_lo, double *wp,
         int Ns, int *bc, int *Nsize, int *do_comm,
-        int ieo, int jeo, int jgm5);
+        int ieo, int jeo, int jgm5, bool recon);
 void mult_domainwall_5din_ee_LUinv_dirac_qtw(
         double *vp, double *wp, int Ns, int *Nsize, double alpha, bool ext);
 void mult_domainwall_5din_ee_LUdaginv_dirac_qtw(
@@ -376,7 +376,7 @@ void mult_domainwall_5din_eo_5dirdag_dirac_qtw(
 void mult_domainwall_5din_eo_hopb_qtw_dirac_5d(
         float *vp, float *up, float *up_mid, float *up_lo, float *wp,
         int Ns, int *bc, int *Nsize, int *do_comm,
-        int ieo, int jeo, int jgm5);
+        int ieo, int jeo, int jgm5, bool recon);
 void mult_domainwall_5din_ee_LUinv_dirac_qtw(
         float *vp, float *wp, int Ns, int *Nsize, double alpha, bool ext);
 void mult_domainwall_5din_ee_LUdaginv_dirac_qtw(
@@ -472,9 +472,9 @@ void mult_domainwall_5din_eo_hopb_dirac_4d(
     int jgm5);
 
 void mult_domainwall_5din_eo_hopb_dirac_5d(
-    float *vp, float *up, float *wp, int Ns, int *bc, 
+    float *vp, float *up, float *wp, int Ns, int *bc,
     int *Nsize, int *do_comm, int ieo, int jeo,
-    int jgm5);
+    int jgm5, bool recon);
 
 void mult_domainwall_5din_eo_hop1_dirac(
         float * buf1_xp, float * buf1_xm,

@@ -115,9 +115,36 @@
 
 // Float-float (extended-precision) gauge variants: link = {hi from u_ptr,
 // lo from ul_ptr}, multiplied into the DD vector via qdw_mult_cc.
+//
+// SU(3) 3rd-column reconstruction (RECON template arg, YAML su3_reconstruction):
+// skip reading column 2 of each link from DRAM; rebuild U(:,2)=conj(U(:,0)xU(:,1))
+// in dual-word. RECON is the kernel template param (constant-folded), so when off
+// these branches dead-strip and the fast path is byte-identical.
+#define DWF_LOAD_FF(_u, u_ptr, ul_ptr, a, b, isg_) \
+    (_u).x=(u_ptr)[IDX2_G_R(a,b,(isg_))]; (_u).y=(u_ptr)[IDX2_G_I(a,b,(isg_))]; \
+    (_u).z=(ul_ptr)[IDX2_G_R(a,b,(isg_))]; (_u).w=(ul_ptr)[IDX2_G_I(a,b,(isg_))];
+// U(i,2)=conj(U(p,0)U(q,1)-U(q,0)U(p,1)), p=(i+1)%3, q=(i+2)%3. conj -> negate y,w.
+#define DWF_RECON_COL2_FF(u_ptr, ul_ptr, isg_, rc0, rc1, rc2) \
+{ \
+    real4 _ra,_rb,_rc,_rd,_p1,_p2,_df; \
+    DWF_LOAD_FF(_ra,u_ptr,ul_ptr,1,0,isg_) DWF_LOAD_FF(_rb,u_ptr,ul_ptr,2,1,isg_) \
+    DWF_LOAD_FF(_rc,u_ptr,ul_ptr,2,0,isg_) DWF_LOAD_FF(_rd,u_ptr,ul_ptr,1,1,isg_) \
+    _p1=qdw_mult_cc(_ra,_rb); _p2=qdw_mult_cc(_rc,_rd); QDW_SUB(_df,_p1,_p2); \
+    (rc0).x=_df.x; (rc0).y=-_df.y; (rc0).z=_df.z; (rc0).w=-_df.w; \
+    DWF_LOAD_FF(_ra,u_ptr,ul_ptr,2,0,isg_) DWF_LOAD_FF(_rb,u_ptr,ul_ptr,0,1,isg_) \
+    DWF_LOAD_FF(_rc,u_ptr,ul_ptr,0,0,isg_) DWF_LOAD_FF(_rd,u_ptr,ul_ptr,2,1,isg_) \
+    _p1=qdw_mult_cc(_ra,_rb); _p2=qdw_mult_cc(_rc,_rd); QDW_SUB(_df,_p1,_p2); \
+    (rc1).x=_df.x; (rc1).y=-_df.y; (rc1).z=_df.z; (rc1).w=-_df.w; \
+    DWF_LOAD_FF(_ra,u_ptr,ul_ptr,0,0,isg_) DWF_LOAD_FF(_rb,u_ptr,ul_ptr,1,1,isg_) \
+    DWF_LOAD_FF(_rc,u_ptr,ul_ptr,1,0,isg_) DWF_LOAD_FF(_rd,u_ptr,ul_ptr,0,1,isg_) \
+    _p1=qdw_mult_cc(_ra,_rb); _p2=qdw_mult_cc(_rc,_rd); QDW_SUB(_df,_p1,_p2); \
+    (rc2).x=_df.x; (rc2).y=-_df.y; (rc2).z=_df.z; (rc2).w=-_df.w; \
+}
 #define DWF_GMUL_FWD_FF(u_ptr, ul_ptr, isg_) \
 { \
     real4 _u; real4 _t; \
+    real4 _rc0,_rc1,_rc2; \
+    if (RECON) { DWF_RECON_COL2_FF(u_ptr, ul_ptr, isg_, _rc0, _rc1, _rc2) } \
     _u.x=(u_ptr)[IDX2_G_R(0,0,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(0,0,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(0,0,(isg_))]; _u.w=(ul_ptr)[IDX2_G_I(0,0,(isg_))]; \
     wt1_c0=qdw_mult_cc(_u,vt1_c0); wt2_c0=qdw_mult_cc(_u,vt2_c0); \
     _u.x=(u_ptr)[IDX2_G_R(1,0,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(1,0,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(1,0,(isg_))]; _u.w=(ul_ptr)[IDX2_G_I(1,0,(isg_))]; \
@@ -134,12 +161,12 @@
     _u.x=(u_ptr)[IDX2_G_R(2,1,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(2,1,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(2,1,(isg_))]; _u.w=(ul_ptr)[IDX2_G_I(2,1,(isg_))]; \
     _t=qdw_mult_cc(_u,vt1_c2); QDW_ADD(wt1_c1,wt1_c1,_t); \
     _t=qdw_mult_cc(_u,vt2_c2); QDW_ADD(wt2_c1,wt2_c1,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(0,2,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(0,2,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(0,2,(isg_))]; _u.w=(ul_ptr)[IDX2_G_I(0,2,(isg_))]; \
+    if (RECON) { _u=_rc0; } else { _u.x=(u_ptr)[IDX2_G_R(0,2,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(0,2,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(0,2,(isg_))]; _u.w=(ul_ptr)[IDX2_G_I(0,2,(isg_))]; } \
     wt1_c2=qdw_mult_cc(_u,vt1_c0); wt2_c2=qdw_mult_cc(_u,vt2_c0); \
-    _u.x=(u_ptr)[IDX2_G_R(1,2,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(1,2,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(1,2,(isg_))]; _u.w=(ul_ptr)[IDX2_G_I(1,2,(isg_))]; \
+    if (RECON) { _u=_rc1; } else { _u.x=(u_ptr)[IDX2_G_R(1,2,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(1,2,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(1,2,(isg_))]; _u.w=(ul_ptr)[IDX2_G_I(1,2,(isg_))]; } \
     _t=qdw_mult_cc(_u,vt1_c1); QDW_ADD(wt1_c2,wt1_c2,_t); \
     _t=qdw_mult_cc(_u,vt2_c1); QDW_ADD(wt2_c2,wt2_c2,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(2,2,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(2,2,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(2,2,(isg_))]; _u.w=(ul_ptr)[IDX2_G_I(2,2,(isg_))]; \
+    if (RECON) { _u=_rc2; } else { _u.x=(u_ptr)[IDX2_G_R(2,2,(isg_))]; _u.y=(u_ptr)[IDX2_G_I(2,2,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(2,2,(isg_))]; _u.w=(ul_ptr)[IDX2_G_I(2,2,(isg_))]; } \
     _t=qdw_mult_cc(_u,vt1_c2); QDW_ADD(wt1_c2,wt1_c2,_t); \
     _t=qdw_mult_cc(_u,vt2_c2); QDW_ADD(wt2_c2,wt2_c2,_t); \
 }
@@ -147,12 +174,14 @@
 #define DWF_GMUL_BCK_FF(u_ptr, ul_ptr, isg_) \
 { \
     real4 _u; real4 _t; \
+    real4 _rc0,_rc1,_rc2; \
+    if (RECON) { DWF_RECON_COL2_FF(u_ptr, ul_ptr, isg_, _rc0, _rc1, _rc2) } \
     _u.x=(u_ptr)[IDX2_G_R(0,0,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(0,0,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(0,0,(isg_))]; _u.w=-(ul_ptr)[IDX2_G_I(0,0,(isg_))]; \
     wt1_c0=qdw_mult_cc(_u,vt1_c0); wt2_c0=qdw_mult_cc(_u,vt2_c0); \
     _u.x=(u_ptr)[IDX2_G_R(0,1,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(0,1,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(0,1,(isg_))]; _u.w=-(ul_ptr)[IDX2_G_I(0,1,(isg_))]; \
     _t=qdw_mult_cc(_u,vt1_c1); QDW_ADD(wt1_c0,wt1_c0,_t); \
     _t=qdw_mult_cc(_u,vt2_c1); QDW_ADD(wt2_c0,wt2_c0,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(0,2,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(0,2,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(0,2,(isg_))]; _u.w=-(ul_ptr)[IDX2_G_I(0,2,(isg_))]; \
+    if (RECON) { _u.x=_rc0.x; _u.y=-_rc0.y; _u.z=_rc0.z; _u.w=-_rc0.w; } else { _u.x=(u_ptr)[IDX2_G_R(0,2,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(0,2,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(0,2,(isg_))]; _u.w=-(ul_ptr)[IDX2_G_I(0,2,(isg_))]; } \
     _t=qdw_mult_cc(_u,vt1_c2); QDW_ADD(wt1_c0,wt1_c0,_t); \
     _t=qdw_mult_cc(_u,vt2_c2); QDW_ADD(wt2_c0,wt2_c0,_t); \
     _u.x=(u_ptr)[IDX2_G_R(1,0,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(1,0,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(1,0,(isg_))]; _u.w=-(ul_ptr)[IDX2_G_I(1,0,(isg_))]; \
@@ -160,7 +189,7 @@
     _u.x=(u_ptr)[IDX2_G_R(1,1,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(1,1,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(1,1,(isg_))]; _u.w=-(ul_ptr)[IDX2_G_I(1,1,(isg_))]; \
     _t=qdw_mult_cc(_u,vt1_c1); QDW_ADD(wt1_c1,wt1_c1,_t); \
     _t=qdw_mult_cc(_u,vt2_c1); QDW_ADD(wt2_c1,wt2_c1,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(1,2,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(1,2,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(1,2,(isg_))]; _u.w=-(ul_ptr)[IDX2_G_I(1,2,(isg_))]; \
+    if (RECON) { _u.x=_rc1.x; _u.y=-_rc1.y; _u.z=_rc1.z; _u.w=-_rc1.w; } else { _u.x=(u_ptr)[IDX2_G_R(1,2,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(1,2,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(1,2,(isg_))]; _u.w=-(ul_ptr)[IDX2_G_I(1,2,(isg_))]; } \
     _t=qdw_mult_cc(_u,vt1_c2); QDW_ADD(wt1_c1,wt1_c1,_t); \
     _t=qdw_mult_cc(_u,vt2_c2); QDW_ADD(wt2_c1,wt2_c1,_t); \
     _u.x=(u_ptr)[IDX2_G_R(2,0,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(2,0,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(2,0,(isg_))]; _u.w=-(ul_ptr)[IDX2_G_I(2,0,(isg_))]; \
@@ -168,7 +197,7 @@
     _u.x=(u_ptr)[IDX2_G_R(2,1,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(2,1,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(2,1,(isg_))]; _u.w=-(ul_ptr)[IDX2_G_I(2,1,(isg_))]; \
     _t=qdw_mult_cc(_u,vt1_c1); QDW_ADD(wt1_c2,wt1_c2,_t); \
     _t=qdw_mult_cc(_u,vt2_c1); QDW_ADD(wt2_c2,wt2_c2,_t); \
-    _u.x=(u_ptr)[IDX2_G_R(2,2,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(2,2,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(2,2,(isg_))]; _u.w=-(ul_ptr)[IDX2_G_I(2,2,(isg_))]; \
+    if (RECON) { _u.x=_rc2.x; _u.y=-_rc2.y; _u.z=_rc2.z; _u.w=-_rc2.w; } else { _u.x=(u_ptr)[IDX2_G_R(2,2,(isg_))]; _u.y=-(u_ptr)[IDX2_G_I(2,2,(isg_))]; _u.z=(ul_ptr)[IDX2_G_R(2,2,(isg_))]; _u.w=-(ul_ptr)[IDX2_G_I(2,2,(isg_))]; } \
     _t=qdw_mult_cc(_u,vt1_c2); QDW_ADD(wt1_c2,wt1_c2,_t); \
     _t=qdw_mult_cc(_u,vt2_c2); QDW_ADD(wt2_c2,wt2_c2,_t); \
 }
@@ -1368,7 +1397,8 @@ void mult_domainwall_5din_eo_5dirdag_dirac_qdw_kernel_ff(
 //====================================================================
 // EXT=false: single-precision gauge link (current behavior).
 // EXT=true : float-float / double-double (extended) gauge link from up + up_lo.
-template<bool EXT>
+// RECON: SU(3) 3rd-column reconstruction (only used on the EXT=true / FF path).
+template<bool EXT, bool RECON>
 __global__
 void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
     real4 * __restrict__ vp, real_t * __restrict__ up,
@@ -1538,7 +1568,7 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
 // up_lo != nullptr -> extended (float-float / double-double) gauge link.
 void mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
     real_t *vp, real_t *up, real_t *up_lo, real_t *wp, int Ns, int *bc,
-    int *Nsize, int *do_comm, int ieo, int jeo, int jgm5)
+    int *Nsize, int *do_comm, int ieo, int jeo, int jgm5, bool recon)
 {
     int Nx=Nsize[0], Ny=Nsize[1], Nz=Nsize[2], Nt=Nsize[3];
     int Nst     = Nx*Ny*Nz*Nt;
@@ -1553,21 +1583,22 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
     int gridSize  = (Nst + blockSize - 1) / blockSize;
 
     if (up_lo_dev) {
-      mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel<true><<<gridSize, blockSize>>>(
-        vp_dev, up_dev, up_lo_dev, wp_dev, Ns,
-        bc[0], bc[1], bc[2], bc[3],
-        Nx, Ny, Nz, Nt,
-        ieo, jeo,
-        do_comm[0], do_comm[1], do_comm[2], do_comm[3],
-        Nst, Nst_pad, jgm5);
+      if (recon)
+        mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel<true,true><<<gridSize, blockSize>>>(
+          vp_dev, up_dev, up_lo_dev, wp_dev, Ns,
+          bc[0], bc[1], bc[2], bc[3], Nx, Ny, Nz, Nt, ieo, jeo,
+          do_comm[0], do_comm[1], do_comm[2], do_comm[3], Nst, Nst_pad, jgm5);
+      else
+        mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel<true,false><<<gridSize, blockSize>>>(
+          vp_dev, up_dev, up_lo_dev, wp_dev, Ns,
+          bc[0], bc[1], bc[2], bc[3], Nx, Ny, Nz, Nt, ieo, jeo,
+          do_comm[0], do_comm[1], do_comm[2], do_comm[3], Nst, Nst_pad, jgm5);
     } else {
-      mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel<false><<<gridSize, blockSize>>>(
+      // single-float gauge has no separate columns to reconstruct; RECON=false.
+      mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel<false,false><<<gridSize, blockSize>>>(
         vp_dev, up_dev, nullptr, wp_dev, Ns,
-        bc[0], bc[1], bc[2], bc[3],
-        Nx, Ny, Nz, Nt,
-        ieo, jeo,
-        do_comm[0], do_comm[1], do_comm[2], do_comm[3],
-        Nst, Nst_pad, jgm5);
+        bc[0], bc[1], bc[2], bc[3], Nx, Ny, Nz, Nt, ieo, jeo,
+        do_comm[0], do_comm[1], do_comm[2], do_comm[3], Nst, Nst_pad, jgm5);
     }
 
     CHECK(cudaDeviceSynchronize());

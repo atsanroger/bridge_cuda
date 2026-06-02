@@ -372,6 +372,17 @@ void AFopr_Domainwall_5din_eo<AFIELD>::set_parameters(
   vout.general(m_vl, "  extended_precision = %s\n",
                m_extended_precision ? "true" : "false");
 
+  // optional: SU(3) 3rd-column reconstruction in the QTW hopping (trades gauge
+  // read BW for registers+arithmetic; off by default, regressed on RTX 3080).
+  m_su3_reconstruction = false;
+  std::string su3rec_str;
+  if (!params.fetch_string("su3_reconstruction", su3rec_str)) {
+    m_su3_reconstruction = (su3rec_str == "true" || su3rec_str == "yes"
+                        || su3rec_str == "1");
+  }
+  vout.general(m_vl, "  su3_reconstruction = %s\n",
+               m_su3_reconstruction ? "true" : "false");
+
   // keep the un-truncated double coefficients for extended-precision mode.
   m_M0_d = M0; m_mq_d = mq; m_alpha_d = alpha;
   m_b_d.assign(Ns, b);
@@ -1334,7 +1345,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D_eo(AFIELD& v,
       BridgeACC::mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
                          vp, up, (m_extended_precision ? m_Ueo_lo.ptr(0) : nullptr),
                          yp, m_Ns, m_bc2,
-                         m_Nsize, do_comm, ieo, jeo, 0);
+                         m_Nsize, do_comm, ieo, jeo, 0, m_su3_reconstruction);
     } else if (use_qtw_path) {
       // TW gauge: pass 3-word link (mid/lo) so the hopping runs at full TW
       // precision (use_tw_link path inside the kernel).
@@ -1343,11 +1354,11 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D_eo(AFIELD& v,
                          (m_extended_precision ? m_Ueo_mid.ptr(0) : nullptr),
                          (m_extended_precision ? m_Ueo_lo.ptr(0)  : nullptr),
                          yp, m_Ns, m_bc2,
-                         m_Nsize, do_comm, ieo, jeo, 0);
+                         m_Nsize, do_comm, ieo, jeo, 0, m_su3_reconstruction);
     } else if(m_impl == "5d"){
       BridgeACC::mult_domainwall_5din_eo_hopb_dirac_5d(
                          vp, up, yp, m_Ns, m_bc2,
-                         m_Nsize, do_comm, ieo, jeo, 0);
+                         m_Nsize, do_comm, ieo, jeo, 0, m_su3_reconstruction);
     }else{
 #ifdef USE_DOMAINWALL_5DIN_4D_KERNEL
       BridgeACC::mult_domainwall_5din_eo_hopb_dirac_4d(
@@ -1490,18 +1501,18 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_eo(AFIELD& v,
       BridgeACC::mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
                            yp, up, (m_extended_precision ? m_Ueo_lo.ptr(0) : nullptr),
                            wp, m_Ns, m_bc2,
-                           m_Nsize, do_comm, ieo, jeo, 1);
+                           m_Nsize, do_comm, ieo, jeo, 1, m_su3_reconstruction);
     } else if (use_qtw_path) {
       BridgeACC::mult_domainwall_5din_eo_hopb_qtw_dirac_5d(
                            yp, up,
                            (m_extended_precision ? m_Ueo_mid.ptr(0) : nullptr),
                            (m_extended_precision ? m_Ueo_lo.ptr(0)  : nullptr),
                            wp, m_Ns, m_bc2,
-                           m_Nsize, do_comm, ieo, jeo, 1);
+                           m_Nsize, do_comm, ieo, jeo, 1, m_su3_reconstruction);
     } else if(m_impl == "5d"){
       BridgeACC::mult_domainwall_5din_eo_hopb_dirac_5d(
                            yp, up, wp, m_Ns, m_bc2,
-                           m_Nsize, do_comm, ieo, jeo, 1);
+                           m_Nsize, do_comm, ieo, jeo, 1, m_su3_reconstruction);
     }else{
 #ifdef USE_DOMAINWALL_5DIN_4D_KERNEL
       BridgeACC::mult_domainwall_5din_eo_hopb_dirac_4d(
