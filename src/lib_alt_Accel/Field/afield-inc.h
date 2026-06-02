@@ -216,7 +216,7 @@ void convert_spinor(INDEX& index, AFIELD& v, const Field& w)
 
 //====================================================================
 template <class INDEX, class AFIELD>
-void convert_gauge(INDEX& index, AFIELD& v, const Field& w) 
+void convert_gauge(INDEX& index, AFIELD& v, const Field& w)
 {
   int Nc = CommonParameters::Nc();
   assert(w.nin() == 2*Nc*Nc);
@@ -224,7 +224,126 @@ void convert_gauge(INDEX& index, AFIELD& v, const Field& w)
 
   convert(index, v, w);
 
-}  
+}
+
+//====================================================================
+// Extended-precision gauge convert: split the double config w into a
+// hi word (v_hi) and lo word (v_lo) in the target (eo) layout, so the
+// pair (hi,lo) represents the link as a double-double / float-float number.
+template <class INDEX, class AFIELD>
+void convert_gauge_dd(INDEX& index, AFIELD& v_hi, AFIELD& v_lo, const Field& w)
+{
+#pragma omp barrier
+
+  int Nin  = w.nin();
+  int Nvol = w.nvol();
+  int Nex  = w.nex();
+  assert(v_hi.check_size(Nin, Nvol, Nex));
+  assert(v_lo.check_size(Nin, Nvol, Nex));
+
+  typedef typename AFIELD::real_t real_t;
+  real_t* vhp = v_hi.ptr(0);
+  real_t* vlp = v_lo.ptr(0);
+
+  int Nvol_pad = v_hi.nvol_pad();
+
+  int ith, nth, is, ns;
+  set_threadtask(ith, nth, is, ns, Nvol_pad);
+
+  for(int ex = 0; ex < Nex; ++ex){
+    for(int site = is; site < ns; ++site){
+     if(site < Nvol){
+       for(int in = 0; in < Nin; ++in){
+         int iw = in + Nin * (site + Nvol * ex);
+         int iv = index.idx(in, Nin, site, ex);
+         double d  = w.cmp(iw);
+         real_t hi = real_t(d);
+         vhp[iv] = hi;
+         vlp[iv] = real_t(d - double(hi));
+       }
+     }else{
+       for(int in = 0; in < Nin; ++in){
+         int iv = index.idx(in, Nin, site, ex);
+         vhp[iv] = real_t(0.0);
+         vlp[iv] = real_t(0.0);
+       }
+     }
+   }
+  }
+
+#pragma omp barrier
+
+  if(ith == 0){
+    size_t nv = Nin * Nvol_pad * Nex;
+    BridgeACC::copy_to_device(vhp, nv);
+    BridgeACC::copy_to_device(vlp, nv);
+  }
+
+#pragma omp barrier
+}
+
+//====================================================================
+// Triple-word (TW) gauge split: decompose each double link component into
+// three non-overlapping float words hi + mid + lo, mirroring convert_gauge_dd.
+template<class INDEX, class AFIELD>
+void convert_gauge_tw(INDEX& index, AFIELD& v_hi, AFIELD& v_mid, AFIELD& v_lo,
+                      const Field& w)
+{
+#pragma omp barrier
+
+  int Nin  = w.nin();
+  int Nvol = w.nvol();
+  int Nex  = w.nex();
+  assert(v_hi.check_size(Nin, Nvol, Nex));
+  assert(v_mid.check_size(Nin, Nvol, Nex));
+  assert(v_lo.check_size(Nin, Nvol, Nex));
+
+  typedef typename AFIELD::real_t real_t;
+  real_t* vhp = v_hi.ptr(0);
+  real_t* vmp = v_mid.ptr(0);
+  real_t* vlp = v_lo.ptr(0);
+
+  int Nvol_pad = v_hi.nvol_pad();
+
+  int ith, nth, is, ns;
+  set_threadtask(ith, nth, is, ns, Nvol_pad);
+
+  for(int ex = 0; ex < Nex; ++ex){
+    for(int site = is; site < ns; ++site){
+     if(site < Nvol){
+       for(int in = 0; in < Nin; ++in){
+         int iw = in + Nin * (site + Nvol * ex);
+         int iv = index.idx(in, Nin, site, ex);
+         double d   = w.cmp(iw);
+         real_t hi  = real_t(d);
+         real_t mid = real_t(d - double(hi));
+         real_t lo  = real_t(d - double(hi) - double(mid));
+         vhp[iv] = hi;
+         vmp[iv] = mid;
+         vlp[iv] = lo;
+       }
+     }else{
+       for(int in = 0; in < Nin; ++in){
+         int iv = index.idx(in, Nin, site, ex);
+         vhp[iv] = real_t(0.0);
+         vmp[iv] = real_t(0.0);
+         vlp[iv] = real_t(0.0);
+       }
+     }
+   }
+  }
+
+#pragma omp barrier
+
+  if(ith == 0){
+    size_t nv = Nin * Nvol_pad * Nex;
+    BridgeACC::copy_to_device(vhp, nv);
+    BridgeACC::copy_to_device(vmp, nv);
+    BridgeACC::copy_to_device(vlp, nv);
+  }
+
+#pragma omp barrier
+}
 
 //====================================================================
 template<class INDEX2, class AFIELD2, class INDEX1, class AFIELD1>

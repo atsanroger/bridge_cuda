@@ -158,8 +158,10 @@ class AIndex_eo<REALTYPE, ACCEL>{
   int ieo_origin() const
   { return m_ieo_origin; }
 
+  // mw_mode: 0=FP/plain, 1=QDW (4-real packed), 2=QTW (6-real packed).
+  // bool overloads still in use (false→0, true→1) thanks to implicit conv.
   template <typename AFIELD>
-  void split(AFIELD& v_e, AFIELD& v_o, const AFIELD& v, bool qdw = false);
+  void split(AFIELD& v_e, AFIELD& v_o, const AFIELD& v, int mw_mode = 0);
 
   template <typename AFIELD>
   void split(AFIELD& v_e, const int ex_e,
@@ -170,7 +172,7 @@ class AIndex_eo<REALTYPE, ACCEL>{
   void split_gauge(AFIELD& ueo, const AFIELD& ulex);
 
   template <typename AFIELD>
-  void merge(AFIELD& v, const AFIELD& v_e, const AFIELD& v_o, bool qdw = false);
+  void merge(AFIELD& v, const AFIELD& v_e, const AFIELD& v_o, int mw_mode = 0);
 
 };
 

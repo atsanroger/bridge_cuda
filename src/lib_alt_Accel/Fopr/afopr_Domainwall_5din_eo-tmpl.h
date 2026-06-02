@@ -194,6 +194,10 @@ void AFopr_Domainwall_5din_eo<AFIELD>::init(const Parameters& params)
   // gauge configuration.
   int Nst_pad2 = 2 * ceil_nwp(m_Nst2);
   m_Ueo.reset(m_Ndf, Nst_pad2, m_Ndim);
+  if (m_extended_precision) {
+    m_Ueo_lo.reset(m_Ndf, Nst_pad2, m_Ndim);
+    m_Ueo_mid.reset(m_Ndf, Nst_pad2, m_Ndim);  // mid word for TW gauge link
+  }
 
   vout.decrease_indent();
   vout.detailed(m_vl, "%s: initalization finished.\n",
@@ -356,6 +360,23 @@ void AFopr_Domainwall_5din_eo<AFIELD>::set_parameters(
     alpha = 1.0;
   }
 
+  // optional: extended (float-float / double-double) precision for QDW mode --
+  // applies a low word to the gauge links, source/reverse, and 5D coefficients.
+  // Only meaningful for a float base (lets float-float QDW approach double).
+  m_extended_precision = false;
+  std::string ext_prec_str;
+  if (!params.fetch_string("extended_precision", ext_prec_str)) {
+    m_extended_precision = (ext_prec_str == "true" || ext_prec_str == "yes"
+                        || ext_prec_str == "1");
+  }
+  vout.general(m_vl, "  extended_precision = %s\n",
+               m_extended_precision ? "true" : "false");
+
+  // keep the un-truncated double coefficients for extended-precision mode.
+  m_M0_d = M0; m_mq_d = mq; m_alpha_d = alpha;
+  m_b_d.assign(Ns, b);
+  m_c_d.assign(Ns, c);
+
   set_parameters(real_t(mq), real_t(M0), Ns, bc,
                  real_t(b), real_t(c), real_t(alpha));
 
@@ -458,6 +479,19 @@ void AFopr_Domainwall_5din_eo<AFIELD>::set_parameters(
   BridgeACC::initDomainwallConstantMemory(
     m_e.data(), m_f.data(), m_dpinv.data(),
     m_dm.data(), m_b.data(), m_c.data(), m_Ns);
+  if (m_extended_precision) {
+    // populate float-float (hi/lo) constant memory from the un-truncated
+    // double coefficients. Kernels in EXT path do FP32-only dw_add/dw_mul
+    // on these (no FP64 ALU used).
+    BridgeACC::initDomainwallConstantMemoryFF(
+      m_e_d.data(), m_f_d.data(), m_dpinv_d.data(),
+      m_dm_d.data(), m_b_d.data(), m_c_d.data(), m_Ns);
+  }
+  // Always populate the TW (hi, mid, lo) constants too — cheap, and lets the
+  // TW kernels work whether or not extended_precision is also set. FP32-only.
+  BridgeACC::initDomainwallConstantMemoryTW(
+    m_e_d.data(), m_f_d.data(), m_dpinv_d.data(),
+    m_dm_d.data(), m_b_d.data(), m_c_d.data(), m_Ns);
 #endif
 
 
@@ -476,6 +510,11 @@ void AFopr_Domainwall_5din_eo<AFIELD>::set_mw_mode(MWMode mode)
     m_w1_qdw.reset(m_NinF * 2, m_Nst2, 1);
     m_v1.reset(m_NinF * 2, m_Nst2, 1);
     m_v2.reset(m_NinF * 2, m_Nst2, 1);
+  } else if (mode == MWMode::TW && m_NinF > 0) {
+    // TW layout: 6 reals/cplx → 3 x m_NinF reals per site.
+    m_w1_qtw.reset(m_NinF * 3, m_Nst2, 1);
+    m_v1.reset(m_NinF * 3, m_Nst2, 1);
+    m_v2.reset(m_NinF * 3, m_Nst2, 1);
   } else if (mode == MWMode::FP && m_NinF > 0) {
     m_v1.reset(m_NinF, m_Nst2, 1);
     m_v2.reset(m_NinF, m_Nst2, 1);
@@ -549,6 +588,29 @@ void AFopr_Domainwall_5din_eo<AFIELD>::set_precond_parameters()
       m_dpinv[is] = 1.0 / m_dp[is];
     }
     m_dpinv[m_Ns - 1] = 1.0 / (m_dp[m_Ns - 1] + m_g);
+
+    // extended-precision (double) copies of the same coefficients.
+    if ((int)m_dp_d.size() != m_Ns) {
+      m_dp_d.resize(m_Ns);  m_dm_d.resize(m_Ns);  m_dpinv_d.resize(m_Ns);
+      m_e_d.resize(m_Ns - 1);  m_f_d.resize(m_Ns - 1);
+    }
+    if ((int)m_b_d.size() != m_Ns) {  // fallback if set via set_coefficients
+      m_b_d.assign(m_Ns, double(m_b[0]));
+      m_c_d.assign(m_Ns, double(m_c[0]));
+    }
+    for (int is = 0; is < m_Ns; ++is) {
+      m_dp_d[is] = m_alpha_d * (1.0 + m_b_d[is] * (4.0 - m_M0_d));
+      m_dm_d[is] = m_alpha_d * (1.0 - m_c_d[is] * (4.0 - m_M0_d));
+    }
+    m_e_d[0] = m_mq_d * m_dm_d[m_Ns - 1] / m_dp_d[0];
+    m_f_d[0] = m_mq_d * m_dm_d[0] / m_alpha_d;
+    for (int is = 1; is < m_Ns - 1; ++is) {
+      m_e_d[is] = m_e_d[is - 1] * m_dm_d[is - 1] / m_dp_d[is];
+      m_f_d[is] = m_f_d[is - 1] * m_dm_d[is] / m_dp_d[is - 1];
+    }
+    m_g_d = m_e_d[m_Ns - 2] * m_dm_d[m_Ns - 2];
+    for (int is = 0; is < m_Ns - 1; ++is) m_dpinv_d[is] = 1.0 / m_dp_d[is];
+    m_dpinv_d[m_Ns - 1] = 1.0 / (m_dp_d[m_Ns - 1] + m_g_d);
 
   }
 
@@ -628,7 +690,14 @@ void AFopr_Domainwall_5din_eo<AFIELD>::set_config_impl(Field *u)
 
   //  if (ith == 0) m_conf = u;
 
-  convert_gauge(m_index_eo, m_Ueo, *u);
+  if (m_mw_mode == MWMode::TW && m_extended_precision) {
+    // 3-word gauge links so the hopping operator runs at full TW precision.
+    convert_gauge_tw(m_index_eo, m_Ueo, m_Ueo_mid, m_Ueo_lo, *u);
+  } else if (m_extended_precision) {
+    convert_gauge_dd(m_index_eo, m_Ueo, m_Ueo_lo, *u);
+  } else {
+    convert_gauge(m_index_eo, m_Ueo, *u);
+  }
 
 #pragma omp barrier
 }
@@ -658,12 +727,51 @@ void AFopr_Domainwall_5din_eo<AFIELD>::convert(AFIELD& v, const Field& w)
             int k4    = ic + NC * (id + ND * is5);
             int idx4  = IDX2(NC * ND * m_Ns, k4, site);
             int ivcd_re = 2 * ic + NVC * id;
-            real_t vt_re = real_t(w.cmp(ivcd_re,     site, is5));
-            real_t vt_im = real_t(w.cmp(ivcd_re + 1, site, is5));
+            double src_re = w.cmp(ivcd_re,     site, is5);
+            double src_im = w.cmp(ivcd_re + 1, site, is5);
+            real_t vt_re = real_t(src_re);
+            real_t vt_im = real_t(src_im);
             v.set_host(4 * idx4 + 0, vt_re);        // hi_re
             v.set_host(4 * idx4 + 1, vt_im);        // hi_im
-            v.set_host(4 * idx4 + 2, real_t(0.0));  // lo_re
-            v.set_host(4 * idx4 + 3, real_t(0.0));  // lo_im
+            // extended precision: keep the low word so a float base carries
+            // ~double precision in the source (no effect for a double base).
+            if (m_extended_precision) {
+              v.set_host(4 * idx4 + 2, real_t(src_re - double(vt_re)));  // lo_re
+              v.set_host(4 * idx4 + 3, real_t(src_im - double(vt_im)));  // lo_im
+            } else {
+              v.set_host(4 * idx4 + 2, real_t(0.0));  // lo_re
+              v.set_host(4 * idx4 + 3, real_t(0.0));  // lo_im
+            }
+          }
+        }
+      }
+    }
+  } else if (m_mw_mode == MWMode::TW) {
+    // TW mode: 6 reals/cplx layout {rh, ih, rm, im, rl, il}.
+    // Triple-decompose the double source so a float base carries ~72-bit precision.
+    for (int site = isite; site < nsite; ++site) {
+      for (int is5 = 0; is5 < m_Ns; ++is5) {
+        for (int id = 0; id < ND; ++id) {
+          for (int ic = 0; ic < NC; ++ic) {
+            int k4   = ic + NC * (id + ND * is5);
+            int idx6 = IDX2(NC * ND * m_Ns, k4, site);
+            int ivcd_re = 2 * ic + NVC * id;
+            double src_re = w.cmp(ivcd_re,     site, is5);
+            double src_im = w.cmp(ivcd_re + 1, site, is5);
+            real_t vt_re_h = real_t(src_re);
+            real_t vt_im_h = real_t(src_im);
+            double rem_re = src_re - double(vt_re_h);
+            double rem_im = src_im - double(vt_im_h);
+            real_t vt_re_m = real_t(rem_re);
+            real_t vt_im_m = real_t(rem_im);
+            real_t vt_re_l = real_t(rem_re - double(vt_re_m));
+            real_t vt_im_l = real_t(rem_im - double(vt_im_m));
+            v.set_host(6 * idx6 + 0, vt_re_h);
+            v.set_host(6 * idx6 + 1, vt_im_h);
+            v.set_host(6 * idx6 + 2, vt_re_m);
+            v.set_host(6 * idx6 + 3, vt_im_m);
+            v.set_host(6 * idx6 + 4, vt_re_l);
+            v.set_host(6 * idx6 + 5, vt_im_l);
           }
         }
       }
@@ -714,6 +822,32 @@ void AFopr_Domainwall_5din_eo<AFIELD>::reverse(Field& v, const AFIELD& w)
             int ivcd_re = 2 * ic + NVC * id;
             double vt_re = double(w.cmp_host(4 * idx4 + 0));  // hi_re
             double vt_im = double(w.cmp_host(4 * idx4 + 1));  // hi_im
+            // extended precision: add the low word back (no effect for double base).
+            if (m_extended_precision) {
+              vt_re += double(w.cmp_host(4 * idx4 + 2));  // + lo_re
+              vt_im += double(w.cmp_host(4 * idx4 + 3));  // + lo_im
+            }
+            v.set(ivcd_re,     site, is5, vt_re);
+            v.set(ivcd_re + 1, site, is5, vt_im);
+          }
+        }
+      }
+    }
+  } else if (m_mw_mode == MWMode::TW) {
+    // TW mode: reconstruct from {rh, ih, rm, im, rl, il}.
+    for (int site = isite; site < nsite; ++site) {
+      for (int is5 = 0; is5 < m_Ns; ++is5) {
+        for (int id = 0; id < ND; ++id) {
+          for (int ic = 0; ic < NC; ++ic) {
+            int k4   = ic + NC * (id + ND * is5);
+            int idx6 = IDX2(NC * ND * m_Ns, k4, site);
+            int ivcd_re = 2 * ic + NVC * id;
+            double vt_re = double(w.cmp_host(6 * idx6 + 0))
+                         + double(w.cmp_host(6 * idx6 + 2))
+                         + double(w.cmp_host(6 * idx6 + 4));
+            double vt_im = double(w.cmp_host(6 * idx6 + 1))
+                         + double(w.cmp_host(6 * idx6 + 3))
+                         + double(w.cmp_host(6 * idx6 + 5));
             v.set(ivcd_re,     site, is5, vt_re);
             v.set(ivcd_re + 1, site, is5, vt_im);
           }
@@ -890,6 +1024,24 @@ void AFopr_Domainwall_5din_eo<AFIELD>::mult_dag(AFIELD& v,
 
 //====================================================================
 template<typename AFIELD>
+void AFopr_Domainwall_5din_eo<AFIELD>::axpy_mw(AFIELD& y, const real_t a,
+                                              const AFIELD& x)
+{
+  // Genuine multiword y += a*x. Mode-less axpy() does single-float arithmetic
+  // on each word independently (no inter-word carry), so in the Schur combine
+  // w - m_v2 (where w ~ m_v2) it catastrophically cancels to ~1e-7. The DW/TW
+  // variants fold the words correctly and keep the operator at full precision.
+  if (m_mw_mode == MWMode::TW) {
+    y.axpy_triple(a, x, static_cast<int>(MWMode::TW));
+  } else if (m_mw_mode == MWMode::DW) {
+    y.axpy_pair(a, real_t(0), x, static_cast<int>(MWMode::DW));
+  } else {
+    axpy(y, a, x);
+  }
+}
+
+//====================================================================
+template<typename AFIELD>
 void AFopr_Domainwall_5din_eo<AFIELD>::DdagD(AFIELD& v, const AFIELD& w)
 {
   D_eo(m_v1, w, 1);
@@ -898,7 +1050,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::DdagD(AFIELD& v, const AFIELD& w)
   LU_inv(m_v2, m_v1);
 
   copy(m_v1, w);
-  axpy(m_v1, real_t(-1.0), m_v2);
+  axpy_mw(m_v1, real_t(-1.0), m_v2);
 
   LUdag_inv(v, m_v1);
   Ddag_eo(m_v2, v, 1);
@@ -906,7 +1058,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::DdagD(AFIELD& v, const AFIELD& w)
   Ddag_eo(m_v2, v, 0);
 
   copy(v, m_v1);
-  axpy(v, real_t(-1.0), m_v2);
+  axpy_mw(v, real_t(-1.0), m_v2);
 }
 
 
@@ -920,7 +1072,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D(AFIELD& v, const AFIELD& w)
   LU_inv(m_v2, m_v1);
 
   copy(v, w);
-  axpy(v, real_t(-1.0), m_v2);
+  axpy_mw(v, real_t(-1.0), m_v2);
 }
 
 //====================================================================
@@ -938,7 +1090,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag(AFIELD& v, const AFIELD& w)
   Ddag_eo(m_v2, m_v1, 0);
 
   copy(v, w);
-  axpy(v, real_t(-1.0), m_v2);
+  axpy_mw(v, real_t(-1.0), m_v2);
 
 }
 
@@ -1111,12 +1263,17 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D_eo(AFIELD& v,
   bool use_qdw_path = (m_mw_mode == MWMode::DW
                        && v.nin() == m_NinF * 2
                        && w.nin() == m_NinF * 2);
-  if (use_qdw_path && do_comm_any > 0) {
-    vout.crucial(m_vl, "%s: QDW mode requires do_comm_any == 0 (single process).\n",
+  bool use_qtw_path = (m_mw_mode == MWMode::TW
+                       && v.nin() == m_NinF * 3
+                       && w.nin() == m_NinF * 3);
+  if ((use_qdw_path || use_qtw_path) && do_comm_any > 0) {
+    vout.crucial(m_vl, "%s: QDW/QTW mode requires do_comm_any == 0 (single process).\n",
                  class_name.c_str());
     exit(EXIT_FAILURE);
   }
-  real_t *yp = use_qdw_path ? m_w1_qdw.ptr(0) : m_w1.ptr(0);
+  real_t *yp = use_qdw_path ? m_w1_qdw.ptr(0)
+             : use_qtw_path ? m_w1_qtw.ptr(0)
+                            : m_w1.ptr(0);
 
   if(do_comm_any > 0 && ith == 0){
     TIMER_comm_recv_start_start;
@@ -1128,8 +1285,14 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D_eo(AFIELD& v,
 
     if (use_qdw_path) {
       BridgeACC::mult_domainwall_5din_eo_5dir_dirac_qdw(
-                              yp, wp, real_t(m_mq), real_t(m_M0), m_Ns,
-                              &m_b[0], &m_c[0], real_t(m_alpha), m_Nsize);
+                              yp, wp, m_mq_d, m_M0_d, m_Ns,
+                              &m_b[0], &m_c[0], m_alpha_d, m_Nsize,
+                              m_extended_precision);
+    } else if (use_qtw_path) {
+      BridgeACC::mult_domainwall_5din_eo_5dir_dirac_qtw(
+                              yp, wp, m_mq_d, m_M0_d, m_Ns,
+                              &m_b[0], &m_c[0], m_alpha_d, m_Nsize,
+                              m_extended_precision);
     } else {
       BridgeACC::mult_domainwall_5din_eo_5dir_dirac(
                               yp, wp, m_mq, m_M0, m_Ns,
@@ -1169,7 +1332,17 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D_eo(AFIELD& v,
     TIMER_bulk_start;
     if (use_qdw_path) {
       BridgeACC::mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
-                         vp, up, yp, m_Ns, m_bc2,
+                         vp, up, (m_extended_precision ? m_Ueo_lo.ptr(0) : nullptr),
+                         yp, m_Ns, m_bc2,
+                         m_Nsize, do_comm, ieo, jeo, 0);
+    } else if (use_qtw_path) {
+      // TW gauge: pass 3-word link (mid/lo) so the hopping runs at full TW
+      // precision (use_tw_link path inside the kernel).
+      BridgeACC::mult_domainwall_5din_eo_hopb_qtw_dirac_5d(
+                         vp, up,
+                         (m_extended_precision ? m_Ueo_mid.ptr(0) : nullptr),
+                         (m_extended_precision ? m_Ueo_lo.ptr(0)  : nullptr),
+                         yp, m_Ns, m_bc2,
                          m_Nsize, do_comm, ieo, jeo, 0);
     } else if(m_impl == "5d"){
       BridgeACC::mult_domainwall_5din_eo_hopb_dirac_5d(
@@ -1262,12 +1435,17 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_eo(AFIELD& v,
   bool use_qdw_path = (m_mw_mode == MWMode::DW
                        && v.nin() == m_NinF * 2
                        && w.nin() == m_NinF * 2);
-  if (use_qdw_path && do_comm_any > 0) {
-    vout.crucial(m_vl, "%s: QDW mode requires do_comm_any == 0 (single process).\n",
+  bool use_qtw_path = (m_mw_mode == MWMode::TW
+                       && v.nin() == m_NinF * 3
+                       && w.nin() == m_NinF * 3);
+  if ((use_qdw_path || use_qtw_path) && do_comm_any > 0) {
+    vout.crucial(m_vl, "%s: QDW/QTW mode requires do_comm_any == 0 (single process).\n",
                  class_name.c_str());
     exit(EXIT_FAILURE);
   }
-  real_t *yp = use_qdw_path ? m_w1_qdw.ptr(0) : m_w1.ptr(0);
+  real_t *yp = use_qdw_path ? m_w1_qdw.ptr(0)
+             : use_qtw_path ? m_w1_qtw.ptr(0)
+                            : m_w1.ptr(0);
 
   if(do_comm_any > 0 && ith == 0){
     TIMER_comm_recv_start_start;
@@ -1277,7 +1455,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_eo(AFIELD& v,
 
   if (ith == ith_kernel){
 
-    if (!use_qdw_path && do_comm_any > 0) {
+    if (!use_qdw_path && !use_qtw_path && do_comm_any > 0) {
       TIMER_pack_start;
 
       real_t *buf1_xp = (real_t *)chsend_dn[0].ptr();
@@ -1310,7 +1488,15 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_eo(AFIELD& v,
     TIMER_bulk_start;
     if (use_qdw_path) {
       BridgeACC::mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
-                           yp, up, wp, m_Ns, m_bc2,
+                           yp, up, (m_extended_precision ? m_Ueo_lo.ptr(0) : nullptr),
+                           wp, m_Ns, m_bc2,
+                           m_Nsize, do_comm, ieo, jeo, 1);
+    } else if (use_qtw_path) {
+      BridgeACC::mult_domainwall_5din_eo_hopb_qtw_dirac_5d(
+                           yp, up,
+                           (m_extended_precision ? m_Ueo_mid.ptr(0) : nullptr),
+                           (m_extended_precision ? m_Ueo_lo.ptr(0)  : nullptr),
+                           wp, m_Ns, m_bc2,
                            m_Nsize, do_comm, ieo, jeo, 1);
     } else if(m_impl == "5d"){
       BridgeACC::mult_domainwall_5din_eo_hopb_dirac_5d(
@@ -1343,7 +1529,7 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_eo(AFIELD& v,
   }
 
   if (ith == ith_kernel) {
-    if (!use_qdw_path && do_comm_any > 0) {
+    if (!use_qdw_path && !use_qtw_path && do_comm_any > 0) {
       TIMER_boundary_start;
 
       real_t *buf2_xp = (real_t *)chrecv_up[0].ptr();
@@ -1366,8 +1552,14 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_eo(AFIELD& v,
     }
     if (use_qdw_path) {
       BridgeACC::mult_domainwall_5din_eo_5dirdag_dirac_qdw(
-                              vp, yp, real_t(m_mq), real_t(m_M0), m_Ns,
-                              &m_b[0], &m_c[0], real_t(m_alpha), m_Nsize);
+                              vp, yp, m_mq_d, m_M0_d, m_Ns,
+                              &m_b[0], &m_c[0], m_alpha_d, m_Nsize,
+                              m_extended_precision);
+    } else if (use_qtw_path) {
+      BridgeACC::mult_domainwall_5din_eo_5dirdag_dirac_qtw(
+                              vp, yp, m_mq_d, m_M0_d, m_Ns,
+                              &m_b[0], &m_c[0], m_alpha_d, m_Nsize,
+                              m_extended_precision);
     } else {
       BridgeACC::mult_domainwall_5din_eo_5dirdag_dirac(
                               vp, yp, m_mq, m_M0, m_Ns,
@@ -1403,8 +1595,14 @@ void AFopr_Domainwall_5din_eo<AFIELD>::D_ee(AFIELD& v, const AFIELD& w,
 
     if (m_mw_mode == MWMode::DW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
       BridgeACC::mult_domainwall_5din_ee_5dir_dirac_qdw(
-                                   vp, wp, real_t(m_mq), real_t(m_M0), m_Ns,
-                                   &m_b[0], &m_c[0], real_t(m_alpha), m_Nsize);
+                                   vp, wp, m_mq_d, m_M0_d, m_Ns,
+                                   &m_b[0], &m_c[0], m_alpha_d, m_Nsize,
+                                   m_extended_precision);
+    } else if (m_mw_mode == MWMode::TW && v.nin() == m_NinF * 3 && w.nin() == m_NinF * 3) {
+      BridgeACC::mult_domainwall_5din_ee_5dir_dirac_qtw(
+                                   vp, wp, m_mq_d, m_M0_d, m_Ns,
+                                   &m_b[0], &m_c[0], m_alpha_d, m_Nsize,
+                                   m_extended_precision);
     } else {
       BridgeACC::mult_domainwall_5din_ee_5dir_dirac(
                                    vp, wp, m_mq, m_M0, m_Ns,
@@ -1431,8 +1629,14 @@ void AFopr_Domainwall_5din_eo<AFIELD>::Ddag_ee(AFIELD& v, const AFIELD& w,
 
     if (m_mw_mode == MWMode::DW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
       BridgeACC::mult_domainwall_5din_ee_5dirdag_dirac_qdw(
-                                   vp, wp, real_t(m_mq), real_t(m_M0), m_Ns,
-                                   &m_b[0], &m_c[0], real_t(m_alpha), m_Nsize);
+                                   vp, wp, m_mq_d, m_M0_d, m_Ns,
+                                   &m_b[0], &m_c[0], m_alpha_d, m_Nsize,
+                                   m_extended_precision);
+    } else if (m_mw_mode == MWMode::TW && v.nin() == m_NinF * 3 && w.nin() == m_NinF * 3) {
+      BridgeACC::mult_domainwall_5din_ee_5dirdag_dirac_qtw(
+                                   vp, wp, m_mq_d, m_M0_d, m_Ns,
+                                   &m_b[0], &m_c[0], m_alpha_d, m_Nsize,
+                                   m_extended_precision);
     } else {
       BridgeACC::mult_domainwall_5din_ee_5dirdag_dirac(
                                    vp, wp, m_mq, m_M0, m_Ns,
@@ -1569,7 +1773,10 @@ void AFopr_Domainwall_5din_eo<AFIELD>::LU_inv(AFIELD& v, const AFIELD& w)
 
     if (m_mw_mode == MWMode::DW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
       BridgeACC::mult_domainwall_5din_ee_LUinv_dirac_qdw(
-                     vp, wp, m_Ns, m_Nsize, m_alpha);
+                     vp, wp, m_Ns, m_Nsize, m_alpha_d, m_extended_precision);
+    } else if (m_mw_mode == MWMode::TW && v.nin() == m_NinF * 3 && w.nin() == m_NinF * 3) {
+      BridgeACC::mult_domainwall_5din_ee_LUinv_dirac_qtw(
+                     vp, wp, m_Ns, m_Nsize, m_alpha_d, m_extended_precision);
     } else {
       BridgeACC::mult_domainwall_5din_ee_LUinv_dirac(
                      vp, wp, m_Ns, m_Nsize,
@@ -1603,7 +1810,10 @@ void AFopr_Domainwall_5din_eo<AFIELD>::LUdag_inv(AFIELD& v, const AFIELD& w)
 
     if (m_mw_mode == MWMode::DW && v.nin() == m_NinF * 2 && w.nin() == m_NinF * 2) {
       BridgeACC::mult_domainwall_5din_ee_LUdaginv_dirac_qdw(
-                    vp, wp, m_Ns, m_Nsize, m_alpha);
+                    vp, wp, m_Ns, m_Nsize, m_alpha_d, m_extended_precision);
+    } else if (m_mw_mode == MWMode::TW && v.nin() == m_NinF * 3 && w.nin() == m_NinF * 3) {
+      BridgeACC::mult_domainwall_5din_ee_LUdaginv_dirac_qtw(
+                    vp, wp, m_Ns, m_Nsize, m_alpha_d, m_extended_precision);
     } else {
       BridgeACC::mult_domainwall_5din_ee_LUdaginv_dirac(
                     vp, wp, m_Ns, m_Nsize,

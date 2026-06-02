@@ -14,8 +14,12 @@
 #include "bridgeACC_AField.h"
 
 typedef double real_t;
+typedef double4 real4;
+typedef double2 real2;
 #include "inline/mult_Wilson_cuda_inline-inc.h"
 //#include "src/mult_Wilson_cuda2-inc.h"
+
+#include "src/qtw_prof_timer.h"  // global scope: keep its STL out of namespace BridgeACC
 
 namespace BridgeACC {
 
@@ -31,6 +35,8 @@ namespace BridgeACC {
 #include "src/mult_Domainwall_5din_cuda_qdw-inc.h"
 #include "src/mult_Domainwall_5din_eo_cuda_qdw-inc.h"
 #include "src/mult_Domainwall_5din_eo_inv_cuda_qdw-inc.h"
+#include "src/mult_Domainwall_5din_eo_cuda_qtw-inc.h"
+#include "src/mult_Domainwall_5din_eo_inv_cuda_qtw-inc.h"
 
 }
 

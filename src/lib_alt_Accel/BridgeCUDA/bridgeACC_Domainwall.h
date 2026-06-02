@@ -21,6 +21,22 @@ void initDomainwallConstantMemory(
     float* e, float* f, float* dpinv,
     float* dm, float* b, float* c, int Ns);
 
+// Push float-float pairs from double coefficients into const_*_float (hi)
+// and const_*_ff_lo (lo). Used by extended_precision=true on a float base
+// so kernels can read coefficients at ~48-bit precision and do FP32-only
+// dw_add/dw_mul on them.
+void initDomainwallConstantMemoryFF(
+    double* e, double* f, double* dpinv,
+    double* dm, double* b, double* c, int Ns);
+
+// Triple-word (QTW) variant: pushes (hi, mid, lo) FP32 decomposition of each
+// double coefficient. const_*_float gets the hi word; const_*_tw_mid the mid;
+// const_*_tw_lo the lo. Together they encode each coefficient at ~72-bit
+// precision using only FP32 storage / fma arithmetic.
+void initDomainwallConstantMemoryTW(
+    double* e, double* f, double* dpinv,
+    double* dm, double* b, double* c, int Ns);
+
 void mult_domainwall_5din_5dir_dirac(
         double *vp, double *yp, double *wp,
         double mq, double M0, int Ns, double *b, double *c, int *Nsize);
@@ -269,57 +285,102 @@ void mult_domainwall_5din_hopb_qdw_dirac(
         double *vp, double *up, double *wp,
         int Ns, int *bc, int *Nsize, int *do_comm, int flag);
 
-// QDW EO Domain Wall kernels (double precision only)
+// QDW EO Domain Wall kernels (double overloads)
 void mult_domainwall_5din_ee_5dir_dirac_qdw(
         double *vp, double *wp, double mq, double M0, int Ns,
-        double *b, double *c, double alpha, int *Nsize);
+        double *b, double *c, double alpha, int *Nsize, bool ext);
 
 void mult_domainwall_5din_eo_5dir_dirac_qdw(
         double *yp, double *wp, double mq, double M0, int Ns,
-        double *b, double *c, double alpha, int *Nsize);
+        double *b, double *c, double alpha, int *Nsize, bool ext);
 
 void mult_domainwall_5din_ee_5dirdag_dirac_qdw(
         double *vp, double *wp, double mq, double M0, int Ns,
-        double *b, double *c, double alpha, int *Nsize);
+        double *b, double *c, double alpha, int *Nsize, bool ext);
 
 void mult_domainwall_5din_eo_5dirdag_dirac_qdw(
         double *vp, double *yp, double mq, double M0, int Ns,
-        double *b, double *c, double alpha, int *Nsize);
+        double *b, double *c, double alpha, int *Nsize, bool ext);
 
 void mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
-        double *vp, double *up, double *wp,
+        double *vp, double *up, double *up_lo, double *wp,
         int Ns, int *bc, int *Nsize, int *do_comm,
         int ieo, int jeo, int jgm5);
 
-// QDW EO Domain Wall kernels — float stubs (QDW is double-only)
+// QDW EO Domain Wall kernels — float overloads (vector is float-float;
+// scalar args stay double so extended_precision can promote coefficients).
 void mult_domainwall_5din_ee_5dir_dirac_qdw(
-        float *vp, float *wp, float mq, float M0, int Ns,
-        float *b, float *c, float alpha, int *Nsize);
+        float *vp, float *wp, double mq, double M0, int Ns,
+        float *b, float *c, double alpha, int *Nsize, bool ext);
 void mult_domainwall_5din_eo_5dir_dirac_qdw(
-        float *yp, float *wp, float mq, float M0, int Ns,
-        float *b, float *c, float alpha, int *Nsize);
+        float *yp, float *wp, double mq, double M0, int Ns,
+        float *b, float *c, double alpha, int *Nsize, bool ext);
 void mult_domainwall_5din_ee_5dirdag_dirac_qdw(
-        float *vp, float *wp, float mq, float M0, int Ns,
-        float *b, float *c, float alpha, int *Nsize);
+        float *vp, float *wp, double mq, double M0, int Ns,
+        float *b, float *c, double alpha, int *Nsize, bool ext);
 void mult_domainwall_5din_eo_5dirdag_dirac_qdw(
-        float *vp, float *yp, float mq, float M0, int Ns,
-        float *b, float *c, float alpha, int *Nsize);
+        float *vp, float *yp, double mq, double M0, int Ns,
+        float *b, float *c, double alpha, int *Nsize, bool ext);
 void mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
-        float *vp, float *up, float *wp,
+        float *vp, float *up, float *up_lo, float *wp,
         int Ns, int *bc, int *Nsize, int *do_comm,
         int ieo, int jeo, int jgm5);
 
-// QDW LU inverse (double only)
+// QDW LU inverse (alpha promotable to double via extended_precision)
 void mult_domainwall_5din_ee_LUinv_dirac_qdw(
-        double* vp, double* wp, int Ns, int *Nsize, double alpha);
+        double* vp, double* wp, int Ns, int *Nsize, double alpha, bool ext);
 void mult_domainwall_5din_ee_LUdaginv_dirac_qdw(
-        double* vp, double* wp, int Ns, int *Nsize, double alpha);
+        double* vp, double* wp, int Ns, int *Nsize, double alpha, bool ext);
 
-// QDW LU inverse — float stubs
 void mult_domainwall_5din_ee_LUinv_dirac_qdw(
-        float* vp, float* wp, int Ns, int *Nsize, float alpha);
+        float* vp, float* wp, int Ns, int *Nsize, double alpha, bool ext);
 void mult_domainwall_5din_ee_LUdaginv_dirac_qdw(
-        float* vp, float* wp, int Ns, int *Nsize, float alpha);
+        float* vp, float* wp, int Ns, int *Nsize, double alpha, bool ext);
+
+// QTW (triple-word, 6 reals/cplx) EO Domain Wall kernels.
+// `ext` is reserved for future TW gauge-link toggling; today the FP-gauge
+// path is used (up_mid==up_lo==nullptr in hopb).
+void mult_domainwall_5din_ee_5dir_dirac_qtw(
+        double *vp, double *wp, double mq, double M0, int Ns,
+        double *b, double *c, double alpha, int *Nsize, bool ext);
+void mult_domainwall_5din_eo_5dir_dirac_qtw(
+        double *yp, double *wp, double mq, double M0, int Ns,
+        double *b, double *c, double alpha, int *Nsize, bool ext);
+void mult_domainwall_5din_ee_5dirdag_dirac_qtw(
+        double *vp, double *wp, double mq, double M0, int Ns,
+        double *b, double *c, double alpha, int *Nsize, bool ext);
+void mult_domainwall_5din_eo_5dirdag_dirac_qtw(
+        double *vp, double *yp, double mq, double M0, int Ns,
+        double *b, double *c, double alpha, int *Nsize, bool ext);
+void mult_domainwall_5din_eo_hopb_qtw_dirac_5d(
+        double *vp, double *up, double *up_mid, double *up_lo, double *wp,
+        int Ns, int *bc, int *Nsize, int *do_comm,
+        int ieo, int jeo, int jgm5);
+void mult_domainwall_5din_ee_LUinv_dirac_qtw(
+        double *vp, double *wp, int Ns, int *Nsize, double alpha, bool ext);
+void mult_domainwall_5din_ee_LUdaginv_dirac_qtw(
+        double *vp, double *wp, int Ns, int *Nsize, double alpha, bool ext);
+
+void mult_domainwall_5din_ee_5dir_dirac_qtw(
+        float *vp, float *wp, double mq, double M0, int Ns,
+        float *b, float *c, double alpha, int *Nsize, bool ext);
+void mult_domainwall_5din_eo_5dir_dirac_qtw(
+        float *yp, float *wp, double mq, double M0, int Ns,
+        float *b, float *c, double alpha, int *Nsize, bool ext);
+void mult_domainwall_5din_ee_5dirdag_dirac_qtw(
+        float *vp, float *wp, double mq, double M0, int Ns,
+        float *b, float *c, double alpha, int *Nsize, bool ext);
+void mult_domainwall_5din_eo_5dirdag_dirac_qtw(
+        float *vp, float *yp, double mq, double M0, int Ns,
+        float *b, float *c, double alpha, int *Nsize, bool ext);
+void mult_domainwall_5din_eo_hopb_qtw_dirac_5d(
+        float *vp, float *up, float *up_mid, float *up_lo, float *wp,
+        int Ns, int *bc, int *Nsize, int *do_comm,
+        int ieo, int jeo, int jgm5);
+void mult_domainwall_5din_ee_LUinv_dirac_qtw(
+        float *vp, float *wp, int Ns, int *Nsize, double alpha, bool ext);
+void mult_domainwall_5din_ee_LUdaginv_dirac_qtw(
+        float *vp, float *wp, int Ns, int *Nsize, double alpha, bool ext);
 
 // anchor1
   void set_block_config(double* u, int* Nsize,

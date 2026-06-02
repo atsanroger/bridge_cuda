@@ -372,40 +372,104 @@ __global__ void axpy_kernel_opt(real_t *v, real_t a, real_t *w, int nin)
 __global__ void axpy_kernel_qdw(real_t *v, real_t a, real_t *w, int nin)
 {
   const int site = blockIdx.x * blockDim.x + threadIdx.x;
-  double a_d = (double)a;
 
   const int nin4 = nin / 4;
   for (int in4 = 0; in4 < nin4; ++in4)
   {
     int base = 4 * IDX2(nin4, in4, site);
-    double wh_re = (double)w[base + 0];
-    double wh_im = (double)w[base + 1];
-    double wl_re = (double)w[base + 2];
-    double wl_im = (double)w[base + 3];
+    real_t wh_re = w[base + 0];
+    real_t wh_im = w[base + 1];
+    real_t wl_re = w[base + 2];
+    real_t wl_im = w[base + 3];
 
-    double vh_re = (double)v[base + 0];
-    double vh_im = (double)v[base + 1];
-    double vl_re = (double)v[base + 2];
-    double vl_im = (double)v[base + 3];
+    real_t vh_re = v[base + 0];
+    real_t vh_im = v[base + 1];
+    real_t vl_re = v[base + 2];
+    real_t vl_im = v[base + 3];
 
-    double th_re, tl_re;
-    dw_scal(a_d, wh_re, wl_re, th_re, tl_re);
-    double th_im, tl_im;
-    dw_scal(a_d, wh_im, wl_im, th_im, tl_im);
+    real_t th_re, tl_re;
+    dw_scal(a, wh_re, wl_re, th_re, tl_re);
+    real_t th_im, tl_im;
+    dw_scal(a, wh_im, wl_im, th_im, tl_im);
 
-    double out_h_re, out_l_re;
+    real_t out_h_re, out_l_re;
     dw_add(vh_re, vl_re, th_re, tl_re, out_h_re, out_l_re);
-    double out_h_im, out_l_im;
+    real_t out_h_im, out_l_im;
     dw_add(vh_im, vl_im, th_im, tl_im, out_h_im, out_l_im);
 
-    v[base + 0] = (real_t)out_h_re;
-    v[base + 1] = (real_t)out_h_im;
-    v[base + 2] = (real_t)out_l_re;
-    v[base + 3] = (real_t)out_l_im;
+    v[base + 0] = out_h_re;
+    v[base + 1] = out_h_im;
+    v[base + 2] = out_l_re;
+    v[base + 3] = out_l_im;
   }
 }
 
 //====================================================================
+// DD-pair axpy: v = a*w + v  where a = (a_h, a_l) is a float-pair scalar.
+// Uses dw_mul on the scalar-pair × vector-pair so all 48-bit precision in
+// the scalar is preserved through the multiplication.
+__global__ void axpy_kernel_qdw_pair(real_t *v, real_t a_h, real_t a_l, real_t *w, int nin)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+
+  const int nin4 = nin / 4;
+  for (int in4 = 0; in4 < nin4; ++in4)
+  {
+    int base = 4 * IDX2(nin4, in4, site);
+    real_t wh_re = w[base + 0];
+    real_t wh_im = w[base + 1];
+    real_t wl_re = w[base + 2];
+    real_t wl_im = w[base + 3];
+
+    real_t vh_re = v[base + 0];
+    real_t vh_im = v[base + 1];
+    real_t vl_re = v[base + 2];
+    real_t vl_im = v[base + 3];
+
+    // (a_h,a_l) * (w_hi,w_lo) — full DD multiply
+    real_t th_re, tl_re;
+    dw_mul(a_h, a_l, wh_re, wl_re, th_re, tl_re);
+    real_t th_im, tl_im;
+    dw_mul(a_h, a_l, wh_im, wl_im, th_im, tl_im);
+
+    real_t out_h_re, out_l_re;
+    dw_add(vh_re, vl_re, th_re, tl_re, out_h_re, out_l_re);
+    real_t out_h_im, out_l_im;
+    dw_add(vh_im, vl_im, th_im, tl_im, out_h_im, out_l_im);
+
+    v[base + 0] = out_h_re;
+    v[base + 1] = out_h_im;
+    v[base + 2] = out_l_re;
+    v[base + 3] = out_l_im;
+  }
+}
+
+void axpy_pair(real_t *y, int nv1, real_t a_h, real_t a_l,
+               real_t *x, int nv2, int nin, int nvol, int mode)
+{
+  real_t *y_dev = (real_t *)dev_ptr(y);
+  real_t *x_dev = (real_t *)dev_ptr(x);
+
+  int nth = VECTOR_LENGTH;
+  int nbl = nvol / nth;
+
+  if (mode == 1) {
+    axpy_kernel_qdw_pair<<<nbl, nth>>>(&y_dev[nv1], a_h, a_l, &x_dev[nv2], nin);
+  } else {
+    // Non-DW path collapses the pair into a single float.
+    real_t a = a_h + a_l;
+    size_t sharedMemSize = nth * NWP * sizeof(real_t);
+    axpy_kernel_opt<<<nbl, nth, sharedMemSize>>>(&y_dev[nv1], a, &x_dev[nv2], nin);
+  }
+
+  cudaDeviceSynchronize();
+}
+
+//====================================================================
+// Forward declarations: the TW (mode==2) kernels are defined later in this TU.
+__global__ void axpy_kernel_tw3(real_t *v, real_t a, real_t *w, int nin);
+__global__ void aypx_kernel_tw3(real_t a, real_t *v, real_t *w, int nin);
+
 void axpy(real_t *y, int nv1, real_t a,
           real_t *x, int nv2, int nin, int nvol, int mode)
 {
@@ -417,6 +481,9 @@ void axpy(real_t *y, int nv1, real_t a,
 
   if (mode == 1) {
     axpy_kernel_qdw<<<nbl, nth>>>(&y_dev[nv1], a, &x_dev[nv2], nin);
+  } else if (mode == 2) {
+    // TW: genuine triple-word a*x + y (was silently single-float before).
+    axpy_kernel_tw3<<<nbl, nth>>>(&y_dev[nv1], a, &x_dev[nv2], nin);
   } else {
     size_t sharedMemSize = nth * NWP * sizeof(real_t);
     axpy_kernel_opt<<<nbl, nth, sharedMemSize>>>(&y_dev[nv1], a, &x_dev[nv2], nin);
@@ -499,37 +566,92 @@ __global__ void aypx_kernel(real_t a, real_t *v, real_t *w, int nin)
 __global__ void aypx_kernel_qdw(real_t a, real_t *v, real_t *w, int nin)
 {
   const int site = blockIdx.x * blockDim.x + threadIdx.x;
-  double a_d = (double)a;
 
   const int nin4 = nin / 4;
   for (int in4 = 0; in4 < nin4; ++in4)
   {
     int base = 4 * IDX2(nin4, in4, site);
-    double vh_re = (double)v[base + 0];
-    double vh_im = (double)v[base + 1];
-    double vl_re = (double)v[base + 2];
-    double vl_im = (double)v[base + 3];
+    real_t vh_re = v[base + 0];
+    real_t vh_im = v[base + 1];
+    real_t vl_re = v[base + 2];
+    real_t vl_im = v[base + 3];
 
-    double wh_re = (double)w[base + 0];
-    double wh_im = (double)w[base + 1];
-    double wl_re = (double)w[base + 2];
-    double wl_im = (double)w[base + 3];
+    real_t wh_re = w[base + 0];
+    real_t wh_im = w[base + 1];
+    real_t wl_re = w[base + 2];
+    real_t wl_im = w[base + 3];
 
-    double th_re, tl_re;
-    dw_scal(a_d, vh_re, vl_re, th_re, tl_re);
-    double th_im, tl_im;
-    dw_scal(a_d, vh_im, vl_im, th_im, tl_im);
+    real_t th_re, tl_re;
+    dw_scal(a, vh_re, vl_re, th_re, tl_re);
+    real_t th_im, tl_im;
+    dw_scal(a, vh_im, vl_im, th_im, tl_im);
 
-    double out_h_re, out_l_re;
+    real_t out_h_re, out_l_re;
     dw_add(wh_re, wl_re, th_re, tl_re, out_h_re, out_l_re);
-    double out_h_im, out_l_im;
+    real_t out_h_im, out_l_im;
     dw_add(wh_im, wl_im, th_im, tl_im, out_h_im, out_l_im);
 
-    v[base + 0] = (real_t)out_h_re;
-    v[base + 1] = (real_t)out_h_im;
-    v[base + 2] = (real_t)out_l_re;
-    v[base + 3] = (real_t)out_l_im;
+    v[base + 0] = out_h_re;
+    v[base + 1] = out_h_im;
+    v[base + 2] = out_l_re;
+    v[base + 3] = out_l_im;
   }
+}
+
+//====================================================================
+// DD-pair aypx: v = a*v + w, a = (a_h, a_l) float-pair scalar.
+__global__ void aypx_kernel_qdw_pair(real_t a_h, real_t a_l, real_t *v, real_t *w, int nin)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+
+  const int nin4 = nin / 4;
+  for (int in4 = 0; in4 < nin4; ++in4)
+  {
+    int base = 4 * IDX2(nin4, in4, site);
+    real_t vh_re = v[base + 0];
+    real_t vh_im = v[base + 1];
+    real_t vl_re = v[base + 2];
+    real_t vl_im = v[base + 3];
+
+    real_t wh_re = w[base + 0];
+    real_t wh_im = w[base + 1];
+    real_t wl_re = w[base + 2];
+    real_t wl_im = w[base + 3];
+
+    real_t th_re, tl_re;
+    dw_mul(a_h, a_l, vh_re, vl_re, th_re, tl_re);
+    real_t th_im, tl_im;
+    dw_mul(a_h, a_l, vh_im, vl_im, th_im, tl_im);
+
+    real_t out_h_re, out_l_re;
+    dw_add(wh_re, wl_re, th_re, tl_re, out_h_re, out_l_re);
+    real_t out_h_im, out_l_im;
+    dw_add(wh_im, wl_im, th_im, tl_im, out_h_im, out_l_im);
+
+    v[base + 0] = out_h_re;
+    v[base + 1] = out_h_im;
+    v[base + 2] = out_l_re;
+    v[base + 3] = out_l_im;
+  }
+}
+
+void aypx_pair(real_t a_h, real_t a_l, real_t *y, int nv1,
+               real_t *x, int nv2, int nin, int nvol, int mode)
+{
+  real_t *y_dev = (real_t *)dev_ptr(y);
+  real_t *x_dev = (real_t *)dev_ptr(x);
+
+  int nth = VECTOR_LENGTH;
+  int nbl = nvol / nth;
+
+  if (mode == 1) {
+    aypx_kernel_qdw_pair<<<nbl, nth>>>(a_h, a_l, &y_dev[nv1], &x_dev[nv2], nin);
+  } else {
+    real_t a = a_h + a_l;
+    aypx_kernel<<<nbl, nth>>>(a, &y_dev[nv1], &x_dev[nv2], nin);
+  }
+
+  cudaDeviceSynchronize();
 }
 
 //====================================================================
@@ -544,6 +666,9 @@ void aypx(real_t a, real_t *y, int nv1,
 
   if (mode == 1) {
     aypx_kernel_qdw<<<nbl, nth>>>(a, &y_dev[nv1], &x_dev[nv2], nin);
+  } else if (mode == 2) {
+    // TW: genuine triple-word a*y + x (was silently single-float before).
+    aypx_kernel_tw3<<<nbl, nth>>>(a, &y_dev[nv1], &x_dev[nv2], nin);
   } else {
     aypx_kernel<<<nbl, nth>>>(a, &y_dev[nv1], &x_dev[nv2], nin);
   }
@@ -576,39 +701,37 @@ __global__ void aypx_kernel(real_t ar, real_t ai, real_t *v,
 __global__ void aypx_kernel_qdw(real_t ar, real_t ai, real_t *v, real_t *w, int nin)
 {
   const int site = blockIdx.x * blockDim.x + threadIdx.x;
-  double ar_d = (double)ar;
-  double ai_d = (double)ai;
 
   for (int in4 = 0; in4 < nin / 4; ++in4)
   {
-    double vh_re = (double)v[IDX2(nin, 4 * in4 + 0, site)];
-    double vh_im = (double)v[IDX2(nin, 4 * in4 + 1, site)];
-    double vl_re = (double)v[IDX2(nin, 4 * in4 + 2, site)];
-    double vl_im = (double)v[IDX2(nin, 4 * in4 + 3, site)];
-    
-    double wh_re = (double)w[IDX2(nin, 4 * in4 + 0, site)];
-    double wh_im = (double)w[IDX2(nin, 4 * in4 + 1, site)];
-    double wl_re = (double)w[IDX2(nin, 4 * in4 + 2, site)];
-    double wl_im = (double)w[IDX2(nin, 4 * in4 + 3, site)];
+    real_t vh_re = v[IDX2(nin, 4 * in4 + 0, site)];
+    real_t vh_im = v[IDX2(nin, 4 * in4 + 1, site)];
+    real_t vl_re = v[IDX2(nin, 4 * in4 + 2, site)];
+    real_t vl_im = v[IDX2(nin, 4 * in4 + 3, site)];
+
+    real_t wh_re = w[IDX2(nin, 4 * in4 + 0, site)];
+    real_t wh_im = w[IDX2(nin, 4 * in4 + 1, site)];
+    real_t wl_re = w[IDX2(nin, 4 * in4 + 2, site)];
+    real_t wl_im = w[IDX2(nin, 4 * in4 + 3, site)];
 
     // real part: ar*vr - ai*vi
-    double p1_r, e1_r; dw_scal(ar_d, vh_re, vl_re, p1_r, e1_r);
-    double p2_r, e2_r; dw_scal(ai_d, vh_im, vl_im, p2_r, e2_r);
-    double r_h, r_l; dw_add(p1_r, e1_r, -p2_r, -e2_r, r_h, r_l);
-    
+    real_t p1_r, e1_r; dw_scal(ar, vh_re, vl_re, p1_r, e1_r);
+    real_t p2_r, e2_r; dw_scal(ai, vh_im, vl_im, p2_r, e2_r);
+    real_t r_h, r_l;   dw_add(p1_r, e1_r, -p2_r, -e2_r, r_h, r_l);
+
     // imag part: ai*vr + ar*vi
-    double p1_i, e1_i; dw_scal(ai_d, vh_re, vl_re, p1_i, e1_i);
-    double p2_i, e2_i; dw_scal(ar_d, vh_im, vl_im, p2_i, e2_i);
-    double i_h, i_l; dw_add(p1_i, e1_i, p2_i, e2_i, i_h, i_l);
-    
+    real_t p1_i, e1_i; dw_scal(ai, vh_re, vl_re, p1_i, e1_i);
+    real_t p2_i, e2_i; dw_scal(ar, vh_im, vl_im, p2_i, e2_i);
+    real_t i_h, i_l;   dw_add(p1_i, e1_i, p2_i, e2_i, i_h, i_l);
+
     // add w: v = a*v + w
-    double out_h_re, out_l_re; dw_add(wh_re, wl_re, r_h, r_l, out_h_re, out_l_re);
-    double out_h_im, out_l_im; dw_add(wh_im, wl_im, i_h, i_l, out_h_im, out_l_im);
-    
-    v[IDX2(nin, 4 * in4 + 0, site)] = (real_t)out_h_re;
-    v[IDX2(nin, 4 * in4 + 1, site)] = (real_t)out_h_im;
-    v[IDX2(nin, 4 * in4 + 2, site)] = (real_t)out_l_re;
-    v[IDX2(nin, 4 * in4 + 3, site)] = (real_t)out_l_im;
+    real_t out_h_re, out_l_re; dw_add(wh_re, wl_re, r_h, r_l, out_h_re, out_l_re);
+    real_t out_h_im, out_l_im; dw_add(wh_im, wl_im, i_h, i_l, out_h_im, out_l_im);
+
+    v[IDX2(nin, 4 * in4 + 0, site)] = out_h_re;
+    v[IDX2(nin, 4 * in4 + 1, site)] = out_h_im;
+    v[IDX2(nin, 4 * in4 + 2, site)] = out_l_re;
+    v[IDX2(nin, 4 * in4 + 3, site)] = out_l_im;
   }
 }
 
@@ -873,37 +996,35 @@ __global__ void norm2_reduce_fused_kernel_qdw(real_t *red,
       for (int in4 = 0; in4 < nin4; ++in4)
       {
         int base = 4 * IDX2(nin4, in4, ist2);
-        double h_re = (double)v1[base + 0];
-        double h_im = (double)v1[base + 1];
-        double l_re = (double)v1[base + 2];
-        double l_im = (double)v1[base + 3];
-        
+        real_t h_re = v1[base + 0];
+        real_t h_im = v1[base + 1];
+        real_t l_re = v1[base + 2];
+        real_t l_im = v1[base + 3];
+
         // Exact real square
-        double p1, e1;
+        real_t p1, e1;
         TwoProd(h_re, h_re, p1, e1);
-        double lo = 2.0 * h_re * l_re + e1;
-        
-        double dh, dl;
-        double sum_d = (double)sum;
-        TwoSum(sum_d, p1, dh, dl);
-        double temp_sum = dh;
-        double temp_comp = (double)comp + dl + lo;
-        double sum_out, comp_out;
+        real_t lo = real_t(2.0) * h_re * l_re + e1;
+
+        real_t dh, dl;
+        TwoSum(sum, p1, dh, dl);
+        real_t temp_sum  = dh;
+        real_t temp_comp = comp + dl + lo;
+        real_t sum_out, comp_out;
         TwoSum(temp_sum, temp_comp, sum_out, comp_out);
-        sum = (real_t)sum_out;
-        comp = (real_t)comp_out;
-        
+        sum  = sum_out;
+        comp = comp_out;
+
         // Exact imaginary square
         TwoProd(h_im, h_im, p1, e1);
-        lo = 2.0 * h_im * l_im + e1;
-        
-        sum_d = (double)sum;
-        TwoSum(sum_d, p1, dh, dl);
-        temp_sum = dh;
-        temp_comp = (double)comp + dl + lo;
+        lo = real_t(2.0) * h_im * l_im + e1;
+
+        TwoSum(sum, p1, dh, dl);
+        temp_sum  = dh;
+        temp_comp = comp + dl + lo;
         TwoSum(temp_sum, temp_comp, sum_out, comp_out);
-        sum = (real_t)sum_out;
-        comp = (real_t)comp_out;
+        sum  = sum_out;
+        comp = comp_out;
       }
     }
   }
@@ -1086,6 +1207,61 @@ __global__ void reduce_kernel_multiblocks_qtw(real_t *red, int n)
 }
 
 //====================================================================
+// QTW/QDW final-pass reducer that preserves the dual-word pair.
+// Writes hi to red[0] and lo to red[1] (instead of collapsing). Used by the
+// _pair host wrappers so the CG layer can carry DD scalars without collapsing
+// to single real_t at the device→host boundary.
+__global__ void reduce_kernel_multiblocks_qtw_pair(real_t *red, int n)
+{
+  extern __shared__ real_t sdata[];
+  real_t *sh_hi = sdata;
+  real_t *sh_lo = sdata + blockDim.x;
+
+  const int tid = threadIdx.x;
+  const int gridSize = blockDim.x * gridDim.x;
+
+  real_t sum_h = 0, sum_l = 0;
+
+  for (int i = tid; i < n; i += gridSize)
+  {
+    real_t ah = red[i];
+    real_t al = red[i + MAX_THREAD_PER_BLOCK];
+    real_t rh, t;
+    TwoSum_r(sum_h, ah, rh, t);
+    sum_h = rh;
+    sum_l = sum_l + al + t;
+  }
+
+  real_t nh, nl;
+  TwoSum_r(sum_h, sum_l, nh, nl);
+  sh_hi[tid] = nh;
+  sh_lo[tid] = nl;
+  __syncthreads();
+
+  for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1)
+  {
+    if (tid < s)
+    {
+      real_t ah = sh_hi[tid],   al = sh_lo[tid];
+      real_t bh = sh_hi[tid+s], bl = sh_lo[tid+s];
+      real_t rh, t;
+      TwoSum_r(ah, bh, rh, t);
+      sh_hi[tid] = rh;
+      sh_lo[tid] = al + bl + t;
+    }
+    __syncthreads();
+  }
+
+  if (tid == 0)
+  {
+    real_t nh2, nl2;
+    TwoSum_r(sh_hi[0], sh_lo[0], nh2, nl2);
+    red[0] = nh2;
+    red[1] = nl2;
+  }
+}
+
+//====================================================================
 real_t norm2(real_t *x1, real_t *red1, int nin, int nvol, int nex, int mode)
 {
   real_t *x1_dev = (real_t *)dev_ptr(x1);
@@ -1119,6 +1295,43 @@ real_t norm2(real_t *x1, real_t *red1, int nin, int nvol, int nex, int mode)
                    cudaMemcpyDeviceToHost));
 
   return a;
+}
+
+//====================================================================
+// DD-pair norm2: returns (h, l) preserving the dual-word accumulator. Only
+// meaningful for mode 1/2; for mode 0 we fall back to the single-real_t path
+// and return l=0.
+void norm2_pair(real_t *h, real_t *l, real_t *x1, real_t *red1,
+                int nin, int nvol, int nex, int mode)
+{
+  real_t *x1_dev   = (real_t *)dev_ptr(x1);
+  real_t *red1_dev = (real_t *)dev_ptr(red1);
+
+  int threadsPerBlock = VECTOR_LENGTH;
+  int blocksPerGrid   = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
+  size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
+
+  if (mode == 1) {
+    norm2_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks_qtw_pair<<<1, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
+  } else if (mode == 2) {
+    norm2_reduce_fused_kernel_qtw<<<blocksPerGrid, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks_qtw_pair<<<1, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
+  } else {
+    norm2_reduce_fused_kernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks<<<1, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
+  }
+
+  cudaDeviceSynchronize();
+
+  real_t pair[2] = {0, 0};
+  if (mode == 1 || mode == 2) {
+    CHECK(cudaMemcpy(pair, &red1_dev[0], 2 * sizeof(real_t), cudaMemcpyDeviceToHost));
+  } else {
+    CHECK(cudaMemcpy(&pair[0], &red1_dev[0], sizeof(real_t), cudaMemcpyDeviceToHost));
+  }
+  *h = pair[0];
+  *l = pair[1];
 }
 
 //====================================================================
@@ -1221,35 +1434,34 @@ __global__ void dot_reduce_fused_kernel_qdw(real_t *red,
       for (int in4 = 0; in4 < nin4; ++in4)
       {
         int base = 4 * IDX2(nin4, in4, ist2);
-        double v1h_re = (double)v1[base + 0];
-        double v1h_im = (double)v1[base + 1];
-        double v1l_re = (double)v1[base + 2];
-        double v1l_im = (double)v1[base + 3];
+        real_t v1h_re = v1[base + 0];
+        real_t v1h_im = v1[base + 1];
+        real_t v1l_re = v1[base + 2];
+        real_t v1l_im = v1[base + 3];
 
-        double v2h_re = (double)v2[base + 0];
-        double v2h_im = (double)v2[base + 1];
-        double v2l_re = (double)v2[base + 2];
-        double v2l_im = (double)v2[base + 3];
+        real_t v2h_re = v2[base + 0];
+        real_t v2h_im = v2[base + 1];
+        real_t v2l_re = v2[base + 2];
+        real_t v2l_im = v2[base + 3];
 
         // Real dot product part: v1.re * v2.re + v1.im * v2.im
-        double p1_r, e1_r, p2_r, e2_r;
+        real_t p1_r, e1_r, p2_r, e2_r;
         TwoProd(v1h_re, v2h_re, p1_r, e1_r);
         TwoProd(v1h_im, v2h_im, p2_r, e2_r);
-        
-        double dh_r, dl_r;
+
+        real_t dh_r, dl_r;
         TwoSum(p1_r, p2_r, dh_r, dl_r);
-        
-        double lo_r = v1h_re * v2l_re + v1l_re * v2h_re + v1h_im * v2l_im + v1l_im * v2h_im + e1_r + e2_r + dl_r;
-        
-        double dh, dl;
-        double at_d = (double)at;
-        TwoSum(at_d, dh_r, dh, dl);
-        double temp_sum = dh;
-        double temp_comp = (double)comp + dl + lo_r;
-        double at_out, comp_out;
+
+        real_t lo_r = v1h_re * v2l_re + v1l_re * v2h_re + v1h_im * v2l_im + v1l_im * v2h_im + e1_r + e2_r + dl_r;
+
+        real_t dh, dl;
+        TwoSum(at, dh_r, dh, dl);
+        real_t temp_sum  = dh;
+        real_t temp_comp = comp + dl + lo_r;
+        real_t at_out, comp_out;
         TwoSum(temp_sum, temp_comp, at_out, comp_out);
-        at = (real_t)at_out;
-        comp = (real_t)comp_out;
+        at   = at_out;
+        comp = comp_out;
       }
     }
   }
@@ -1424,6 +1636,42 @@ real_t dot(real_t *x1, real_t *x2, real_t *red1,
 }
 
 //====================================================================
+// DD-pair dot: returns (h, l) preserving the dual-word accumulator.
+void dot_pair(real_t *h, real_t *l, real_t *x1, real_t *x2, real_t *red1,
+              int nin, int nvol, int nex, int mode)
+{
+  real_t *x1_dev   = (real_t *)dev_ptr(x1);
+  real_t *x2_dev   = (real_t *)dev_ptr(x2);
+  real_t *red1_dev = (real_t *)dev_ptr(red1);
+
+  int threadsPerBlock = VECTOR_LENGTH;
+  int blocksPerGrid   = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
+  size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
+
+  if (mode == 1) {
+    dot_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, x1_dev, x2_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks_qtw_pair<<<1, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
+  } else if (mode == 2) {
+    dot_reduce_fused_kernel_qtw<<<blocksPerGrid, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, x1_dev, x2_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks_qtw_pair<<<1, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
+  } else {
+    dot_reduce_fused_kernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize>>>(red1_dev, x1_dev, x2_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks<<<1, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
+  }
+
+  cudaDeviceSynchronize();
+
+  real_t pair[2] = {0, 0};
+  if (mode == 1 || mode == 2) {
+    CHECK(cudaMemcpy(pair, &red1_dev[0], 2 * sizeof(real_t), cudaMemcpyDeviceToHost));
+  } else {
+    CHECK(cudaMemcpy(&pair[0], &red1_dev[0], sizeof(real_t), cudaMemcpyDeviceToHost));
+  }
+  *h = pair[0];
+  *l = pair[1];
+}
+
+//====================================================================
 __global__ void dotc_kernel(real_t *red1, real_t *red2,
                             real_t *v1, real_t *v2,
                             int nin, int nvol, int nex)
@@ -1566,54 +1814,52 @@ __global__ void dotc_reduce_fused_kernel_qdw(real_t *red1, real_t *red2,
       for (int in4 = 0; in4 < nin4; ++in4)
       {
         int base = 4 * IDX2(nin4, in4, ist2);
-        double v1h_re = (double)v1[base + 0];
-        double v1h_im = (double)v1[base + 1];
-        double v1l_re = (double)v1[base + 2];
-        double v1l_im = (double)v1[base + 3];
+        real_t v1h_re = v1[base + 0];
+        real_t v1h_im = v1[base + 1];
+        real_t v1l_re = v1[base + 2];
+        real_t v1l_im = v1[base + 3];
 
-        double v2h_re = (double)v2[base + 0];
-        double v2h_im = (double)v2[base + 1];
-        double v2l_re = (double)v2[base + 2];
-        double v2l_im = (double)v2[base + 3];
+        real_t v2h_re = v2[base + 0];
+        real_t v2h_im = v2[base + 1];
+        real_t v2l_re = v2[base + 2];
+        real_t v2l_im = v2[base + 3];
 
         // Real part: v1.re * v2.re + v1.im * v2.im
-        double p1_r, e1_r, p2_r, e2_r;
+        real_t p1_r, e1_r, p2_r, e2_r;
         TwoProd(v1h_re, v2h_re, p1_r, e1_r);
         TwoProd(v1h_im, v2h_im, p2_r, e2_r);
-        
-        double dh_r, dl_r;
+
+        real_t dh_r, dl_r;
         TwoSum(p1_r, p2_r, dh_r, dl_r);
-        
-        double lo_r = v1h_re * v2l_re + v1l_re * v2h_re + v1h_im * v2l_im + v1l_im * v2h_im + e1_r + e2_r + dl_r;
-        
-        double dh, dl;
-        double ar_d = (double)ar;
-        TwoSum(ar_d, dh_r, dh, dl);
-        double temp_sum_r = dh;
-        double temp_comp_r = (double)comp_r + dl + lo_r;
-        double ar_out, comp_r_out;
+
+        real_t lo_r = v1h_re * v2l_re + v1l_re * v2h_re + v1h_im * v2l_im + v1l_im * v2h_im + e1_r + e2_r + dl_r;
+
+        real_t dh, dl;
+        TwoSum(ar, dh_r, dh, dl);
+        real_t temp_sum_r  = dh;
+        real_t temp_comp_r = comp_r + dl + lo_r;
+        real_t ar_out, comp_r_out;
         TwoSum(temp_sum_r, temp_comp_r, ar_out, comp_r_out);
-        ar = (real_t)ar_out;
-        comp_r = (real_t)comp_r_out;
+        ar     = ar_out;
+        comp_r = comp_r_out;
 
         // Imag part: v1.re * v2.im - v1.im * v2.re
-        double p1_i, e1_i, p2_i, e2_i;
+        real_t p1_i, e1_i, p2_i, e2_i;
         TwoProd(v1h_re, v2h_im, p1_i, e1_i);
         TwoProd(-v1h_im, v2h_re, p2_i, e2_i);
-        
-        double dh_i, dl_i;
+
+        real_t dh_i, dl_i;
         TwoSum(p1_i, p2_i, dh_i, dl_i);
-        
-        double lo_i = v1h_re * v2l_im + v1l_re * v2h_im - v1h_im * v2l_re - v1l_im * v2h_re + e1_i + e2_i + dl_i;
-        
-        double ai_d = (double)ai;
-        TwoSum(ai_d, dh_i, dh, dl);
-        double temp_sum_i = dh;
-        double temp_comp_i = (double)comp_i + dl + lo_i;
-        double ai_out, comp_i_out;
+
+        real_t lo_i = v1h_re * v2l_im + v1l_re * v2h_im - v1h_im * v2l_re - v1l_im * v2h_re + e1_i + e2_i + dl_i;
+
+        TwoSum(ai, dh_i, dh, dl);
+        real_t temp_sum_i  = dh;
+        real_t temp_comp_i = comp_i + dl + lo_i;
+        real_t ai_out, comp_i_out;
         TwoSum(temp_sum_i, temp_comp_i, ai_out, comp_i_out);
-        ai = (real_t)ai_out;
-        comp_i = (real_t)comp_i_out;
+        ai     = ai_out;
+        comp_i = comp_i_out;
       }
     }
   }
@@ -1839,6 +2085,659 @@ void dotc(real_t *ar, real_t *ai, real_t *x1, real_t *x2,
 }
 
 //====================================================================
+// DD-pair dotc: returns (ar_h, ar_l), (ai_h, ai_l).
+void dotc_pair(real_t *ar_h, real_t *ar_l, real_t *ai_h, real_t *ai_l,
+               real_t *x1, real_t *x2,
+               real_t *red1, real_t *red2,
+               int nin, int nvol, int nex, int mode)
+{
+  real_t *x1_dev   = (real_t *)dev_ptr(x1);
+  real_t *x2_dev   = (real_t *)dev_ptr(x2);
+  real_t *red1_dev = (real_t *)dev_ptr(red1);
+  real_t *red2_dev = (real_t *)dev_ptr(red2);
+
+  int threadsPerBlock = VECTOR_LENGTH;
+  int blocksPerGrid   = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
+  size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
+
+  if (mode == 1) {
+    dotc_reduce_fused_kernel_qdw<<<blocksPerGrid, threadsPerBlock, 4 * sharedMemSize>>>(red1_dev, red2_dev, x1_dev, x2_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks_qtw_pair<<<1, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
+    reduce_kernel_multiblocks_qtw_pair<<<1, threadsPerBlock, 2*sharedMemSize>>>(red2_dev, blocksPerGrid);
+  } else if (mode == 2) {
+    dotc_reduce_fused_kernel_qtw<<<blocksPerGrid, threadsPerBlock, 4 * sharedMemSize>>>(red1_dev, red2_dev, x1_dev, x2_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks_qtw_pair<<<1, threadsPerBlock, 2*sharedMemSize>>>(red1_dev, blocksPerGrid);
+    reduce_kernel_multiblocks_qtw_pair<<<1, threadsPerBlock, 2*sharedMemSize>>>(red2_dev, blocksPerGrid);
+  } else {
+    dotc_reduce_fused_kernel<<<blocksPerGrid, threadsPerBlock, 2 * sharedMemSize>>>(red1_dev, red2_dev, x1_dev, x2_dev, nin, nvol, nex);
+    reduce_kernel_multiblocks<<<1, threadsPerBlock, sharedMemSize>>>(red1_dev, blocksPerGrid);
+    reduce_kernel_multiblocks<<<1, threadsPerBlock, sharedMemSize>>>(red2_dev, blocksPerGrid);
+  }
+
+  cudaDeviceSynchronize();
+
+  real_t r1[2] = {0, 0}, r2[2] = {0, 0};
+  if (mode == 1 || mode == 2) {
+    CHECK(cudaMemcpy(r1, &red1_dev[0], 2 * sizeof(real_t), cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(r2, &red2_dev[0], 2 * sizeof(real_t), cudaMemcpyDeviceToHost));
+  } else {
+    CHECK(cudaMemcpy(&r1[0], &red1_dev[0], sizeof(real_t), cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(&r2[0], &red2_dev[0], sizeof(real_t), cudaMemcpyDeviceToHost));
+  }
+  *ar_h = r1[0]; *ar_l = r1[1];
+  *ai_h = r2[0]; *ai_l = r2[1];
+}
+
+//====================================================================
+// QTW (triple-word) BLAS kernels. Field layout: 6 real_t per complex,
+// {r_hi, i_hi, r_mid, i_mid, r_lo, i_lo}. All arithmetic stays in real_t —
+// when real_t = float the chain is FP32-only via ThreeSum/ThreeProd/tw_mul.
+//====================================================================
+
+// Helper: read one complex (6 reals starting at base) into 6 named scalars.
+#define TW3_LOAD6(prefix, ptr, base) \
+    real_t prefix##_rh = (ptr)[(base) + 0]; \
+    real_t prefix##_ih = (ptr)[(base) + 1]; \
+    real_t prefix##_rm = (ptr)[(base) + 2]; \
+    real_t prefix##_im = (ptr)[(base) + 3]; \
+    real_t prefix##_rl = (ptr)[(base) + 4]; \
+    real_t prefix##_il = (ptr)[(base) + 5];
+
+#define TW3_STORE6(ptr, base, rh, ih, rm, im, rl, il) \
+    (ptr)[(base) + 0] = (rh); \
+    (ptr)[(base) + 1] = (ih); \
+    (ptr)[(base) + 2] = (rm); \
+    (ptr)[(base) + 3] = (im); \
+    (ptr)[(base) + 4] = (rl); \
+    (ptr)[(base) + 5] = (il);
+
+//====================================================================
+// axpy_tw3: v = a*w + v   (a = real scalar T)
+__global__ void axpy_kernel_tw3(real_t *v, real_t a, real_t *w, int nin)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+  const int nin6 = nin / 6;
+  for (int in6 = 0; in6 < nin6; ++in6)
+  {
+    int base = 6 * IDX2(nin6, in6, site);
+    TW3_LOAD6(w, w, base);
+    TW3_LOAD6(v, v, base);
+
+    real_t tr_h, tr_m, tr_l;
+    tw_scal(a, w_rh, w_rm, w_rl, tr_h, tr_m, tr_l);
+    real_t ti_h, ti_m, ti_l;
+    tw_scal(a, w_ih, w_im, w_il, ti_h, ti_m, ti_l);
+
+    real_t or_h, or_m, or_l;
+    tw_add(v_rh, v_rm, v_rl, tr_h, tr_m, tr_l, or_h, or_m, or_l);
+    real_t oi_h, oi_m, oi_l;
+    tw_add(v_ih, v_im, v_il, ti_h, ti_m, ti_l, oi_h, oi_m, oi_l);
+
+    TW3_STORE6(v, base, or_h, oi_h, or_m, oi_m, or_l, oi_l);
+  }
+}
+
+// axpy_tw3 with TW-pair scalar: a = (a_h, a_m, a_l) — full FP32 triple-word
+__global__ void axpy_kernel_tw3_pair(real_t *v,
+                                     real_t a_h, real_t a_m, real_t a_l,
+                                     real_t *w, int nin)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+  const int nin6 = nin / 6;
+  for (int in6 = 0; in6 < nin6; ++in6)
+  {
+    int base = 6 * IDX2(nin6, in6, site);
+    TW3_LOAD6(w, w, base);
+    TW3_LOAD6(v, v, base);
+
+    real_t tr_h, tr_m, tr_l;
+    tw_mul(a_h, a_m, a_l, w_rh, w_rm, w_rl, tr_h, tr_m, tr_l);
+    real_t ti_h, ti_m, ti_l;
+    tw_mul(a_h, a_m, a_l, w_ih, w_im, w_il, ti_h, ti_m, ti_l);
+
+    real_t or_h, or_m, or_l;
+    tw_add(v_rh, v_rm, v_rl, tr_h, tr_m, tr_l, or_h, or_m, or_l);
+    real_t oi_h, oi_m, oi_l;
+    tw_add(v_ih, v_im, v_il, ti_h, ti_m, ti_l, oi_h, oi_m, oi_l);
+
+    TW3_STORE6(v, base, or_h, oi_h, or_m, oi_m, or_l, oi_l);
+  }
+}
+
+void axpy_tw3(real_t *y, int nv1, real_t a,
+              real_t *x, int nv2, int nin, int nvol)
+{
+  real_t *y_dev = (real_t *)dev_ptr(y);
+  real_t *x_dev = (real_t *)dev_ptr(x);
+  int nth = VECTOR_LENGTH;
+  int nbl = nvol / nth;
+  axpy_kernel_tw3<<<nbl, nth>>>(&y_dev[nv1], a, &x_dev[nv2], nin);
+  cudaDeviceSynchronize();
+}
+
+void axpy_tw3_pair(real_t *y, int nv1,
+                   real_t a_h, real_t a_m, real_t a_l,
+                   real_t *x, int nv2, int nin, int nvol)
+{
+  real_t *y_dev = (real_t *)dev_ptr(y);
+  real_t *x_dev = (real_t *)dev_ptr(x);
+  int nth = VECTOR_LENGTH;
+  int nbl = nvol / nth;
+  axpy_kernel_tw3_pair<<<nbl, nth>>>(&y_dev[nv1], a_h, a_m, a_l, &x_dev[nv2], nin);
+  cudaDeviceSynchronize();
+}
+
+//====================================================================
+// aypx_tw3: v = a*v + w  (real scalar)
+__global__ void aypx_kernel_tw3(real_t a, real_t *v, real_t *w, int nin)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+  const int nin6 = nin / 6;
+  for (int in6 = 0; in6 < nin6; ++in6)
+  {
+    int base = 6 * IDX2(nin6, in6, site);
+    TW3_LOAD6(v, v, base);
+    TW3_LOAD6(w, w, base);
+
+    real_t tr_h, tr_m, tr_l;
+    tw_scal(a, v_rh, v_rm, v_rl, tr_h, tr_m, tr_l);
+    real_t ti_h, ti_m, ti_l;
+    tw_scal(a, v_ih, v_im, v_il, ti_h, ti_m, ti_l);
+
+    real_t or_h, or_m, or_l;
+    tw_add(w_rh, w_rm, w_rl, tr_h, tr_m, tr_l, or_h, or_m, or_l);
+    real_t oi_h, oi_m, oi_l;
+    tw_add(w_ih, w_im, w_il, ti_h, ti_m, ti_l, oi_h, oi_m, oi_l);
+
+    TW3_STORE6(v, base, or_h, oi_h, or_m, oi_m, or_l, oi_l);
+  }
+}
+
+__global__ void aypx_kernel_tw3_pair(real_t a_h, real_t a_m, real_t a_l,
+                                     real_t *v, real_t *w, int nin)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+  const int nin6 = nin / 6;
+  for (int in6 = 0; in6 < nin6; ++in6)
+  {
+    int base = 6 * IDX2(nin6, in6, site);
+    TW3_LOAD6(v, v, base);
+    TW3_LOAD6(w, w, base);
+
+    real_t tr_h, tr_m, tr_l;
+    tw_mul(a_h, a_m, a_l, v_rh, v_rm, v_rl, tr_h, tr_m, tr_l);
+    real_t ti_h, ti_m, ti_l;
+    tw_mul(a_h, a_m, a_l, v_ih, v_im, v_il, ti_h, ti_m, ti_l);
+
+    real_t or_h, or_m, or_l;
+    tw_add(w_rh, w_rm, w_rl, tr_h, tr_m, tr_l, or_h, or_m, or_l);
+    real_t oi_h, oi_m, oi_l;
+    tw_add(w_ih, w_im, w_il, ti_h, ti_m, ti_l, oi_h, oi_m, oi_l);
+
+    TW3_STORE6(v, base, or_h, oi_h, or_m, oi_m, or_l, oi_l);
+  }
+}
+
+void aypx_tw3(real_t a, real_t *y, int nv1,
+              real_t *x, int nv2, int nin, int nvol)
+{
+  real_t *y_dev = (real_t *)dev_ptr(y);
+  real_t *x_dev = (real_t *)dev_ptr(x);
+  int nth = VECTOR_LENGTH;
+  int nbl = nvol / nth;
+  aypx_kernel_tw3<<<nbl, nth>>>(a, &y_dev[nv1], &x_dev[nv2], nin);
+  cudaDeviceSynchronize();
+}
+
+void aypx_tw3_pair(real_t a_h, real_t a_m, real_t a_l,
+                   real_t *y, int nv1,
+                   real_t *x, int nv2, int nin, int nvol)
+{
+  real_t *y_dev = (real_t *)dev_ptr(y);
+  real_t *x_dev = (real_t *)dev_ptr(x);
+  int nth = VECTOR_LENGTH;
+  int nbl = nvol / nth;
+  aypx_kernel_tw3_pair<<<nbl, nth>>>(a_h, a_m, a_l, &y_dev[nv1], &x_dev[nv2], nin);
+  cudaDeviceSynchronize();
+}
+
+//====================================================================
+// QTW norm2: 3-word thread accumulator over QTW field.
+// Per complex, compute (r^2 + i^2) where r = rh+rm+rl, i = ih+im+il via
+// tw_mul on the TW reals, then tw_add into the accumulator.
+__global__ void norm2_reduce_fused_kernel_tw3(real_t *red,
+                                              const real_t *__restrict__ v1,
+                                              int nin, int nvol, int nex)
+{
+  extern __shared__ real_t sdata[];
+  const int tid = threadIdx.x;
+  const int ist = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gridSize = blockDim.x * gridDim.x;
+
+  real_t sh = 0, sm = 0, sl = 0;
+
+  for (int idx = ist; idx < nvol; idx += gridSize)
+  {
+    for (int ex = 0; ex < nex; ++ex)
+    {
+      int ist2 = idx + nvol * ex;
+      const int nin6 = nin / 6;
+      for (int in6 = 0; in6 < nin6; ++in6)
+      {
+        int base = 6 * IDX2(nin6, in6, ist2);
+        TW3_LOAD6(v, v1, base);
+
+        // sq_r = (v_rh, v_rm, v_rl)^2
+        real_t sqr_h, sqr_m, sqr_l;
+        tw_mul(v_rh, v_rm, v_rl, v_rh, v_rm, v_rl, sqr_h, sqr_m, sqr_l);
+        // sq_i = (v_ih, v_im, v_il)^2
+        real_t sqi_h, sqi_m, sqi_l;
+        tw_mul(v_ih, v_im, v_il, v_ih, v_im, v_il, sqi_h, sqi_m, sqi_l);
+        // contribution = sq_r + sq_i
+        real_t c_h, c_m, c_l;
+        tw_add(sqr_h, sqr_m, sqr_l, sqi_h, sqi_m, sqi_l, c_h, c_m, c_l);
+        // sum += contribution
+        real_t ns_h, ns_m, ns_l;
+        tw_add(sh, sm, sl, c_h, c_m, c_l, ns_h, ns_m, ns_l);
+        sh = ns_h; sm = ns_m; sl = ns_l;
+      }
+    }
+  }
+
+  real_t *sh_h = sdata;
+  real_t *sh_m = sdata +     blockDim.x;
+  real_t *sh_l = sdata + 2 * blockDim.x;
+  sh_h[tid] = sh;
+  sh_m[tid] = sm;
+  sh_l[tid] = sl;
+  __syncthreads();
+
+  for (unsigned int s = blockDim.x / 2; s >= WARP_LENGTH; s >>= 1)
+  {
+    if (tid < s)
+    {
+      real_t bh = sh_h[tid+s], bm = sh_m[tid+s], bl = sh_l[tid+s];
+      real_t ah = sh_h[tid],   am = sh_m[tid],   al = sh_l[tid];
+      real_t rh, rm, rl;
+      tw_add(ah, am, al, bh, bm, bl, rh, rm, rl);
+      sh_h[tid] = rh; sh_m[tid] = rm; sh_l[tid] = rl;
+    }
+    __syncthreads();
+  }
+
+  if (tid < WARP_LENGTH)
+  {
+    real_t ah = sh_h[tid], am = sh_m[tid], al = sh_l[tid];
+#pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1)
+    {
+      real_t bh = __shfl_down_sync(0xffffffff, ah, offset);
+      real_t bm = __shfl_down_sync(0xffffffff, am, offset);
+      real_t bl = __shfl_down_sync(0xffffffff, al, offset);
+      real_t rh, rm, rl;
+      tw_add(ah, am, al, bh, bm, bl, rh, rm, rl);
+      ah = rh; am = rm; al = rl;
+    }
+    if (tid == 0)
+    {
+      red[blockIdx.x]                            = ah;
+      red[blockIdx.x +     MAX_THREAD_PER_BLOCK] = am;
+      red[blockIdx.x + 2 * MAX_THREAD_PER_BLOCK] = al;
+    }
+  }
+}
+
+//====================================================================
+// dot_tw3: real-valued inner product, 3-word thread accumulator.
+__global__ void dot_reduce_fused_kernel_tw3(real_t *red,
+                                            const real_t *__restrict__ v1,
+                                            const real_t *__restrict__ v2,
+                                            int nin, int nvol, int nex)
+{
+  extern __shared__ real_t sdata[];
+  const int tid = threadIdx.x;
+  const int ist = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gridSize = blockDim.x * gridDim.x;
+
+  real_t sh = 0, sm = 0, sl = 0;
+
+  for (int idx = ist; idx < nvol; idx += gridSize)
+  {
+    for (int ex = 0; ex < nex; ++ex)
+    {
+      int ist2 = idx + nvol * ex;
+      const int nin6 = nin / 6;
+      for (int in6 = 0; in6 < nin6; ++in6)
+      {
+        int base = 6 * IDX2(nin6, in6, ist2);
+        TW3_LOAD6(a, v1, base);
+        TW3_LOAD6(b, v2, base);
+
+        // v1.r * v2.r
+        real_t pr_h, pr_m, pr_l;
+        tw_mul(a_rh, a_rm, a_rl, b_rh, b_rm, b_rl, pr_h, pr_m, pr_l);
+        // v1.i * v2.i
+        real_t pi_h, pi_m, pi_l;
+        tw_mul(a_ih, a_im, a_il, b_ih, b_im, b_il, pi_h, pi_m, pi_l);
+        // c = pr + pi
+        real_t c_h, c_m, c_l;
+        tw_add(pr_h, pr_m, pr_l, pi_h, pi_m, pi_l, c_h, c_m, c_l);
+        // sum += c
+        real_t ns_h, ns_m, ns_l;
+        tw_add(sh, sm, sl, c_h, c_m, c_l, ns_h, ns_m, ns_l);
+        sh = ns_h; sm = ns_m; sl = ns_l;
+      }
+    }
+  }
+
+  real_t *sh_h = sdata;
+  real_t *sh_m = sdata +     blockDim.x;
+  real_t *sh_l = sdata + 2 * blockDim.x;
+  sh_h[tid] = sh;
+  sh_m[tid] = sm;
+  sh_l[tid] = sl;
+  __syncthreads();
+
+  for (unsigned int s = blockDim.x / 2; s >= WARP_LENGTH; s >>= 1)
+  {
+    if (tid < s)
+    {
+      real_t bh = sh_h[tid+s], bm = sh_m[tid+s], bl = sh_l[tid+s];
+      real_t ah = sh_h[tid],   am = sh_m[tid],   al = sh_l[tid];
+      real_t rh, rm, rl;
+      tw_add(ah, am, al, bh, bm, bl, rh, rm, rl);
+      sh_h[tid] = rh; sh_m[tid] = rm; sh_l[tid] = rl;
+    }
+    __syncthreads();
+  }
+
+  if (tid < WARP_LENGTH)
+  {
+    real_t ah = sh_h[tid], am = sh_m[tid], al = sh_l[tid];
+#pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1)
+    {
+      real_t bh = __shfl_down_sync(0xffffffff, ah, offset);
+      real_t bm = __shfl_down_sync(0xffffffff, am, offset);
+      real_t bl = __shfl_down_sync(0xffffffff, al, offset);
+      real_t rh, rm, rl;
+      tw_add(ah, am, al, bh, bm, bl, rh, rm, rl);
+      ah = rh; am = rm; al = rl;
+    }
+    if (tid == 0)
+    {
+      red[blockIdx.x]                            = ah;
+      red[blockIdx.x +     MAX_THREAD_PER_BLOCK] = am;
+      red[blockIdx.x + 2 * MAX_THREAD_PER_BLOCK] = al;
+    }
+  }
+}
+
+//====================================================================
+// dotc_tw3: complex inner product, 3-word accumulator for re and im.
+__global__ void dotc_reduce_fused_kernel_tw3(real_t *red1, real_t *red2,
+                                             const real_t *__restrict__ v1,
+                                             const real_t *__restrict__ v2,
+                                             int nin, int nvol, int nex)
+{
+  extern __shared__ real_t sdata[];
+  const int tid = threadIdx.x;
+  const int ist = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gridSize = blockDim.x * gridDim.x;
+
+  real_t arh = 0, arm = 0, arl = 0;
+  real_t aih = 0, aim = 0, ail = 0;
+
+  for (int idx = ist; idx < nvol; idx += gridSize)
+  {
+    for (int ex = 0; ex < nex; ++ex)
+    {
+      int ist2 = idx + nvol * ex;
+      const int nin6 = nin / 6;
+      for (int in6 = 0; in6 < nin6; ++in6)
+      {
+        int base = 6 * IDX2(nin6, in6, ist2);
+        TW3_LOAD6(a, v1, base);
+        TW3_LOAD6(b, v2, base);
+
+        // Real: v1.r*v2.r + v1.i*v2.i
+        real_t pr_h, pr_m, pr_l;
+        tw_mul(a_rh, a_rm, a_rl, b_rh, b_rm, b_rl, pr_h, pr_m, pr_l);
+        real_t pi_h, pi_m, pi_l;
+        tw_mul(a_ih, a_im, a_il, b_ih, b_im, b_il, pi_h, pi_m, pi_l);
+        real_t cr_h, cr_m, cr_l;
+        tw_add(pr_h, pr_m, pr_l, pi_h, pi_m, pi_l, cr_h, cr_m, cr_l);
+        real_t nrh, nrm, nrl;
+        tw_add(arh, arm, arl, cr_h, cr_m, cr_l, nrh, nrm, nrl);
+        arh = nrh; arm = nrm; arl = nrl;
+
+        // Imag: v1.r*v2.i - v1.i*v2.r
+        real_t qr_h, qr_m, qr_l;
+        tw_mul(a_rh, a_rm, a_rl, b_ih, b_im, b_il, qr_h, qr_m, qr_l);
+        real_t qi_h, qi_m, qi_l;
+        tw_mul(a_ih, a_im, a_il, b_rh, b_rm, b_rl, qi_h, qi_m, qi_l);
+        real_t ci_h, ci_m, ci_l;
+        tw_add(qr_h, qr_m, qr_l, -qi_h, -qi_m, -qi_l, ci_h, ci_m, ci_l);
+        real_t nih, nim, nil;
+        tw_add(aih, aim, ail, ci_h, ci_m, ci_l, nih, nim, nil);
+        aih = nih; aim = nim; ail = nil;
+      }
+    }
+  }
+
+  real_t *shr_h = sdata;
+  real_t *shr_m = sdata +     blockDim.x;
+  real_t *shr_l = sdata + 2 * blockDim.x;
+  real_t *shi_h = sdata + 3 * blockDim.x;
+  real_t *shi_m = sdata + 4 * blockDim.x;
+  real_t *shi_l = sdata + 5 * blockDim.x;
+  shr_h[tid] = arh; shr_m[tid] = arm; shr_l[tid] = arl;
+  shi_h[tid] = aih; shi_m[tid] = aim; shi_l[tid] = ail;
+  __syncthreads();
+
+  for (unsigned int s = blockDim.x / 2; s >= WARP_LENGTH; s >>= 1)
+  {
+    if (tid < s)
+    {
+      real_t bh = shr_h[tid+s], bm = shr_m[tid+s], bl = shr_l[tid+s];
+      real_t ah = shr_h[tid],   am = shr_m[tid],   al = shr_l[tid];
+      real_t rh, rm, rl;
+      tw_add(ah, am, al, bh, bm, bl, rh, rm, rl);
+      shr_h[tid] = rh; shr_m[tid] = rm; shr_l[tid] = rl;
+
+      bh = shi_h[tid+s]; bm = shi_m[tid+s]; bl = shi_l[tid+s];
+      ah = shi_h[tid];   am = shi_m[tid];   al = shi_l[tid];
+      tw_add(ah, am, al, bh, bm, bl, rh, rm, rl);
+      shi_h[tid] = rh; shi_m[tid] = rm; shi_l[tid] = rl;
+    }
+    __syncthreads();
+  }
+
+  if (tid < WARP_LENGTH)
+  {
+    real_t ah_r = shr_h[tid], am_r = shr_m[tid], al_r = shr_l[tid];
+    real_t ah_i = shi_h[tid], am_i = shi_m[tid], al_i = shi_l[tid];
+#pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1)
+    {
+      real_t bh, bm, bl, rh, rm, rl;
+      bh = __shfl_down_sync(0xffffffff, ah_r, offset);
+      bm = __shfl_down_sync(0xffffffff, am_r, offset);
+      bl = __shfl_down_sync(0xffffffff, al_r, offset);
+      tw_add(ah_r, am_r, al_r, bh, bm, bl, rh, rm, rl);
+      ah_r = rh; am_r = rm; al_r = rl;
+      bh = __shfl_down_sync(0xffffffff, ah_i, offset);
+      bm = __shfl_down_sync(0xffffffff, am_i, offset);
+      bl = __shfl_down_sync(0xffffffff, al_i, offset);
+      tw_add(ah_i, am_i, al_i, bh, bm, bl, rh, rm, rl);
+      ah_i = rh; am_i = rm; al_i = rl;
+    }
+    if (tid == 0)
+    {
+      red1[blockIdx.x]                            = ah_r;
+      red1[blockIdx.x +     MAX_THREAD_PER_BLOCK] = am_r;
+      red1[blockIdx.x + 2 * MAX_THREAD_PER_BLOCK] = al_r;
+      red2[blockIdx.x]                            = ah_i;
+      red2[blockIdx.x +     MAX_THREAD_PER_BLOCK] = am_i;
+      red2[blockIdx.x + 2 * MAX_THREAD_PER_BLOCK] = al_i;
+    }
+  }
+}
+
+//====================================================================
+// QTW final-pass reducer: aggregates per-block (h, m, l) into a single
+// triple stored at red[0], red[1], red[2].
+__global__ void reduce_kernel_multiblocks_tw3(real_t *red, int n)
+{
+  extern __shared__ real_t sdata[];
+  real_t *sh_h = sdata;
+  real_t *sh_m = sdata +     blockDim.x;
+  real_t *sh_l = sdata + 2 * blockDim.x;
+
+  const int tid = threadIdx.x;
+  const int gridSize = blockDim.x * gridDim.x;
+
+  real_t sh = 0, sm = 0, sl = 0;
+  for (int i = tid; i < n; i += gridSize)
+  {
+    real_t ah = red[i];
+    real_t am = red[i +     MAX_THREAD_PER_BLOCK];
+    real_t al = red[i + 2 * MAX_THREAD_PER_BLOCK];
+    real_t rh, rm, rl;
+    tw_add(sh, sm, sl, ah, am, al, rh, rm, rl);
+    sh = rh; sm = rm; sl = rl;
+  }
+
+  sh_h[tid] = sh; sh_m[tid] = sm; sh_l[tid] = sl;
+  __syncthreads();
+
+  for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1)
+  {
+    if (tid < s)
+    {
+      real_t bh = sh_h[tid+s], bm = sh_m[tid+s], bl = sh_l[tid+s];
+      real_t ah = sh_h[tid],   am = sh_m[tid],   al = sh_l[tid];
+      real_t rh, rm, rl;
+      tw_add(ah, am, al, bh, bm, bl, rh, rm, rl);
+      sh_h[tid] = rh; sh_m[tid] = rm; sh_l[tid] = rl;
+    }
+    __syncthreads();
+  }
+
+  if (tid == 0)
+  {
+    red[0] = sh_h[0];
+    red[1] = sh_m[0];
+    red[2] = sh_l[0];
+  }
+}
+
+//====================================================================
+// Host wrappers for QTW BLAS reductions.
+void norm2_tw3(real_t *h, real_t *m, real_t *l,
+               real_t *x1, real_t *red1, int nin, int nvol, int nex)
+{
+  real_t *x1_dev   = (real_t *)dev_ptr(x1);
+  real_t *red1_dev = (real_t *)dev_ptr(red1);
+
+  int threadsPerBlock = VECTOR_LENGTH;
+  int blocksPerGrid   = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
+  size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
+
+  norm2_reduce_fused_kernel_tw3<<<blocksPerGrid, threadsPerBlock, 3*sharedMemSize>>>(red1_dev, x1_dev, nin, nvol, nex);
+  reduce_kernel_multiblocks_tw3<<<1, threadsPerBlock, 3*sharedMemSize>>>(red1_dev, blocksPerGrid);
+
+  cudaDeviceSynchronize();
+
+  real_t triple[3] = {0, 0, 0};
+  CHECK(cudaMemcpy(triple, &red1_dev[0], 3 * sizeof(real_t), cudaMemcpyDeviceToHost));
+  *h = triple[0]; *m = triple[1]; *l = triple[2];
+}
+
+void dot_tw3(real_t *h, real_t *m, real_t *l,
+             real_t *x1, real_t *x2, real_t *red1,
+             int nin, int nvol, int nex)
+{
+  real_t *x1_dev   = (real_t *)dev_ptr(x1);
+  real_t *x2_dev   = (real_t *)dev_ptr(x2);
+  real_t *red1_dev = (real_t *)dev_ptr(red1);
+
+  int threadsPerBlock = VECTOR_LENGTH;
+  int blocksPerGrid   = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
+  size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
+
+  dot_reduce_fused_kernel_tw3<<<blocksPerGrid, threadsPerBlock, 3*sharedMemSize>>>(red1_dev, x1_dev, x2_dev, nin, nvol, nex);
+  reduce_kernel_multiblocks_tw3<<<1, threadsPerBlock, 3*sharedMemSize>>>(red1_dev, blocksPerGrid);
+
+  cudaDeviceSynchronize();
+
+  real_t triple[3] = {0, 0, 0};
+  CHECK(cudaMemcpy(triple, &red1_dev[0], 3 * sizeof(real_t), cudaMemcpyDeviceToHost));
+  *h = triple[0]; *m = triple[1]; *l = triple[2];
+}
+
+void dotc_tw3(real_t *ar_h, real_t *ar_m, real_t *ar_l,
+              real_t *ai_h, real_t *ai_m, real_t *ai_l,
+              real_t *x1, real_t *x2, real_t *red1, real_t *red2,
+              int nin, int nvol, int nex)
+{
+  real_t *x1_dev   = (real_t *)dev_ptr(x1);
+  real_t *x2_dev   = (real_t *)dev_ptr(x2);
+  real_t *red1_dev = (real_t *)dev_ptr(red1);
+  real_t *red2_dev = (real_t *)dev_ptr(red2);
+
+  int threadsPerBlock = VECTOR_LENGTH;
+  int blocksPerGrid   = min((nvol + threadsPerBlock - 1) / threadsPerBlock, MAX_THREAD_PER_BLOCK);
+  size_t sharedMemSize = threadsPerBlock * sizeof(real_t);
+
+  dotc_reduce_fused_kernel_tw3<<<blocksPerGrid, threadsPerBlock, 6*sharedMemSize>>>(red1_dev, red2_dev, x1_dev, x2_dev, nin, nvol, nex);
+  reduce_kernel_multiblocks_tw3<<<1, threadsPerBlock, 3*sharedMemSize>>>(red1_dev, blocksPerGrid);
+  reduce_kernel_multiblocks_tw3<<<1, threadsPerBlock, 3*sharedMemSize>>>(red2_dev, blocksPerGrid);
+
+  cudaDeviceSynchronize();
+
+  real_t r1[3] = {0,0,0}, r2[3] = {0,0,0};
+  CHECK(cudaMemcpy(r1, &red1_dev[0], 3 * sizeof(real_t), cudaMemcpyDeviceToHost));
+  CHECK(cudaMemcpy(r2, &red2_dev[0], 3 * sizeof(real_t), cudaMemcpyDeviceToHost));
+  *ar_h = r1[0]; *ar_m = r1[1]; *ar_l = r1[2];
+  *ai_h = r2[0]; *ai_m = r2[1]; *ai_l = r2[2];
+}
+
+//====================================================================
+// QTW renormalize: re-establish |m| <= ulp(h)/2 and |l| <= ulp(m)/2 after
+// an arithmetic chain that may have left the triple loosely renormalized.
+__global__ void normalize_kernel_tw3(real_t *spinor, int nin, int nvol)
+{
+  const int site = blockIdx.x * blockDim.x + threadIdx.x;
+  if (site >= nvol) return;
+  const int nin6 = nin / 6;
+  for (int in6 = 0; in6 < nin6; ++in6)
+  {
+    int base = 6 * IDX2(nin6, in6, site);
+    real_t rh = spinor[base + 0], ih = spinor[base + 1];
+    real_t rm = spinor[base + 2], im = spinor[base + 3];
+    real_t rl = spinor[base + 4], il = spinor[base + 5];
+    Renormalize3(rh, rm, rl);
+    Renormalize3(ih, im, il);
+    spinor[base + 0] = rh; spinor[base + 1] = ih;
+    spinor[base + 2] = rm; spinor[base + 3] = im;
+    spinor[base + 4] = rl; spinor[base + 5] = il;
+  }
+}
+
+void normalize_tw3(real_t *v, int nin, int nvol)
+{
+  real_t *v_dev = (real_t *)dev_ptr(v);
+  int nth = VECTOR_LENGTH;
+  int nbl = (nvol + nth - 1) / nth;
+  normalize_kernel_tw3<<<nbl, nth>>>(v_dev, nin, nvol);
+  cudaDeviceSynchronize();
+}
+
+#undef TW3_LOAD6
+#undef TW3_STORE6
+
+//====================================================================
 #ifdef __CUDACC__
 namespace {
 __global__ void normalize_kernel_qdw_actual(real_t *spinor, int nin, int nvol)
@@ -1870,13 +2769,19 @@ __global__ void normalize_kernel_qdw_actual(real_t *spinor, int nin, int nvol)
 
 void normalize(real_t* v, int nin, int nvol, int mode)
 {
-  if (mode != 1) return;
+  // mode == MWMode::DW (1) → QDW two-word renormalize.
+  // mode == MWMode::TW (2) → QTW three-word renormalize.
+  // anything else (incl. FP=0) → no-op.
 #ifdef __CUDACC__
-  real_t *v_dev = (real_t *)dev_ptr(v);
-  int nth = VECTOR_LENGTH;
-  int nbl = (nvol + nth - 1) / nth;
-  normalize_kernel_qdw_actual<<<nbl, nth>>>(v_dev, nin, nvol);
-  cudaDeviceSynchronize();
+  if (mode == 1) {
+    real_t *v_dev = (real_t *)dev_ptr(v);
+    int nth = VECTOR_LENGTH;
+    int nbl = (nvol + nth - 1) / nth;
+    normalize_kernel_qdw_actual<<<nbl, nth>>>(v_dev, nin, nvol);
+    cudaDeviceSynchronize();
+  } else if (mode == 2) {
+    normalize_tw3(v, nin, nvol);
+  }
 #endif
 }
 

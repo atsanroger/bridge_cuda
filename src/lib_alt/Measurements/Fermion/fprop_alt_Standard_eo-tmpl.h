@@ -39,6 +39,9 @@ void Fprop_alt_Standard_eo<AFIELD>::init(const Parameters& params_fopr,
   m_solver = AltSolver::New(solver_type, m_fopr);
   m_solver->set_parameters(params_solver);
 
+  params_solver.fetch_int("refinement_iterations", m_n_refine);
+  vout.general(m_vl, "  refinement_iterations = %d\n", m_n_refine);
+
   reset_performance();
 
   vout.decrease_indent();
@@ -78,6 +81,9 @@ void Fprop_alt_Standard_eo<AFIELD>::init(const Parameters& params_fopr,
   string solver_type = params_solver.get_string("solver_type");
   m_solver = AltSolver::New(solver_type, m_fopr);
   m_solver->set_parameters(params_solver);
+
+  params_solver.fetch_int("refinement_iterations", m_n_refine);
+  vout.general(m_vl, "  refinement_iterations = %d\n", m_n_refine);
 
   reset_performance();
 
@@ -119,6 +125,9 @@ void Fprop_alt_Standard_eo<AFIELD>::init(
   string solver_type = params_solver.get_string("solver_type");
   m_solver = AltSolver::New(solver_type, m_fopr);
   m_solver->set_parameters(params_solver);
+
+  params_solver.fetch_int("refinement_iterations", m_n_refine);
+  vout.general(m_vl, "  refinement_iterations = %d\n", m_n_refine);
 
   reset_performance();
 
@@ -224,11 +233,19 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_D(Field& xq, const Field& b,
 
   AFIELD be(nin, nvol2, nex), bo(nin, nvol2, nex);
   AFIELD xe(nin, nvol2, nex), xo(nin, nvol2, nex);
+  AFIELD be0(nin, nvol2, nex);  // saved even RHS (invert_De destroys be)
 
   AIndex_lex<real_t, AFIELD::IMPL> index_alt;
   AIndex_eo<real_t, AFIELD::IMPL>  index_eo;
 
-  bool is_qdw = (m_fopr->get_mw_mode() == AFopr<AFIELD>::MWMode::DW);
+  int mw_mode = static_cast<int>(m_fopr->get_mw_mode());
+
+  // Full-system refinement passes. The inner eo solves (initial + corrections)
+  // must run WITHOUT their own preconditioned (kappa^2) refinement: on the tiny
+  // correction RHS that nested loop divides by a near-zero residual norm and
+  // produces NaN. Accuracy here is driven by the full-system loop below instead.
+  const int n_full = m_n_refine;
+  m_n_refine = 0;
 
 #pragma omp parallel
   {
@@ -240,16 +257,58 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_D(Field& xq, const Field& b,
       convert(index_alt, abq, b);
     }
 #pragma omp barrier
-    index_eo.split(be, bo, abq, is_qdw);
+    index_eo.split(be, bo, abq, mw_mode);
+    if (n_full > 0) be0.copy(be);
   }
 
   invert_De(xe, xo, be, bo, nconv, diff);
 
   vout.detailed(m_vl, "%s: diff = %e\n", class_name.c_str(), diff);
 
+  // --- full-system iterative refinement on M x = b (sees kappa, not kappa^2).
+  // r = b - M x via the now-all-TW forward sub-ops (Dee/Deo/Doe/Doo), then solve
+  // M dx = r with the same eo solver and accumulate. Residual is full multiword
+  // precision so the float-triple path can drive the solution past FP64. -------
+  if (n_full > 0) {
+    AFIELD Mxe(nin, nvol2, nex), Mxo(nin, nvol2, nex), tt(nin, nvol2, nex);
+    AFIELD re(nin, nvol2, nex),  ro(nin, nvol2, nex);
+    AFIELD dxe(nin, nvol2, nex), dxo(nin, nvol2, nex);
+    for (int ir = 0; ir < n_full; ++ir) {
+      int    nc_r = 0;
+      double df_r = 0.0;
+#pragma omp parallel
+      {
+        m_fopr->mult(Mxe, xe, "Dee");
+#pragma omp barrier
+        m_fopr->mult(tt,  xo, "Deo");
+#pragma omp barrier
+        Mxe.axpy(real_t(1.0), tt, mw_mode);     // Mxe = Dee xe + Deo xo
+#pragma omp barrier
+        m_fopr->mult(Mxo, xo, "Doo");
+#pragma omp barrier
+        m_fopr->mult(tt,  xe, "Doe");
+#pragma omp barrier
+        Mxo.axpy(real_t(1.0), tt, mw_mode);     // Mxo = Doe xe + Doo xo
+#pragma omp barrier
+        re.copy(be0); re.axpy(real_t(-1.0), Mxe, mw_mode);   // re = be - (Mx)_e
+        ro.copy(bo);  ro.axpy(real_t(-1.0), Mxo, mw_mode);   // ro = bo - (Mx)_o
+      }
+      invert_De(dxe, dxo, re, ro, nc_r, df_r);  // M dx = r
+#pragma omp parallel
+      {
+        xe.axpy(real_t(1.0), dxe, mw_mode);
+        xo.axpy(real_t(1.0), dxo, mw_mode);
+      }
+#pragma omp master
+      vout.general(m_vl, "  full-refine[%d]: inner nconv=%d diff=%.3e\n",
+                   ir, nc_r, df_r);
+    }
+  }
+  m_n_refine = n_full;  // restore the configured refinement count
+
 #pragma omp parallel
   {
-    index_eo.merge(axq, xe, xo, is_qdw);
+    index_eo.merge(axq, xe, xo, mw_mode);
 #pragma omp barrier
 
     if (m_fopr->needs_convert()) {
@@ -293,7 +352,7 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_DdagD(Field& xq, const Field& b,
   AIndex_lex<real_t, AFIELD::IMPL> index_alt;
   AIndex_eo<real_t, AFIELD::IMPL>  index_eo;
 
-  bool is_qdw = (m_fopr->get_mw_mode() == AFopr<AFIELD>::MWMode::DW);
+  int mw_mode = static_cast<int>(m_fopr->get_mw_mode());
 
 #pragma omp parallel
   {
@@ -306,7 +365,7 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_DdagD(Field& xq, const Field& b,
     }
 #pragma omp barrier
 
-    index_eo.split(be, bo, abq, is_qdw);
+    index_eo.split(be, bo, abq, mw_mode);
 #pragma omp barrier
 
     m_fopr->mult_gm5(y1, be);
@@ -333,7 +392,7 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_DdagD(Field& xq, const Field& b,
 
 #pragma omp parallel
   {
-    index_eo.merge(axq, xe, xo, is_qdw);
+    index_eo.merge(axq, xe, xo, mw_mode);
 #pragma omp barrier
 
     if (m_fopr->needs_convert()) {
@@ -371,18 +430,18 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_D(AFIELD& xq, const AFIELD& b,
 
   AIndex_eo<real_t, AFIELD::IMPL> index_eo;
 
-  bool is_qdw = (m_fopr->get_mw_mode() == AFopr<AFIELD>::MWMode::DW);
+  int mw_mode = static_cast<int>(m_fopr->get_mw_mode());
 
 #pragma omp parallel
   {
-    index_eo.split(be, bo, b, is_qdw);
+    index_eo.split(be, bo, b, mw_mode);
   }
 
   invert_De(xe, xo, be, bo, nconv, diff);
 
 #pragma omp parallel
   {
-    index_eo.merge(xq, xe, xo, is_qdw);
+    index_eo.merge(xq, xe, xo, mw_mode);
   }
 
   m_timer.stop();
@@ -464,11 +523,11 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_DdagD(AFIELD& xq, const AFIELD& b,
 
   AIndex_eo<real_t, AFIELD::IMPL> index_eo;
 
-  bool is_qdw = (m_fopr->get_mw_mode() == AFopr<AFIELD>::MWMode::DW);
+  int mw_mode = static_cast<int>(m_fopr->get_mw_mode());
 
 #pragma omp parallel
   {
-    index_eo.split(be, bo, b, is_qdw);
+    index_eo.split(be, bo, b, mw_mode);
 #pragma omp barrier
 
     m_fopr->mult_gm5(y1, be);
@@ -495,7 +554,7 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_DdagD(AFIELD& xq, const AFIELD& b,
 
 #pragma omp parallel
   {
-    index_eo.merge(xq, xe, xo, is_qdw);
+    index_eo.merge(xq, xe, xo, mw_mode);
   }
 
   m_timer.stop();
@@ -516,6 +575,12 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_De(AFIELD& xe, AFIELD& xo,
   int nvol  = 2 * nvol2;
 
   AFIELD y1(nin, nvol2, nex), y2(nin, nvol2, nex);
+  AFIELD rr(nin, nvol2, nex), dd(nin, nvol2, nex);  // iterative-refinement temps
+
+  // multiword mode (0=FP, 2=TW): the vector axpy/aypx below must run in this
+  // mode so the eo RHS and the refinement residual are full triple-word, not
+  // single-word (otherwise refinement is capped at ~double).
+  const int mw_mode = static_cast<int>(m_fopr->get_mw_mode());
 
   vout.detailed(m_vl, "invert_De(AFIELD)(6arg) start.\n");
 
@@ -528,7 +593,7 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_De(AFIELD& xe, AFIELD& xo,
     m_fopr->mult(y2, y1, "Deo");
 
 #pragma omp barrier
-    axpy(be, real_t(-1.0), y2);
+    be.axpy(real_t(-1.0), y2, mw_mode);
 
 #pragma omp barrier
     m_fopr->mult(y1, be, "Dee_inv");
@@ -545,10 +610,33 @@ void Fprop_alt_Standard_eo<AFIELD>::invert_De(AFIELD& xe, AFIELD& xo,
 
     m_fopr->normalize_fprop(xe);
 
+    // --- iterative refinement on the eo-preconditioned system D_hat xe = y1 ---
+    // Residual r = y1 - D_hat xe is recomputed in the field's own (multiword)
+    // precision, so each pass restores accuracy the CGNR normal equations lose
+    // to kappa^2. FP32-only for the QTW path (D_hat = D_eo + LU_inv, no double).
+    for (int ir = 0; ir < m_n_refine; ++ir) {
+#pragma omp barrier
+      m_fopr->mult(rr, xe);                 // rr = D_hat xe  (mode "D")
+#pragma omp barrier
+      rr.aypx(real_t(-1.0), y1, mw_mode);   // rr = y1 - D_hat xe  (TW residual)
+#pragma omp barrier
+      real_t rnorm = rr.norm2(mw_mode);     // residual norm before correcting
+      int    nc_r;
+      real_t df_r;
+      m_solver->solve(dd, rr, nc_r, df_r);  // D_hat dd = rr
+#pragma omp barrier
+      m_fopr->normalize_fprop(dd);
+      xe.axpy(real_t(1.0), dd, mw_mode);    // xe += dd  (TW)
+#pragma omp master
+      vout.general(m_vl, "  refine[%d]: ||r||^2=%.3e  inner nconv=%d diff=%.3e\n",
+                   ir, double(rnorm), nc_r, double(df_r));
+    }
+#pragma omp barrier
+
     m_fopr->mult(y1, xe, "Doe");
 #pragma omp barrier
 
-    aypx(real_t(-1.0), y1, bo);
+    y1.aypx(real_t(-1.0), bo, mw_mode);
 #pragma omp barrier
 
     m_fopr->mult(xo, y1, "Doo_inv");

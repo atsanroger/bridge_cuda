@@ -109,6 +109,14 @@ void ASolver_CG<AFIELD>::set_parameters(const Parameters& params)
     m_r.reset(nin, nvol, nex);
     m_p.reset(nin, nvol, nex);
     m_s.reset(nin, nvol, nex);
+  } else if (m_mw_mode == MWMode::TW) {
+    int nin = 3 * m_fopr->field_nin();
+    int nvol = m_fopr->field_nvol();
+    int nex = m_fopr->field_nex();
+    m_x.reset(nin, nvol, nex);
+    m_r.reset(nin, nvol, nex);
+    m_p.reset(nin, nvol, nex);
+    m_s.reset(nin, nvol, nex);
   }
 
   if (m_fopr) {
@@ -162,11 +170,26 @@ void ASolver_CG<AFIELD>::solve(AFIELD& xq, const AFIELD& b,
   real_t rr, rrp;
   int    nconv = -1;
 
-  solve_CG_init(rrp, rr);
+  const bool use_pair   = (m_mw_mode == MWMode::DW);
+  const bool use_triple = (m_mw_mode == MWMode::TW);
+
+  if (use_triple) {
+    solve_CG_init_triple(rr);
+  } else if (use_pair) {
+    solve_CG_init_pair(rr);
+  } else {
+    solve_CG_init(rrp, rr);
+  }
   vout.detailed(m_vl, "  init: %22.15e\n", rr * snorm);
 
   for (int iter = 0; iter < m_Niter; ++iter) {
-    solve_CG_step(rrp, rr);
+    if (use_triple) {
+      solve_CG_step_triple(rr);
+    } else if (use_pair) {
+      solve_CG_step_pair(rr);
+    } else {
+      solve_CG_step(rrp, rr);
+    }
     vout.detailed(m_vl, "%6d  %22.15e\n", iter, rr * snorm);
 
     if (rr * snorm < m_Stop_cond) {
@@ -277,6 +300,289 @@ void ASolver_CG<AFIELD>::solve_CG_step(real_t& rrp, real_t& rr)
   m_p.normalize(static_cast<int>(m_mw_mode));
 
   rrp = rr;
+}
+
+
+//====================================================================
+// DD-pair CG: rrp, rr, cr, bk and pap are all (h, l) float-pairs. We use
+// dw_add/dw_mul/dw_div on real_t (= float in the float build) so no FP64
+// ALU is touched. snorm/rr*snorm at the host level is still computed in
+// real_t since it only drives the convergence check.
+namespace dd_priv {
+template<typename T>
+inline void dd_two_sum(T a, T b, T& s, T& e) {
+    s = a + b;
+    T v = s - a;
+    e = (a - (s - v)) + (b - v);
+}
+template<typename T>
+inline void dd_two_prod(T a, T b, T& p, T& e) {
+    p = a * b;
+    e = std::fma(a, b, -p);
+}
+// (a_h, a_l) / (b_h, b_l) via 2-iteration Newton refinement on the FP32 quotient.
+template<typename T>
+inline void dd_div(T a_h, T a_l, T b_h, T b_l, T& q_h, T& q_l) {
+    T q1 = a_h / b_h;
+    // r = a - q1*b   (DD)
+    T p_h, p_e;
+    dd_two_prod(q1, b_h, p_h, p_e);
+    T t  = std::fma(q1, b_l, p_e);
+    T r_h, r_e;
+    dd_two_sum(a_h, -p_h, r_h, r_e);
+    T r_l = a_l - t + r_e;
+    T q2  = (r_h + r_l) / b_h;
+    // q = q1 + q2 (renormalize)
+    dd_two_sum(q1, q2, q_h, q_l);
+}
+} // namespace dd_priv
+
+template<typename AFIELD>
+void ASolver_CG<AFIELD>::solve_CG_init_pair(real_t& rr)
+{
+  if (m_initial_mode == InitialGuess::RHS) {
+    copy(m_r, m_s);
+    copy(m_x, m_s);
+    m_fopr->set_mode("DdagD");
+    m_fopr->mult(m_s, m_x);
+    m_s.normalize(static_cast<int>(m_mw_mode));
+    // m_r -= m_s : single-rep is fine here, b - A*x is bounded.
+    m_r.axpy(real_t(-1.0), m_s, static_cast<int>(m_mw_mode));
+    m_r.normalize(static_cast<int>(m_mw_mode));
+    copy(m_p, m_r);
+    real_t rr_h, rr_l;
+    m_r.norm2_pair(rr_h, rr_l, static_cast<int>(m_mw_mode));
+    m_rrp_h = rr_h;
+    m_rrp_l = rr_l;
+    rr      = rr_h + rr_l;
+  } else if (m_initial_mode == InitialGuess::ZERO) {
+    copy(m_r, m_s);
+    m_s.set(0.0);
+    m_x.set(0.0);
+    copy(m_p, m_r);
+    real_t rr_h, rr_l;
+    m_r.norm2_pair(rr_h, rr_l, static_cast<int>(m_mw_mode));
+    m_rrp_h = rr_h;
+    m_rrp_l = rr_l;
+    rr      = rr_h + rr_l;
+  } else {
+    vout.crucial("%s: unsupported initial guess mode in pair path\n", class_name.c_str());
+    exit(EXIT_FAILURE);
+  }
+}
+
+template<typename AFIELD>
+void ASolver_CG<AFIELD>::solve_CG_step_pair(real_t& rr)
+{
+  m_fopr->mult(m_s, m_p);
+  m_s.normalize(static_cast<int>(m_mw_mode));
+
+  // pap = <s, p> as DD pair
+  real_t pap_h, pap_l;
+  m_s.dot_pair(pap_h, pap_l, m_p, static_cast<int>(m_mw_mode));
+
+  // cr = rrp / pap (DD division, FP32-only)
+  real_t cr_h, cr_l;
+  dd_priv::dd_div(m_rrp_h, m_rrp_l, pap_h, pap_l, cr_h, cr_l);
+
+  // m_x += cr * m_p  (DD axpy)
+  m_x.axpy_pair(cr_h, cr_l, m_p, static_cast<int>(m_mw_mode));
+  m_x.normalize(static_cast<int>(m_mw_mode));
+
+  // m_r -= cr * m_s
+  m_r.axpy_pair(-cr_h, -cr_l, m_s, static_cast<int>(m_mw_mode));
+  m_r.normalize(static_cast<int>(m_mw_mode));
+
+  // rr = <r, r> (DD)
+  real_t rr_h, rr_l;
+  m_r.norm2_pair(rr_h, rr_l, static_cast<int>(m_mw_mode));
+  rr = rr_h + rr_l;
+
+  // bk = rr / rrp
+  real_t bk_h, bk_l;
+  dd_priv::dd_div(rr_h, rr_l, m_rrp_h, m_rrp_l, bk_h, bk_l);
+
+  // m_p = bk * m_p + m_r
+  m_p.aypx_pair(bk_h, bk_l, m_r, static_cast<int>(m_mw_mode));
+  m_p.normalize(static_cast<int>(m_mw_mode));
+
+  m_rrp_h = rr_h;
+  m_rrp_l = rr_l;
+}
+
+
+//====================================================================
+// TW-triple CG: rrp, rr, cr, bk and pap are all (h, m, l) float-triples.
+// Triple-word arithmetic via Hida QD-library style renormalize-after-each-op,
+// FP32-only — never promotes to FP64. The CG inner-product BLAS layer
+// (norm2_tw3 / dot_tw3) yields per-rank 3-word reductions; the device kernels
+// preserve (h, m, l) at red[0..2] so the host-side coefficient algebra stays
+// at ~72-bit precision.
+namespace tw_priv {
+// Error-free transforms (host). Same role as the device TwoSum/TwoProd.
+template<typename T>
+inline void tps(T a, T b, T& s, T& e) { s = a + b; T v = s - a; e = (a - (s - v)) + (b - v); }
+template<typename T>
+inline void tpp(T a, T b, T& p, T& e) { p = a * b; e = std::fma(a, b, -p); }
+
+// Renormalize: enforce |m| <= ulp(h)/2, |l| <= ulp(m)/2.
+template<typename T>
+inline void tw_three_sum(T a, T b, T c, T& s_h, T& s_m, T& s_l) {
+  // Two TwoSums + a fold: classic Hida 3-sum.
+  T t1, e1;
+  t1 = a + b; { T v = t1 - a; e1 = (a - (t1 - v)) + (b - v); }
+  T t2, e2;
+  t2 = t1 + c; { T v = t2 - t1; e2 = (t1 - (t2 - v)) + (c - v); }
+  s_h = t2;
+  T s2 = e1 + e2;        // no renorm needed — leading bits already separated.
+  T sv = s2 - e1; T e3 = (e1 - (s2 - sv)) + (e2 - sv);
+  s_m = s2;
+  s_l = e3;
+}
+
+// (a_h, a_m, a_l) + (b_h, b_m, b_l) → (s_h, s_m, s_l), renormalized.
+template<typename T>
+inline void tw_add(T a_h, T a_m, T a_l, T b_h, T b_m, T b_l,
+                   T& s_h, T& s_m, T& s_l) {
+  T u_h, u_m; tps(a_h, b_h, u_h, u_m);
+  T v_h, v_m; tps(a_m, b_m, v_h, v_m);
+  T w_h = a_l + b_l;
+  // Capture the eps^2 fold error of (u_m + v_h) instead of dropping it —
+  // this is what makes the scalar genuinely triple-word, not dual.
+  T mid, em; tps(u_m, v_h, mid, em);
+  T lo = (v_m + w_h) + em;
+  tw_three_sum(u_h, mid, lo, s_h, s_m, s_l);
+}
+
+// (a_h, a_m, a_l) * b (real, single-word) → (p_h, p_m, p_l) via TwoProd cascade.
+template<typename T>
+inline void tw_mul_real(T a_h, T a_m, T a_l, T b,
+                        T& p_h, T& p_m, T& p_l) {
+  T ph, pe; tpp(a_h, b, ph, pe);
+  T mh, me; tpp(a_m, b, mh, me);
+  T lh = a_l * b;
+  T mid, em; tps(pe, mh, mid, em);     // capture fold error
+  T lo = (me + lh) + em;
+  tw_three_sum(ph, mid, lo, p_h, p_m, p_l);
+}
+
+// (a_h, a_m, a_l) * (b_h, b_m, b_l) → (p_h, p_m, p_l), genuine ~72-bit product.
+template<typename T>
+inline void tw_mul(T a_h, T a_m, T a_l, T b_h, T b_m, T b_l,
+                   T& p_h, T& p_m, T& p_l) {
+  T hh, he; tpp(a_h, b_h, hh, he);
+  // Form the two mid cross-terms error-free so their eps^2 rounding lands in lo.
+  T cm1_h, cm1_l; tpp(a_h, b_m, cm1_h, cm1_l);
+  T cm2_h, cm2_l; tpp(a_m, b_h, cm2_h, cm2_l);
+  T s1, e1; tps(cm1_h, cm2_h, s1, e1);
+  T mid, e2; tps(he, s1, mid, e2);
+  T lo = cm1_l + cm2_l + e1 + e2
+       + std::fma(a_h, b_l, std::fma(a_m, b_m, std::fma(a_l, b_h, T(0))));
+  tw_three_sum(hh, mid, lo, p_h, p_m, p_l);
+}
+
+// (a_h, a_m, a_l) / (b_h, b_m, b_l) via 2-step Newton refinement.
+// FP32-only on real_t.
+template<typename T>
+inline void tw_div(T a_h, T a_m, T a_l, T b_h, T b_m, T b_l,
+                   T& q_h, T& q_m, T& q_l) {
+  T q1 = a_h / b_h;
+  // r = a - q1*b
+  T qb_h, qb_m, qb_l;
+  tw_mul_real(b_h, b_m, b_l, q1, qb_h, qb_m, qb_l);
+  T r_h, r_m, r_l;
+  tw_add(a_h, a_m, a_l, -qb_h, -qb_m, -qb_l, r_h, r_m, r_l);
+
+  T q2 = r_h / b_h;
+  T qb2_h, qb2_m, qb2_l;
+  tw_mul_real(b_h, b_m, b_l, q2, qb2_h, qb2_m, qb2_l);
+  T r2_h, r2_m, r2_l;
+  tw_add(r_h, r_m, r_l, -qb2_h, -qb2_m, -qb2_l, r2_h, r2_m, r2_l);
+
+  T q3 = r2_h / b_h;
+
+  // q = q1 + q2 + q3 (renormalized to (h, m, l)).
+  tw_three_sum(q1, q2, q3, q_h, q_m, q_l);
+}
+} // namespace tw_priv
+
+template<typename AFIELD>
+void ASolver_CG<AFIELD>::solve_CG_init_triple(real_t& rr)
+{
+  if (m_initial_mode == InitialGuess::RHS) {
+    copy(m_r, m_s);
+    copy(m_x, m_s);
+    m_fopr->set_mode("DdagD");
+    m_fopr->mult(m_s, m_x);
+    m_s.normalize(static_cast<int>(m_mw_mode));
+    m_r.axpy(real_t(-1.0), m_s, static_cast<int>(m_mw_mode));
+    m_r.normalize(static_cast<int>(m_mw_mode));
+    copy(m_p, m_r);
+    real_t rr_h, rr_m, rr_l;
+    m_r.norm2_triple(rr_h, rr_m, rr_l, static_cast<int>(m_mw_mode));
+    m_rrp_th = rr_h;
+    m_rrp_tm = rr_m;
+    m_rrp_tl = rr_l;
+    rr       = rr_h + rr_m + rr_l;
+  } else if (m_initial_mode == InitialGuess::ZERO) {
+    copy(m_r, m_s);
+    m_s.set(0.0);
+    m_x.set(0.0);
+    copy(m_p, m_r);
+    real_t rr_h, rr_m, rr_l;
+    m_r.norm2_triple(rr_h, rr_m, rr_l, static_cast<int>(m_mw_mode));
+    m_rrp_th = rr_h;
+    m_rrp_tm = rr_m;
+    m_rrp_tl = rr_l;
+    rr       = rr_h + rr_m + rr_l;
+  } else {
+    vout.crucial("%s: unsupported initial guess mode in triple path\n", class_name.c_str());
+    exit(EXIT_FAILURE);
+  }
+}
+
+template<typename AFIELD>
+void ASolver_CG<AFIELD>::solve_CG_step_triple(real_t& rr)
+{
+  m_fopr->mult(m_s, m_p);
+  m_s.normalize(static_cast<int>(m_mw_mode));
+
+  // pap = <s, p> as TW triple
+  real_t pap_h, pap_m, pap_l;
+  m_s.dot_triple(pap_h, pap_m, pap_l, m_p, static_cast<int>(m_mw_mode));
+
+  // cr = rrp / pap (TW division, FP32-only)
+  real_t cr_h, cr_m, cr_l;
+  tw_priv::tw_div(m_rrp_th, m_rrp_tm, m_rrp_tl,
+                  pap_h, pap_m, pap_l,
+                  cr_h, cr_m, cr_l);
+
+  // m_x += cr * m_p
+  m_x.axpy_triple(cr_h, cr_m, cr_l, m_p, static_cast<int>(m_mw_mode));
+  m_x.normalize(static_cast<int>(m_mw_mode));
+
+  // m_r -= cr * m_s
+  m_r.axpy_triple(-cr_h, -cr_m, -cr_l, m_s, static_cast<int>(m_mw_mode));
+  m_r.normalize(static_cast<int>(m_mw_mode));
+
+  // rr = <r, r> (TW)
+  real_t rr_h, rr_m, rr_l;
+  m_r.norm2_triple(rr_h, rr_m, rr_l, static_cast<int>(m_mw_mode));
+  rr = rr_h + rr_m + rr_l;
+
+  // bk = rr / rrp
+  real_t bk_h, bk_m, bk_l;
+  tw_priv::tw_div(rr_h, rr_m, rr_l,
+                  m_rrp_th, m_rrp_tm, m_rrp_tl,
+                  bk_h, bk_m, bk_l);
+
+  // m_p = bk * m_p + m_r
+  m_p.aypx_triple(bk_h, bk_m, bk_l, m_r, static_cast<int>(m_mw_mode));
+  m_p.normalize(static_cast<int>(m_mw_mode));
+
+  m_rrp_th = rr_h;
+  m_rrp_tm = rr_m;
+  m_rrp_tl = rr_l;
 }
 
 

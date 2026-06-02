@@ -50,6 +50,19 @@ void merge_qdw(float* v,
                float* we, float* wo, int ieo_origin,
                int nin, int* Nsize, int nvol2_pad, int nvol_pad);
 
+// QTW-aware split/merge: 6-reals-per-cplx-contiguous layout
+// (6*IDX2(nin/6, c, site)+k).
+void split_qtw(double* ve, double* vo,
+               double* w, int ieo_origin,
+               int nin, int* Nsize, int nvol2_pad, int nvol_pad);
+void split_qtw(float* ve, float* vo,
+               float* w, int ieo_origin,
+               int nin, int* Nsize, int nvol2_pad, int nvol_pad);
+void merge_qtw(double* v, double* we, double* wo, int ieo_origin,
+               int nin, int* Nsize, int nvol2_pad, int nvol_pad);
+void merge_qtw(float* v, float* we, float* wo, int ieo_origin,
+               int nin, int* Nsize, int nvol2_pad, int nvol_pad);
+
 }
 
 //============================================================END=====

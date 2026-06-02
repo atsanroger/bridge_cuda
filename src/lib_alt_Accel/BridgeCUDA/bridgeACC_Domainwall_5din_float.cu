@@ -13,9 +13,12 @@
 
 
 typedef float real_t;
+typedef float4 real4;
+typedef float2 real2;
 #include "inline/mult_Wilson_cuda_inline-inc.h"
 //#include "src/mult_Wilson_cuda2-inc.h"
 
+#include "src/qtw_prof_timer.h"  // global scope: keep its STL out of namespace BridgeACC
 
 namespace BridgeACC {
 
@@ -29,34 +32,13 @@ namespace BridgeACC {
 #include "src/mult_Domainwall_5din_cuda2-inc.h"
 #include "src/mult_Domainwall_5din_eo_inv_cuda-inc.h"
 
-// QDW EO stubs — QDW arithmetic is double-only; print error if called for float
-void mult_domainwall_5din_ee_5dir_dirac_qdw(
-    float*, float*, float, float, int, float*, float*, float, int*)
-{ printf("Error: QDW mult only supported for double precision.\n"); exit(1); }
-
-void mult_domainwall_5din_eo_5dir_dirac_qdw(
-    float*, float*, float, float, int, float*, float*, float, int*)
-{ printf("Error: QDW mult only supported for double precision.\n"); exit(1); }
-
-void mult_domainwall_5din_ee_5dirdag_dirac_qdw(
-    float*, float*, float, float, int, float*, float*, float, int*)
-{ printf("Error: QDW mult only supported for double precision.\n"); exit(1); }
-
-void mult_domainwall_5din_eo_5dirdag_dirac_qdw(
-    float*, float*, float, float, int, float*, float*, float, int*)
-{ printf("Error: QDW mult only supported for double precision.\n"); exit(1); }
-
-void mult_domainwall_5din_eo_hopb_qdw_dirac_5d(
-    float*, float*, float*, int, int*, int*, int*, int, int, int)
-{ printf("Error: QDW mult only supported for double precision.\n"); exit(1); }
-
-void mult_domainwall_5din_ee_LUinv_dirac_qdw(
-    float*, float*, int, int*, float)
-{ printf("Error: QDW LU inv only supported for double precision.\n"); exit(1); }
-
-void mult_domainwall_5din_ee_LUdaginv_dirac_qdw(
-    float*, float*, int, int*, float)
-{ printf("Error: QDW LUdag inv only supported for double precision.\n"); exit(1); }
+// QDW EO kernels — float-base (float-float) implementation. The kernels are
+// parameterized on real_t/real4/real2, so including them here (real_t=float)
+// yields float-float QDW. The non-EO QDW kernel is omitted (unused dead code).
+#include "src/mult_Domainwall_5din_eo_cuda_qdw-inc.h"
+#include "src/mult_Domainwall_5din_eo_inv_cuda_qdw-inc.h"
+#include "src/mult_Domainwall_5din_eo_cuda_qtw-inc.h"
+#include "src/mult_Domainwall_5din_eo_inv_cuda_qtw-inc.h"
 
 }
 

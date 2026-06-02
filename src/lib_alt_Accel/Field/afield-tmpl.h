@@ -728,6 +728,249 @@ REALTYPE AField<REALTYPE,ACCEL>::norm2(const int mode) const
 }
 
 //====================================================================
+// DD-pair variants. Across MPI ranks each word is summed independently — the
+// hi part may carry small rounding errors at the rank boundary, but for the
+// single-rank tests we run today this is irrelevant. For multi-rank correctness
+// a custom TwoSum allreduce can be plugged in later.
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::norm2_pair(REALTYPE& h, REALTYPE& l, const int mode) const
+{
+  int ith, nth;
+  set_thread(ith, nth);
+
+  real_t hh = 0.0, ll = 0.0;
+  if (ith == 0) {
+    BridgeACC::norm2_pair(&hh, &ll, m_field, m_red1, m_nin, m_nvol_pad, m_nex, mode);
+  }
+#pragma omp barrier
+
+  real_t pair[2] = { hh, ll };
+  ThreadManager::reduce_sum_global(pair, 2, ith, nth);
+  h = pair[0];
+  l = pair[1];
+}
+
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::dot_pair(REALTYPE& h, REALTYPE& l,
+                                      const AField<REALTYPE,ACCEL>& w,
+                                      const int mode)
+{
+  assert(check_size(w));
+  int ith, nth;
+  set_thread(ith, nth);
+
+  real_t hh = 0.0, ll = 0.0;
+  if (ith == 0) {
+    BridgeACC::dot_pair(&hh, &ll, m_field, w.m_field, m_red1, m_nin, m_nvol_pad, m_nex, mode);
+  }
+#pragma omp barrier
+
+  real_t pair[2] = { hh, ll };
+  ThreadManager::reduce_sum_global(pair, 2, ith, nth);
+  h = pair[0];
+  l = pair[1];
+}
+
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::dotc_pair(REALTYPE& ar_h, REALTYPE& ar_l,
+                                       REALTYPE& ai_h, REALTYPE& ai_l,
+                                       const AField<REALTYPE,ACCEL>& w,
+                                       const int mode) const
+{
+  assert(check_size(w));
+  int ith, nth;
+  set_thread(ith, nth);
+
+  real_t arh = 0.0, arl = 0.0, aih = 0.0, ail = 0.0;
+  if (ith == 0) {
+    BridgeACC::dotc_pair(&arh, &arl, &aih, &ail, m_field, w.m_field,
+                         m_red1, m_red2, m_nin, m_nvol_pad, m_nex, mode);
+  }
+#pragma omp barrier
+
+  real_t pair[4] = { arh, arl, aih, ail };
+  ThreadManager::reduce_sum_global(pair, 4, ith, nth);
+  ar_h = pair[0]; ar_l = pair[1];
+  ai_h = pair[2]; ai_l = pair[3];
+}
+
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::axpy_pair(const REALTYPE a_h, const REALTYPE a_l,
+                                       const AField<REALTYPE,ACCEL>& w,
+                                       const int mode)
+{
+  assert(check_size(w));
+  int ith, nth;
+  set_thread(ith, nth);
+
+  if (ith == 0) {
+    int nvex = m_nsize_pad / m_nin;
+    BridgeACC::axpy_pair(m_field, 0, a_h, a_l, w.m_field, 0, m_nin, nvex, mode);
+  }
+#pragma omp barrier
+}
+
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::aypx_pair(const REALTYPE a_h, const REALTYPE a_l,
+                                       const AField<REALTYPE,ACCEL>& w,
+                                       const int mode)
+{
+  assert(check_size(w));
+  int ith, nth;
+  set_thread(ith, nth);
+
+  if (ith == 0) {
+    int nvex = m_nsize_pad / m_nin;
+    BridgeACC::aypx_pair(a_h, a_l, m_field, 0, w.m_field, 0, m_nin, nvex, mode);
+  }
+#pragma omp barrier
+}
+
+//====================================================================
+// TW (triple-word) variants. Per-rank reduction kernels yield (h,m,l) at
+// device red[0..2]; we sum each word independently across MPI ranks. As with
+// the DD-pair case, hi/mid may carry rounding at the rank boundary; OK for
+// single-rank tests, a custom ThreeSum allreduce can be added for multi-rank.
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::norm2_triple(REALTYPE& h, REALTYPE& m, REALTYPE& l,
+                                          const int mode) const
+{
+  int ith, nth;
+  set_thread(ith, nth);
+
+  real_t hh = 0.0, mm = 0.0, ll = 0.0;
+  if (ith == 0) {
+    BridgeACC::norm2_tw3(&hh, &mm, &ll, m_field, m_red1, m_nin, m_nvol_pad, m_nex);
+  }
+#pragma omp barrier
+
+  real_t tri[3] = { hh, mm, ll };
+  ThreadManager::reduce_sum_global(tri, 3, ith, nth);
+  h = tri[0]; m = tri[1]; l = tri[2];
+}
+
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::dot_triple(REALTYPE& h, REALTYPE& m, REALTYPE& l,
+                                        const AField<REALTYPE,ACCEL>& w,
+                                        const int mode)
+{
+  assert(check_size(w));
+  int ith, nth;
+  set_thread(ith, nth);
+
+  real_t hh = 0.0, mm = 0.0, ll = 0.0;
+  if (ith == 0) {
+    BridgeACC::dot_tw3(&hh, &mm, &ll, m_field, w.m_field, m_red1, m_nin, m_nvol_pad, m_nex);
+  }
+#pragma omp barrier
+
+  real_t tri[3] = { hh, mm, ll };
+  ThreadManager::reduce_sum_global(tri, 3, ith, nth);
+  h = tri[0]; m = tri[1]; l = tri[2];
+}
+
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::dotc_triple(REALTYPE& ar_h, REALTYPE& ar_m, REALTYPE& ar_l,
+                                         REALTYPE& ai_h, REALTYPE& ai_m, REALTYPE& ai_l,
+                                         const AField<REALTYPE,ACCEL>& w,
+                                         const int mode) const
+{
+  assert(check_size(w));
+  int ith, nth;
+  set_thread(ith, nth);
+
+  real_t arh = 0.0, arm = 0.0, arl = 0.0, aih = 0.0, aim = 0.0, ail = 0.0;
+  if (ith == 0) {
+    BridgeACC::dotc_tw3(&arh, &arm, &arl, &aih, &aim, &ail,
+                        m_field, w.m_field,
+                        m_red1, m_red2, m_nin, m_nvol_pad, m_nex);
+  }
+#pragma omp barrier
+
+  real_t buf[6] = { arh, arm, arl, aih, aim, ail };
+  ThreadManager::reduce_sum_global(buf, 6, ith, nth);
+  ar_h = buf[0]; ar_m = buf[1]; ar_l = buf[2];
+  ai_h = buf[3]; ai_m = buf[4]; ai_l = buf[5];
+}
+
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::axpy_triple(const REALTYPE a,
+                                         const AField<REALTYPE,ACCEL>& w,
+                                         const int mode)
+{
+  assert(check_size(w));
+  int ith, nth;
+  set_thread(ith, nth);
+
+  if (ith == 0) {
+    int nvex = m_nsize_pad / m_nin;
+    BridgeACC::axpy_tw3(m_field, 0, a, w.m_field, 0, m_nin, nvex);
+  }
+#pragma omp barrier
+}
+
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::axpy_triple(const REALTYPE a_h, const REALTYPE a_m, const REALTYPE a_l,
+                                         const AField<REALTYPE,ACCEL>& w,
+                                         const int mode)
+{
+  assert(check_size(w));
+  int ith, nth;
+  set_thread(ith, nth);
+
+  if (ith == 0) {
+    int nvex = m_nsize_pad / m_nin;
+    BridgeACC::axpy_tw3_pair(m_field, 0, a_h, a_m, a_l, w.m_field, 0, m_nin, nvex);
+  }
+#pragma omp barrier
+}
+
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::aypx_triple(const REALTYPE a,
+                                         const AField<REALTYPE,ACCEL>& w,
+                                         const int mode)
+{
+  assert(check_size(w));
+  int ith, nth;
+  set_thread(ith, nth);
+
+  if (ith == 0) {
+    int nvex = m_nsize_pad / m_nin;
+    BridgeACC::aypx_tw3(a, m_field, 0, w.m_field, 0, m_nin, nvex);
+  }
+#pragma omp barrier
+}
+
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::aypx_triple(const REALTYPE a_h, const REALTYPE a_m, const REALTYPE a_l,
+                                         const AField<REALTYPE,ACCEL>& w,
+                                         const int mode)
+{
+  assert(check_size(w));
+  int ith, nth;
+  set_thread(ith, nth);
+
+  if (ith == 0) {
+    int nvex = m_nsize_pad / m_nin;
+    BridgeACC::aypx_tw3_pair(a_h, a_m, a_l, m_field, 0, w.m_field, 0, m_nin, nvex);
+  }
+#pragma omp barrier
+}
+
+template<typename REALTYPE>
+void AField<REALTYPE,ACCEL>::normalize_triple()
+{
+  int ith, nth;
+  set_thread(ith, nth);
+
+  if (ith == 0) {
+    int nvex = m_nsize_pad / m_nin;
+    BridgeACC::normalize_tw3(m_field, m_nin, nvex);
+  }
+#pragma omp barrier
+}
+
+//====================================================================
 template<typename REALTYPE>
 REALTYPE AField<REALTYPE,ACCEL>::norm2_host() const
 {
