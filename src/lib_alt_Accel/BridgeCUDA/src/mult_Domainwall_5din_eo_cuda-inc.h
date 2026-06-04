@@ -836,7 +836,7 @@ void mult_domainwall_5din_eo_hopb_dirac_4d(
 
 __global__ __launch_bounds__(NWP * NS_PER_BLOCK, LB_BLOCKS_PER_SM)
 void mult_domainwall_5din_eo_hopb_dirac_5D_v2_kernel(
-  real_t * __restrict__ vp, real_t * __restrict__ up, real_t * __restrict__ wp,
+  real_t * __restrict__ vp, const real_t * __restrict__ up, const real_t * __restrict__ wp,
   int Ns,
   int bc_x, int bc_y, int bc_z, int bc_t,
   int Nx, int Ny, int Nz, int Nt,
@@ -855,8 +855,8 @@ void mult_domainwall_5din_eo_hopb_dirac_5D_v2_kernel(
   const int is       = is_base + is_local;
   const int site     = lane + NWP * idx_out;
 
-  real_t * u_up = up;
-  real_t * u_dn = up;
+  const real_t * u_up = up;
+  const real_t * u_dn = up;
 
   __shared__ real_t u_sh[12 * NWP];
 
@@ -882,7 +882,7 @@ void mult_domainwall_5din_eo_hopb_dirac_5D_v2_kernel(
   real_t v2_03, v2_13, v2_23, v2_33, v2_43, v2_53;
   real_t v2_04, v2_14, v2_24, v2_34, v2_44, v2_54;
 
-  real_t * v1 = wp;
+  const real_t * v1 = wp;
   real_t * v2 = vp;
 
   #include "inc/mult_Domainwall_eo_cuda_xyz_shmem-inc.h"
@@ -920,7 +920,7 @@ void mult_domainwall_5din_eo_hopb_dirac_5D_v2_kernel(
 //====================================================================
 __global__
 void mult_domainwall_5din_eo_hopb_dirac_5D_kernel(
-  real_t * __restrict__ vp, real_t * __restrict__ up, real_t * __restrict__ wp,
+  real_t * __restrict__ vp, const real_t * __restrict__ up, const real_t * __restrict__ wp,
   int Ns,
   int bc_x, int bc_y, int bc_z, int bc_t,
   int Nx, int Ny, int Nz, int Nt, 
@@ -934,8 +934,8 @@ void mult_domainwall_5din_eo_hopb_dirac_5D_kernel(
   const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
   const int GridSize = blockDim.x * gridDim.x;
 
-  real_t * u_up = up;
-  real_t * u_dn = up;
+  const real_t * u_up = up;
+  const real_t * u_dn = up;
 
   for( int idx = ist; idx < Nst_pad * Ns; idx += GridSize){
 
@@ -968,7 +968,7 @@ void mult_domainwall_5din_eo_hopb_dirac_5D_kernel(
     real_t v2_03, v2_13, v2_23, v2_33, v2_43, v2_53;
     real_t v2_04, v2_14, v2_24, v2_34, v2_44, v2_54;
 
-    real_t * v1 = wp;
+    const real_t * v1 = wp;
     real_t * v2 = vp;
 
     #include "inc/mult_Domainwall_eo_openacc2_xyz-inc.h"

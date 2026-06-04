@@ -495,14 +495,16 @@ void AFopr_Domainwall_5din_eo<AFIELD>::set_parameters(
     // double coefficients. Kernels in EXT path do FP32-only dw_add/dw_mul
     // on these (no FP64 ALU used).
     BridgeACC::initDomainwallConstantMemoryFF(
-      m_e_d.data(), m_f_d.data(), m_dpinv_d.data(),
-      m_dm_d.data(), m_b_d.data(), m_c_d.data(), m_Ns);
+      m_M0_d, m_mq_d, m_alpha_d,
+      m_b_d.data(), m_c_d.data(), m_Ns);
   }
   // Always populate the TW (hi, mid, lo) constants too — cheap, and lets the
   // TW kernels work whether or not extended_precision is also set. FP32-only.
+  // Pass raw inputs so the coefficients are recomputed in host double-double
+  // (genuine >double precision) instead of splitting the double m_*_d copies.
   BridgeACC::initDomainwallConstantMemoryTW(
-    m_e_d.data(), m_f_d.data(), m_dpinv_d.data(),
-    m_dm_d.data(), m_b_d.data(), m_c_d.data(), m_Ns);
+    m_M0_d, m_mq_d, m_alpha_d,
+    m_b_d.data(), m_c_d.data(), m_Ns);
 #endif
 
 

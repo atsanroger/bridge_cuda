@@ -188,6 +188,8 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_qdw_kernel_ff(
     const real_t* dpinv_l = ConstantMemoryTraits<real_t>::dpinv_lo();
     const real_t* dm_h    = ConstantMemoryTraits<real_t>::dm();
     const real_t* dm_l    = ConstantMemoryTraits<real_t>::dm_lo();
+    const real_t* a_con   = ConstantMemoryTraits<real_t>::a();
+    const real_t* a_lo_con = ConstantMemoryTraits<real_t>::a_lo();
 
     real4 vt0, vt1, vt2, vt3;
     real4 xt0, xt1, xt2, xt3;
@@ -209,10 +211,8 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_qdw_kernel_ff(
     QDW_SCAL_DD(yt3, e_h[0], e_l[0], vt3);
 
     for (int is = 1; is < Ns-1; ++is) {
-        // a = 0.5 * dm[is] * dpinv[is-1]  — all DD, FP32-only
-        real_t a_h, a_l;
-        dw_mul(dm_h[is], dm_l[is], dpinv_h[is-1], dpinv_l[is-1], a_h, a_l);
-        dw_scal(real_t(0.5), a_h, a_l, a_h, a_l);
+        // a = 0.5 * dm[is] * dpinv[is-1] = const_a[is-1]  (precomputed, float-float)
+        const real_t a_h = a_con[is-1], a_l = a_lo_con[is-1];
         const real_t eis_h = e_h[is], eis_l = e_l[is];
         xt0 = vt0; xt1 = vt1; xt2 = vt2; xt3 = vt3;
         vt0 = wp[IDX_DWF_QDW(ic,0,is,Ns,site)];
@@ -235,9 +235,7 @@ __global__ void mult_domainwall_5din_ee_LUinv_dirac_qdw_kernel_ff(
 
     {
         const int is = Ns-1;
-        real_t al_h, al_l;
-        dw_mul(dm_h[is], dm_l[is], dpinv_h[is-1], dpinv_l[is-1], al_h, al_l);
-        dw_scal(real_t(0.5), al_h, al_l, al_h, al_l);
+        const real_t al_h = a_con[is-1], al_l = a_lo_con[is-1];  // = const_a[is-1]
         xt0 = vt0; xt1 = vt1; xt2 = vt2; xt3 = vt3;
         vt0 = wp[IDX_DWF_QDW(ic,0,is,Ns,site)];
         vt1 = wp[IDX_DWF_QDW(ic,1,is,Ns,site)];
@@ -511,6 +509,8 @@ __global__ void mult_domainwall_5din_ee_LUdaginv_dirac_qdw_kernel_ff(
     const real_t* dpinv_l = ConstantMemoryTraits<real_t>::dpinv_lo();
     const real_t* dm_h    = ConstantMemoryTraits<real_t>::dm();
     const real_t* dm_l    = ConstantMemoryTraits<real_t>::dm_lo();
+    const real_t* a_con   = ConstantMemoryTraits<real_t>::a();
+    const real_t* a_lo_con = ConstantMemoryTraits<real_t>::a_lo();
 
     real4 vt0, vt1, vt2, vt3;
     real4 xt0, xt1, xt2, xt3;
@@ -623,9 +623,8 @@ __global__ void mult_domainwall_5din_ee_LUdaginv_dirac_qdw_kernel_ff(
 
     // === Backward sweep: Ldag^{-1} ===
     for (int is = Ns-2; is >= 0; --is) {
-        real_t a_h, a_l;
-        dw_mul(dm_h[is+1], dm_l[is+1], dpinv_h[is], dpinv_l[is], a_h, a_l);
-        dw_scal(real_t(0.5), a_h, a_l, a_h, a_l);
+        // a = 0.5 * dm[is+1] * dpinv[is] = const_a[is]  (precomputed, float-float)
+        const real_t a_h = a_con[is], a_l = a_lo_con[is];
         const real_t eis_h = e_h[is], eis_l = e_l[is];
         xt0 = vt0; xt1 = vt1; xt2 = vt2; xt3 = vt3;
         vt0 = vp[IDX_DWF_QDW(ic,0,is,Ns,site)];

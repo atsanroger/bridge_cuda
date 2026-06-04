@@ -1401,8 +1401,8 @@ void mult_domainwall_5din_eo_5dirdag_dirac_qdw_kernel_ff(
 template<bool EXT, bool RECON>
 __global__
 void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
-    real4 * __restrict__ vp, real_t * __restrict__ up,
-    real_t * __restrict__ up_lo, real4 * __restrict__ wp,
+    real4 * __restrict__ vp, const real_t * __restrict__ up,
+    const real_t * __restrict__ up_lo, const real4 * __restrict__ wp,
     int Ns,
     int bc_x, int bc_y, int bc_z, int bc_t,
     int Nx, int Ny, int Nz, int Nt,
@@ -1432,10 +1432,10 @@ void mult_domainwall_5din_eo_hopb_qdw_dirac_5d_kernel(
     const int d2 = (jgm5 == 0) ? 2 : 0;
     const int d3 = (jgm5 == 0) ? 3 : 1;
 
-    real_t *u_up = up;
-    real_t *u_dn = up;
-    real_t *u_up_lo = up_lo;
-    real_t *u_dn_lo = up_lo;
+    const real_t *u_up = up;
+    const real_t *u_dn = up;
+    const real_t *u_up_lo = up_lo;
+    const real_t *u_dn_lo = up_lo;
 
     for (int is = 0; is < Ns; ++is) {
 

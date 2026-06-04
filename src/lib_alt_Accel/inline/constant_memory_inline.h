@@ -48,6 +48,13 @@ extern __constant__ float const_dm_tw_lo[NS_MAX];
 extern __constant__ float const_b_tw_lo[NS_MAX];
 extern __constant__ float const_c_tw_lo[NS_MAX];
 
+// Precomputed coupling a[j] = 0.5*dm[j+1]*dpinv[j] (hi / ff-lo / tw mid+lo).
+extern __constant__ double const_a_double[NS_MAX];
+extern __constant__ float  const_a_float[NS_MAX];
+extern __constant__ float  const_a_ff_lo[NS_MAX];
+extern __constant__ float  const_a_tw_mid[NS_MAX];
+extern __constant__ float  const_a_tw_lo[NS_MAX];
+
 template<typename T> struct ConstantMemoryTraits;
 
 template<> struct ConstantMemoryTraits<double> {
@@ -80,6 +87,11 @@ template<> struct ConstantMemoryTraits<double> {
     static __device__ __forceinline__ const double* dm_lo_tw() { return const_dm_double; }
     static __device__ __forceinline__ const double* b_lo_tw() { return const_b_double; }
     static __device__ __forceinline__ const double* c_lo_tw() { return const_c_double; }
+    // Precomputed coupling a (double-build stub; multiword kernels not invoked).
+    static __device__ __forceinline__ const double* a() { return const_a_double; }
+    static __device__ __forceinline__ const double* a_lo() { return const_a_double; }
+    static __device__ __forceinline__ const double* a_mid() { return const_a_double; }
+    static __device__ __forceinline__ const double* a_lo_tw() { return const_a_double; }
 };
 
 template<> struct ConstantMemoryTraits<float> {
@@ -109,6 +121,11 @@ template<> struct ConstantMemoryTraits<float> {
     static __device__ __forceinline__ const float* dm_lo_tw() { return const_dm_tw_lo; }
     static __device__ __forceinline__ const float* b_lo_tw() { return const_b_tw_lo; }
     static __device__ __forceinline__ const float* c_lo_tw() { return const_c_tw_lo; }
+    // Precomputed coupling a[j] = 0.5*dm[j+1]*dpinv[j]: hi / ff-lo / tw mid+lo.
+    static __device__ __forceinline__ const float* a() { return const_a_float; }
+    static __device__ __forceinline__ const float* a_lo() { return const_a_ff_lo; }
+    static __device__ __forceinline__ const float* a_mid() { return const_a_tw_mid; }
+    static __device__ __forceinline__ const float* a_lo_tw() { return const_a_tw_lo; }
 };
 
 #define const_e     (ConstantMemoryTraits<real_t>::e())

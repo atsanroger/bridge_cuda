@@ -72,6 +72,15 @@ void ASolver_CG<AFIELD>::set_parameters(const Parameters& params)
   int Niter2 = Niter * Nrestart;
   set_parameters(Niter2, Stop_cond, init_guess_mode);
 
+  // Optional diagnostic: log the TRUE residual ||b-Ax|| every N iterations so a
+  // single solve yields the true-residual descent curve (tagged [TRUERES]).
+  m_trueres_interval = 0;
+  params.fetch_int("true_residual_interval", m_trueres_interval);
+  if (m_trueres_interval > 0) {
+    vout.general(m_vl, "  true_residual_interval = %d (logging [TRUERES])\n",
+                 m_trueres_interval);
+  }
+
   m_mw_mode = MWMode::FP;
   std::string mw_mode_str = "FP";
   params.fetch_string("multiword_mode", mw_mode_str);
@@ -182,6 +191,12 @@ void ASolver_CG<AFIELD>::solve(AFIELD& xq, const AFIELD& b,
   }
   vout.detailed(m_vl, "  init: %22.15e\n", rr * snorm);
 
+  // Optional: scratch field for the TRUE residual ||b - A x|| (recomputed fresh,
+  // in the field's own multiword precision, so it reveals the precision floor —
+  // unlike the recursively-updated rr which decouples from it).
+  AFIELD tr_tmp;
+  if (m_trueres_interval > 0) tr_tmp.reset(m_x.nin(), m_x.nvol(), m_x.nex());
+
   for (int iter = 0; iter < m_Niter; ++iter) {
     if (use_triple) {
       solve_CG_step_triple(rr);
@@ -191,6 +206,19 @@ void ASolver_CG<AFIELD>::solve(AFIELD& xq, const AFIELD& b,
       solve_CG_step(rrp, rr);
     }
     vout.detailed(m_vl, "%6d  %22.15e\n", iter, rr * snorm);
+
+    if (m_trueres_interval > 0 && (iter % m_trueres_interval) == 0) {
+      // A is in DdagD mode here; mirror solve_CG_init's residual convention
+      // (normalize the operator output before combining). tr = ||A x - b||^2 *
+      // snorm, same scaling/units as rr*snorm, but recomputed (not recursive).
+      const int mw = static_cast<int>(m_mw_mode);
+      m_fopr->mult(tr_tmp, m_x);
+      tr_tmp.normalize(mw);
+      tr_tmp.axpy(real_t(-1.0), b, mw);
+      tr_tmp.normalize(mw);
+      real_t tr = tr_tmp.norm2(mw) * snorm;
+      vout.general(m_vl, "[TRUERES] %6d %22.15e %22.15e\n", iter, rr * snorm, tr);
+    }
 
     if (rr * snorm < m_Stop_cond) {
       nconv = iter;

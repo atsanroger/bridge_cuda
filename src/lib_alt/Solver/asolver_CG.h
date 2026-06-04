@@ -52,6 +52,12 @@ class ASolver_CG : public ASolver<AFIELD>
   using MWMode = typename AFopr<AFIELD>::MWMode;
   MWMode m_mw_mode;
 
+  //! >0 = log the TRUE residual ||b - A x|| every this-many iterations
+  //! (in the field's own multiword precision) so a single solve yields the
+  //! true-residual descent curve. 0 = off. The recursively-updated residual
+  //! is NOT usable for precision comparison (it decouples from the true one).
+  int m_trueres_interval = 0;
+
  public:
   //! constructor.
   ASolver_CG(AFopr<AFIELD> *fopr)

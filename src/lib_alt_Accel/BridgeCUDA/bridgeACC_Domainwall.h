@@ -21,21 +21,24 @@ void initDomainwallConstantMemory(
     float* e, float* f, float* dpinv,
     float* dm, float* b, float* c, int Ns);
 
-// Push float-float pairs from double coefficients into const_*_float (hi)
-// and const_*_ff_lo (lo). Used by extended_precision=true on a float base
-// so kernels can read coefficients at ~48-bit precision and do FP32-only
-// dw_add/dw_mul on them.
+// Push float-float (hi/lo) pairs into const_*_float (hi) and const_*_ff_lo (lo).
+// Used by extended_precision=true on a float base so kernels read coefficients at
+// ~48-bit precision and do FP32-only dw_add/dw_mul. Recomputes the coefficients in
+// host double-double from raw inputs (M0,mq,alpha,b,c) for consistency with the TW
+// path (numerically identical to the old double-split at the float-float level).
 void initDomainwallConstantMemoryFF(
-    double* e, double* f, double* dpinv,
-    double* dm, double* b, double* c, int Ns);
+    double M0, double mq, double alpha,
+    const double* b, const double* c, int Ns);
 
-// Triple-word (QTW) variant: pushes (hi, mid, lo) FP32 decomposition of each
-// double coefficient. const_*_float gets the hi word; const_*_tw_mid the mid;
-// const_*_tw_lo the lo. Together they encode each coefficient at ~72-bit
-// precision using only FP32 storage / fma arithmetic.
+// Triple-word (QTW) variant: recomputes the EO preconditioner coefficients in
+// host double-double from the raw inputs (M0, mq, alpha, b, c), then pushes the
+// (hi, mid, lo) FP32 decomposition. const_*_float gets the hi word; const_*_tw_mid
+// the mid; const_*_tw_lo the lo. Recomputing in DD (rather than splitting an
+// already-double-rounded coefficient) lets the lo word carry genuine bits 54..72,
+// so the QTW solve is not capped at double precision. Device stays FP32-only.
 void initDomainwallConstantMemoryTW(
-    double* e, double* f, double* dpinv,
-    double* dm, double* b, double* c, int Ns);
+    double M0, double mq, double alpha,
+    const double* b, const double* c, int Ns);
 
 void mult_domainwall_5din_5dir_dirac(
         double *vp, double *yp, double *wp,

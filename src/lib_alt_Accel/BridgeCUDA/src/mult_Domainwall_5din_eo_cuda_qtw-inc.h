@@ -30,21 +30,26 @@
 #define QTW_ZERO(name) \
     name##_rh = name##_ih = name##_rm = name##_im = name##_rl = name##_il = real_t(0)
 
+// Vectorized SoAoS loads: the 6 words {rh,ih,rm,im,rl,il} are contiguous and
+// (rh,ih),(rm,im),(rl,il) form three real2 pairs. base = 6*IDX2 is always even,
+// so &ptr[base+0/2/4] is real2-aligned (float2: 24*IDX2 is 8-aligned; double2:
+// 48*IDX2 is 16-aligned). 3 wide loads instead of 6 scalar LDG.
 #define QTW_LOAD6(prefix, ptr, base) \
-    real_t prefix##_rh = (ptr)[(base) + 0]; \
-    real_t prefix##_ih = (ptr)[(base) + 1]; \
-    real_t prefix##_rm = (ptr)[(base) + 2]; \
-    real_t prefix##_im = (ptr)[(base) + 3]; \
-    real_t prefix##_rl = (ptr)[(base) + 4]; \
-    real_t prefix##_il = (ptr)[(base) + 5]
+    real2 prefix##_ld0 = *reinterpret_cast<const real2 *>(&(ptr)[(base) + 0]); \
+    real2 prefix##_ld1 = *reinterpret_cast<const real2 *>(&(ptr)[(base) + 2]); \
+    real2 prefix##_ld2 = *reinterpret_cast<const real2 *>(&(ptr)[(base) + 4]); \
+    real_t prefix##_rh = prefix##_ld0.x, prefix##_ih = prefix##_ld0.y; \
+    real_t prefix##_rm = prefix##_ld1.x, prefix##_im = prefix##_ld1.y; \
+    real_t prefix##_rl = prefix##_ld2.x, prefix##_il = prefix##_ld2.y
 
-#define QTW_LOAD6_NEW(prefix, ptr, base) \
-    prefix##_rh = (ptr)[(base) + 0]; \
-    prefix##_ih = (ptr)[(base) + 1]; \
-    prefix##_rm = (ptr)[(base) + 2]; \
-    prefix##_im = (ptr)[(base) + 3]; \
-    prefix##_rl = (ptr)[(base) + 4]; \
-    prefix##_il = (ptr)[(base) + 5]
+#define QTW_LOAD6_NEW(prefix, ptr, base) do { \
+    real2 _l0 = *reinterpret_cast<const real2 *>(&(ptr)[(base) + 0]); \
+    real2 _l1 = *reinterpret_cast<const real2 *>(&(ptr)[(base) + 2]); \
+    real2 _l2 = *reinterpret_cast<const real2 *>(&(ptr)[(base) + 4]); \
+    prefix##_rh = _l0.x; prefix##_ih = _l0.y; \
+    prefix##_rm = _l1.x; prefix##_im = _l1.y; \
+    prefix##_rl = _l2.x; prefix##_il = _l2.y; \
+} while (0)
 
 // Store renormalizes the two triples first: the inner-loop adds run sloppy
 // (QTW_ADDC/QTW_SUBC skip Renormalize3), so the canonical 3-word form is only
@@ -55,12 +60,12 @@
     real_t _si_h = prefix##_ih, _si_m = prefix##_im, _si_l = prefix##_il; \
     Renormalize3(_sr_h, _sr_m, _sr_l); \
     Renormalize3(_si_h, _si_m, _si_l); \
-    (ptr)[(base) + 0] = _sr_h; \
-    (ptr)[(base) + 1] = _si_h; \
-    (ptr)[(base) + 2] = _sr_m; \
-    (ptr)[(base) + 3] = _si_m; \
-    (ptr)[(base) + 4] = _sr_l; \
-    (ptr)[(base) + 5] = _si_l; \
+    real2 _o0; _o0.x = _sr_h; _o0.y = _si_h; \
+    real2 _o1; _o1.x = _sr_m; _o1.y = _si_m; \
+    real2 _o2; _o2.x = _sr_l; _o2.y = _si_l; \
+    *reinterpret_cast<real2 *>(&(ptr)[(base) + 0]) = _o0; \
+    *reinterpret_cast<real2 *>(&(ptr)[(base) + 2]) = _o1; \
+    *reinterpret_cast<real2 *>(&(ptr)[(base) + 4]) = _o2; \
 } while (0)
 
 #define QTW_COPY(dst, src) \
@@ -223,9 +228,15 @@ __device__ __forceinline__ void qtw_gmult_fwd_3x3(
     const T in_rl[3], const T in_il[3],
     T out_rh[3], T out_ih[3], T out_rm[3], T out_im[3], T out_rl[3], T out_il[3])
 {
+    // Type-split unroll: double-QTW is at the 255-reg cap and spills heavily, so
+    // fully unrolling promotes the in_/out_ arrays to registers (spill 2448->344B).
+    // float-QTW lives below the cap (188 reg) at a good occupancy/spill balance, so
+    // unrolling there pushes it to 255 and regresses ~33% -> keep float unroll=1.
+    #pragma unroll (std::is_same<T, double>::value ? 3 : 1)
     for (int c = 0; c < NC; ++c) {
         T ar_h = 0, ar_m = 0, ar_l = 0;
         T ai_h = 0, ai_m = 0, ai_l = 0;
+        #pragma unroll (std::is_same<T, double>::value ? 3 : 1)
         for (int j = 0; j < NC; ++j) {
             T ur = u[IDX2_G_R(j, c, isg)];
             T ui = u[IDX2_G_I(j, c, isg)];
@@ -259,9 +270,15 @@ __device__ __forceinline__ void qtw_gmult_bck_3x3(
     const T in_rl[3], const T in_il[3],
     T out_rh[3], T out_ih[3], T out_rm[3], T out_im[3], T out_rl[3], T out_il[3])
 {
+    // Type-split unroll: double-QTW is at the 255-reg cap and spills heavily, so
+    // fully unrolling promotes the in_/out_ arrays to registers (spill 2448->344B).
+    // float-QTW lives below the cap (188 reg) at a good occupancy/spill balance, so
+    // unrolling there pushes it to 255 and regresses ~33% -> keep float unroll=1.
+    #pragma unroll (std::is_same<T, double>::value ? 3 : 1)
     for (int c = 0; c < NC; ++c) {
         T ar_h = 0, ar_m = 0, ar_l = 0;
         T ai_h = 0, ai_m = 0, ai_l = 0;
+        #pragma unroll (std::is_same<T, double>::value ? 3 : 1)
         for (int j = 0; j < NC; ++j) {
             T ur =  u[IDX2_G_R(c, j, isg)];
             T ui = -u[IDX2_G_I(c, j, isg)];  // conjugate
@@ -352,9 +369,15 @@ __device__ __forceinline__ void qtw_gmult_fwd_3x3_tw(
     if (RECON) {
         qtw_recon_col2_tw(uh, um, ul, isg, c2r_h, c2r_m, c2r_l, c2i_h, c2i_m, c2i_l);
     }
+    // Type-split unroll: double-QTW is at the 255-reg cap and spills heavily, so
+    // fully unrolling promotes the in_/out_ arrays to registers (spill 2448->344B).
+    // float-QTW lives below the cap (188 reg) at a good occupancy/spill balance, so
+    // unrolling there pushes it to 255 and regresses ~33% -> keep float unroll=1.
+    #pragma unroll (std::is_same<T, double>::value ? 3 : 1)
     for (int c = 0; c < NC; ++c) {
         T ar_h = 0, ar_m = 0, ar_l = 0;
         T ai_h = 0, ai_m = 0, ai_l = 0;
+        #pragma unroll (std::is_same<T, double>::value ? 3 : 1)
         for (int j = 0; j < NC; ++j) {
             T ur_h, ur_m, ur_l, ui_h, ui_m, ui_l;
             if (RECON && c == 2) {  // column 2: use reconstructed (not read from DRAM)
@@ -400,9 +423,15 @@ __device__ __forceinline__ void qtw_gmult_bck_3x3_tw(
     if (RECON) {
         qtw_recon_col2_tw(uh, um, ul, isg, c2r_h, c2r_m, c2r_l, c2i_h, c2i_m, c2i_l);
     }
+    // Type-split unroll: double-QTW is at the 255-reg cap and spills heavily, so
+    // fully unrolling promotes the in_/out_ arrays to registers (spill 2448->344B).
+    // float-QTW lives below the cap (188 reg) at a good occupancy/spill balance, so
+    // unrolling there pushes it to 255 and regresses ~33% -> keep float unroll=1.
+    #pragma unroll (std::is_same<T, double>::value ? 3 : 1)
     for (int c = 0; c < NC; ++c) {
         T ar_h = 0, ar_m = 0, ar_l = 0;
         T ai_h = 0, ai_m = 0, ai_l = 0;
+        #pragma unroll (std::is_same<T, double>::value ? 3 : 1)
         for (int j = 0; j < NC; ++j) {
             T ur_h, ur_m, ur_l, ui_h, ui_m, ui_l;
             if (RECON && j == 2) {  // column 2 = reconstructed; conj negates imag
@@ -434,6 +463,79 @@ __device__ __forceinline__ void qtw_gmult_bck_3x3_tw(
         out_rh[c] = ar_h; out_rm[c] = ar_m; out_rl[c] = ar_l;
         out_ih[c] = ai_h; out_im[c] = ai_m; out_il[c] = ai_l;
     }
+}
+
+// ---- Single-output-color TW gauge multiplies (color-split kernel) ----
+// Compute only output color `cout` => one TW complex out. Each color-split
+// thread does 1/NC of the gmult work (the whole point of the split).
+template<bool RECON, typename T>
+__device__ __forceinline__ void qtw_gmult_fwd_1col_tw(
+    const T* __restrict__ uh, const T* __restrict__ um, const T* __restrict__ ul,
+    int isg, int cout,
+    const T in_rh[3], const T in_ih[3], const T in_rm[3], const T in_im[3],
+    const T in_rl[3], const T in_il[3],
+    T& o_rh, T& o_ih, T& o_rm, T& o_im, T& o_rl, T& o_il)
+{
+    T c2r_h[3], c2r_m[3], c2r_l[3], c2i_h[3], c2i_m[3], c2i_l[3];
+    if (RECON && cout == 2)
+        qtw_recon_col2_tw(uh, um, ul, isg, c2r_h, c2r_m, c2r_l, c2i_h, c2i_m, c2i_l);
+    T ar_h = 0, ar_m = 0, ar_l = 0, ai_h = 0, ai_m = 0, ai_l = 0;
+    #pragma unroll (std::is_same<T, double>::value ? 3 : 1)
+    for (int j = 0; j < NC; ++j) {
+        T ur_h, ur_m, ur_l, ui_h, ui_m, ui_l;
+        if (RECON && cout == 2) {
+            ur_h = c2r_h[j]; ur_m = c2r_m[j]; ur_l = c2r_l[j];
+            ui_h = c2i_h[j]; ui_m = c2i_m[j]; ui_l = c2i_l[j];
+        } else {
+            ur_h = uh[IDX2_G_R(j, cout, isg)]; ur_m = um[IDX2_G_R(j, cout, isg)]; ur_l = ul[IDX2_G_R(j, cout, isg)];
+            ui_h = uh[IDX2_G_I(j, cout, isg)]; ui_m = um[IDX2_G_I(j, cout, isg)]; ui_l = ul[IDX2_G_I(j, cout, isg)];
+        }
+        T tr_h, tr_m, tr_l, ti_h, ti_m, ti_l, nh, nm, nl;
+        tw_mul_sloppy(ur_h, ur_m, ur_l, in_rh[j], in_rm[j], in_rl[j], tr_h, tr_m, tr_l);
+        tw_mul_sloppy(ui_h, ui_m, ui_l, in_ih[j], in_im[j], in_il[j], ti_h, ti_m, ti_l);
+        tw_add_sloppy(ar_h, ar_m, ar_l,  tr_h,  tr_m,  tr_l, nh, nm, nl); ar_h = nh; ar_m = nm; ar_l = nl;
+        tw_add_sloppy(ar_h, ar_m, ar_l, -ti_h, -ti_m, -ti_l, nh, nm, nl); ar_h = nh; ar_m = nm; ar_l = nl;
+        tw_mul_sloppy(ur_h, ur_m, ur_l, in_ih[j], in_im[j], in_il[j], tr_h, tr_m, tr_l);
+        tw_mul_sloppy(ui_h, ui_m, ui_l, in_rh[j], in_rm[j], in_rl[j], ti_h, ti_m, ti_l);
+        tw_add_sloppy(ai_h, ai_m, ai_l, tr_h, tr_m, tr_l, nh, nm, nl); ai_h = nh; ai_m = nm; ai_l = nl;
+        tw_add_sloppy(ai_h, ai_m, ai_l, ti_h, ti_m, ti_l, nh, nm, nl); ai_h = nh; ai_m = nm; ai_l = nl;
+    }
+    o_rh = ar_h; o_rm = ar_m; o_rl = ar_l; o_ih = ai_h; o_im = ai_m; o_il = ai_l;
+}
+
+template<bool RECON, typename T>
+__device__ __forceinline__ void qtw_gmult_bck_1col_tw(
+    const T* __restrict__ uh, const T* __restrict__ um, const T* __restrict__ ul,
+    int isg, int cout,
+    const T in_rh[3], const T in_ih[3], const T in_rm[3], const T in_im[3],
+    const T in_rl[3], const T in_il[3],
+    T& o_rh, T& o_ih, T& o_rm, T& o_im, T& o_rl, T& o_il)
+{
+    T c2r_h[3], c2r_m[3], c2r_l[3], c2i_h[3], c2i_m[3], c2i_l[3];
+    if (RECON)  // backward j==2 term uses reconstructed col2, indexed by cout
+        qtw_recon_col2_tw(uh, um, ul, isg, c2r_h, c2r_m, c2r_l, c2i_h, c2i_m, c2i_l);
+    T ar_h = 0, ar_m = 0, ar_l = 0, ai_h = 0, ai_m = 0, ai_l = 0;
+    #pragma unroll (std::is_same<T, double>::value ? 3 : 1)
+    for (int j = 0; j < NC; ++j) {
+        T ur_h, ur_m, ur_l, ui_h, ui_m, ui_l;
+        if (RECON && j == 2) {
+            ur_h =  c2r_h[cout]; ur_m =  c2r_m[cout]; ur_l =  c2r_l[cout];
+            ui_h = -c2i_h[cout]; ui_m = -c2i_m[cout]; ui_l = -c2i_l[cout];
+        } else {
+            ur_h =  uh[IDX2_G_R(cout, j, isg)]; ur_m =  um[IDX2_G_R(cout, j, isg)]; ur_l =  ul[IDX2_G_R(cout, j, isg)];
+            ui_h = -uh[IDX2_G_I(cout, j, isg)]; ui_m = -um[IDX2_G_I(cout, j, isg)]; ui_l = -ul[IDX2_G_I(cout, j, isg)];
+        }
+        T tr_h, tr_m, tr_l, ti_h, ti_m, ti_l, nh, nm, nl;
+        tw_mul_sloppy(ur_h, ur_m, ur_l, in_rh[j], in_rm[j], in_rl[j], tr_h, tr_m, tr_l);
+        tw_mul_sloppy(ui_h, ui_m, ui_l, in_ih[j], in_im[j], in_il[j], ti_h, ti_m, ti_l);
+        tw_add_sloppy(ar_h, ar_m, ar_l,  tr_h,  tr_m,  tr_l, nh, nm, nl); ar_h = nh; ar_m = nm; ar_l = nl;
+        tw_add_sloppy(ar_h, ar_m, ar_l, -ti_h, -ti_m, -ti_l, nh, nm, nl); ar_h = nh; ar_m = nm; ar_l = nl;
+        tw_mul_sloppy(ur_h, ur_m, ur_l, in_ih[j], in_im[j], in_il[j], tr_h, tr_m, tr_l);
+        tw_mul_sloppy(ui_h, ui_m, ui_l, in_rh[j], in_rm[j], in_rl[j], ti_h, ti_m, ti_l);
+        tw_add_sloppy(ai_h, ai_m, ai_l, tr_h, tr_m, tr_l, nh, nm, nl); ai_h = nh; ai_m = nm; ai_l = nl;
+        tw_add_sloppy(ai_h, ai_m, ai_l, ti_h, ti_m, ti_l, nh, nm, nl); ai_h = nh; ai_m = nm; ai_l = nl;
+    }
+    o_rh = ar_h; o_rm = ar_m; o_rl = ar_l; o_ih = ai_h; o_im = ai_m; o_il = ai_l;
 }
 
 //====================================================================
@@ -1054,9 +1156,9 @@ void mult_domainwall_5din_eo_5dirdag_dirac_qtw(
 template<bool RECON>
 __global__
 void mult_domainwall_5din_eo_hopb_qtw_dirac_5d_kernel(
-    real_t * __restrict__ vp, real_t * __restrict__ up,
-    real_t * __restrict__ up_mid, real_t * __restrict__ up_lo,
-    real_t * __restrict__ wp,
+    real_t * __restrict__ vp, const real_t * __restrict__ up,
+    const real_t * __restrict__ up_mid, const real_t * __restrict__ up_lo,
+    const real_t * __restrict__ wp,
     int Ns, int bc_x, int bc_y, int bc_z, int bc_t,
     int Nx, int Ny, int Nz, int Nt,
     int ieo, int jeo,
@@ -1364,6 +1466,214 @@ void mult_domainwall_5din_eo_hopb_qtw_dirac_5d_kernel(
     #undef QTW_DIR_GMUL
 }
 
+// ============================================================================
+// COLOR-SPLIT + BLOCK-SMEM SHARE (env QTW_CSPLIT=2, TW link only).
+// 2D block (NWP, NC): threadIdx.x=lane=site (coalesced), threadIdx.y=cout=color.
+// Per direction: each color-thread loads & projects ITS OWN input color
+// (coalesced, read ONCE), deposits the projected spinor into __shared__; after
+// __syncthreads every thread reads all NC input colors and does its single
+// output-color gmult. Kills the 3x redundant spinor reads of the plain split
+// while keeping coalescing -> "bandwidth 止血". 24-real accumulator.
+// Requires: TW link, no padding (Nst % NWP == 0), single-rank (do_comm all 0 ->
+// every thread takes every direction -> no divergent __syncthreads).
+// ============================================================================
+template<bool RECON>
+__global__
+void mult_domainwall_5din_eo_hopb_qtw_dirac_5d_csmem_kernel(
+    real_t * __restrict__ vp, const real_t * __restrict__ up,
+    const real_t * __restrict__ up_mid, const real_t * __restrict__ up_lo,
+    const real_t * __restrict__ wp,
+    int Ns, int bc_x, int bc_y, int bc_z, int bc_t,
+    int Nx, int Ny, int Nz, int Nt,
+    int ieo, int jeo,
+    int do_comm_x, int do_comm_y, int do_comm_z, int do_comm_t,
+    int Nst, int Nst_pad, int jgm5)
+{
+    const int lane = threadIdx.x;             // 0..NWP-1 (4D site within block)
+    const int cout = threadIdx.y;             // 0..NC-1 (this thread's color)
+    const int is   = blockIdx.y;
+    const int site = lane + NWP * blockIdx.x;
+
+    // Shared projected spinor, DOUBLE-BUFFERED: [buf(2)][pair(2)][color(NC)][word(6)][lane].
+    // Direction d uses buf=d&1; consecutive directions alternate buffers, so the
+    // WAR barrier (overwrite vs previous reads) is covered by the intervening
+    // direction's RAW sync -> only 1 __syncthreads/direction (8 vs 16 per site).
+    __shared__ real_t vsh[2 * 2 * NC * 6 * NWP];
+    #define VSH(buf_, pair_, cin_, w_) vsh[((buf_) * (2 * NC * 6 * NWP)) + (((((pair_) * NC + (cin_)) * 6 + (w_)) * NWP) + lane)]
+
+    if (site >= Nst) return;  // no padding required -> uniform within block
+
+    const int Nxy  = Nx * Ny;
+    const int Nxyz = Nxy * Nz;
+    const int ix   = site % Nx;
+    const int iyzt = site / Nx;
+    const int ixy  = site % Nxy;
+    const int iy   = iyzt % Ny;
+    const int izt  = site / Nxy;
+    const int iz   = izt  % Nz;
+    const int it   = izt  / Nz;
+    const int ixyz = site % Nxyz;
+    const int keo  = (jeo + iy + iz + it) % 2;
+
+    const int d0 = (jgm5 == 0) ? 0 : 2;
+    const int d1 = (jgm5 == 0) ? 1 : 3;
+    const int d2 = (jgm5 == 0) ? 2 : 0;
+    const int d3 = (jgm5 == 0) ? 3 : 1;
+
+    QTW_DECL(acc_s0); QTW_ZERO(acc_s0);
+    QTW_DECL(acc_s1); QTW_ZERO(acc_s1);
+    QTW_DECL(acc_s2); QTW_ZERO(acc_s2);
+    QTW_DECL(acc_s3); QTW_ZERO(acc_s3);
+
+    // Project this thread's own input color (cout) for one pair, write to smem.
+    #define QTW_CS_PROJ(buf_, pair_, PROJ_FN, ida_, idb_, isn_) do { \
+        QTW_LOAD6(_psa, wp, 6 * IDX_DWF_QTW(cout, (ida_), is, Ns, (isn_))); \
+        QTW_LOAD6(_psb, wp, 6 * IDX_DWF_QTW(cout, (idb_), is, Ns, (isn_))); \
+        QTW_DECL(_pv); PROJ_FN(_pv, _psa, _psb); \
+        VSH(buf_, pair_, cout, 0) = _pv_rh; VSH(buf_, pair_, cout, 1) = _pv_ih; \
+        VSH(buf_, pair_, cout, 2) = _pv_rm; VSH(buf_, pair_, cout, 3) = _pv_im; \
+        VSH(buf_, pair_, cout, 4) = _pv_rl; VSH(buf_, pair_, cout, 5) = _pv_il; \
+    } while (0)
+    // T-direction projection: single spin component, doubled (PROJ_2).
+    #define QTW_CS_PROJ_T(buf_, pair_, idsp_, isn_) do { \
+        QTW_LOAD6(_psa, wp, 6 * IDX_DWF_QTW(cout, (idsp_), is, Ns, (isn_))); \
+        QTW_DECL(_pv); DWF_PROJ_2_TW(_pv, _psa); \
+        VSH(buf_, pair_, cout, 0) = _pv_rh; VSH(buf_, pair_, cout, 1) = _pv_ih; \
+        VSH(buf_, pair_, cout, 2) = _pv_rm; VSH(buf_, pair_, cout, 3) = _pv_im; \
+        VSH(buf_, pair_, cout, 4) = _pv_rl; VSH(buf_, pair_, cout, 5) = _pv_il; \
+    } while (0)
+    // Read all NC input colors from smem, single-output-color gmul into WT.
+    #define QTW_CS_GMUL(WT, buf_, pair_, isg_, is_fwd) do { \
+        real_t _in_rh[3], _in_ih[3], _in_rm[3], _in_im[3], _in_rl[3], _in_il[3]; \
+        _Pragma("unroll") \
+        for (int _j = 0; _j < NC; ++_j) { \
+            _in_rh[_j] = VSH(buf_, pair_, _j, 0); _in_ih[_j] = VSH(buf_, pair_, _j, 1); \
+            _in_rm[_j] = VSH(buf_, pair_, _j, 2); _in_im[_j] = VSH(buf_, pair_, _j, 3); \
+            _in_rl[_j] = VSH(buf_, pair_, _j, 4); _in_il[_j] = VSH(buf_, pair_, _j, 5); \
+        } \
+        if (is_fwd) qtw_gmult_fwd_1col_tw<RECON>(up, up_mid, up_lo, (isg_), cout, _in_rh,_in_ih,_in_rm,_in_im,_in_rl,_in_il, WT##_rh,WT##_ih,WT##_rm,WT##_im,WT##_rl,WT##_il); \
+        else        qtw_gmult_bck_1col_tw<RECON>(up, up_mid, up_lo, (isg_), cout, _in_rh,_in_ih,_in_rm,_in_im,_in_rl,_in_il, WT##_rh,WT##_ih,WT##_rm,WT##_im,WT##_rl,WT##_il); \
+    } while (0)
+
+    real_t bc2;
+
+        // X+
+        {
+            int isn = ((ix + keo) % Nx) + Nx * iyzt;
+            int isg = site + Nst * (ieo + 2 * 0);
+            bc2 = (ix == Nx-1 && keo == 1) ? (real_t)bc_x : real_t(1.0);
+            QTW_CS_PROJ(0, 0, DWF_PROJ_P_TW, d0, d3, isn);
+            QTW_CS_PROJ(0, 1, DWF_PROJ_P_TW, d1, d2, isn);
+            __syncthreads();
+            QTW_DECL(wt1); QTW_DECL(wt2);
+            QTW_CS_GMUL(wt1, 0, 0, isg, true);
+            QTW_CS_GMUL(wt2, 0, 1, isg, true);
+            DWF_ACCUM_4_TW(acc_s0, acc_s1, acc_s2, acc_s3, wt1, wt2, bc2, DWF_MULT_MI_TW, DWF_MULT_MI_TW);
+        }
+        // X-
+        {
+            int ix2 = (ix - 1 + keo + Nx) % Nx;
+            int isn = ix2 + Nx * iyzt;
+            int isg = isn + Nst * (1 - ieo + 2 * 0);
+            bc2 = (ix == 0 && keo == 0) ? (real_t)bc_x : real_t(1.0);
+            QTW_CS_PROJ(1, 0, DWF_PROJ_M_TW, d0, d3, isn);
+            QTW_CS_PROJ(1, 1, DWF_PROJ_M_TW, d1, d2, isn);
+            __syncthreads();
+            QTW_DECL(wt1); QTW_DECL(wt2);
+            QTW_CS_GMUL(wt1, 1, 0, isg, false);
+            QTW_CS_GMUL(wt2, 1, 1, isg, false);
+            DWF_ACCUM_4_TW(acc_s0, acc_s1, acc_s2, acc_s3, wt1, wt2, bc2, DWF_MULT_PI_TW, DWF_MULT_PI_TW);
+        }
+        // Y+
+        {
+            int isn = ix + Nx * (((iy + 1) % Ny) + Ny * izt);
+            int isg = site + Nst * (ieo + 2 * 1);
+            bc2 = (iy == Ny-1) ? (real_t)bc_y : real_t(1.0);
+            QTW_CS_PROJ(0, 0, DWF_PROJ_RP_TW, d0, d3, isn);
+            QTW_CS_PROJ(0, 1, DWF_PROJ_RM_TW, d1, d2, isn);
+            __syncthreads();
+            QTW_DECL(wt1); QTW_DECL(wt2);
+            QTW_CS_GMUL(wt1, 0, 0, isg, true);
+            QTW_CS_GMUL(wt2, 0, 1, isg, true);
+            DWF_ACCUM_4_TW(acc_s0, acc_s1, acc_s2, acc_s3, wt1, wt2, bc2, DWF_MULT_RM1_TW, DWF_MULT_R1_TW);
+        }
+        // Y-
+        {
+            int isn = ix + Nx * (((iy - 1 + Ny) % Ny) + Ny * izt);
+            int isg = isn + Nst * (1 - ieo + 2 * 1);
+            bc2 = (iy == 0) ? (real_t)bc_y : real_t(1.0);
+            QTW_CS_PROJ(1, 0, DWF_PROJ_RM_TW, d0, d3, isn);
+            QTW_CS_PROJ(1, 1, DWF_PROJ_RP_TW, d1, d2, isn);
+            __syncthreads();
+            QTW_DECL(wt1); QTW_DECL(wt2);
+            QTW_CS_GMUL(wt1, 1, 0, isg, false);
+            QTW_CS_GMUL(wt2, 1, 1, isg, false);
+            DWF_ACCUM_4_TW(acc_s0, acc_s1, acc_s2, acc_s3, wt1, wt2, bc2, DWF_MULT_R1_TW, DWF_MULT_RM1_TW);
+        }
+        // Z+
+        {
+            int isn = ixy + Nxy * (((iz + 1) % Nz) + Nz * it);
+            int isg = site + Nst * (ieo + 2 * 2);
+            bc2 = (iz == Nz-1) ? (real_t)bc_z : real_t(1.0);
+            QTW_CS_PROJ(0, 0, DWF_PROJ_P_TW, d0, d2, isn);
+            QTW_CS_PROJ(0, 1, DWF_PROJ_M_TW, d1, d3, isn);
+            __syncthreads();
+            QTW_DECL(wt1); QTW_DECL(wt2);
+            QTW_CS_GMUL(wt1, 0, 0, isg, true);
+            QTW_CS_GMUL(wt2, 0, 1, isg, true);
+            DWF_ACCUM_4_SW_TW(acc_s0, acc_s1, acc_s2, acc_s3, wt1, wt2, bc2, DWF_MULT_MI_TW, DWF_MULT_PI_TW);
+        }
+        // Z-
+        {
+            int isn = ixy + Nxy * (((iz - 1 + Nz) % Nz) + Nz * it);
+            int isg = isn + Nst * (1 - ieo + 2 * 2);
+            bc2 = (iz == 0) ? (real_t)bc_z : real_t(1.0);
+            QTW_CS_PROJ(1, 0, DWF_PROJ_M_TW, d0, d2, isn);
+            QTW_CS_PROJ(1, 1, DWF_PROJ_P_TW, d1, d3, isn);
+            __syncthreads();
+            QTW_DECL(wt1); QTW_DECL(wt2);
+            QTW_CS_GMUL(wt1, 1, 0, isg, false);
+            QTW_CS_GMUL(wt2, 1, 1, isg, false);
+            DWF_ACCUM_4_SW_TW(acc_s0, acc_s1, acc_s2, acc_s3, wt1, wt2, bc2, DWF_MULT_PI_TW, DWF_MULT_MI_TW);
+        }
+        // T+
+        {
+            int isn = ixyz + Nxyz * ((it + 1) % Nt);
+            int isg = site + Nst * (ieo + 2 * 3);
+            bc2 = (it == Nt-1) ? (real_t)bc_t : real_t(1.0);
+            QTW_CS_PROJ_T(0, 0, d2, isn);
+            QTW_CS_PROJ_T(0, 1, d3, isn);
+            __syncthreads();
+            QTW_DECL(wt1); QTW_DECL(wt2);
+            QTW_CS_GMUL(wt1, 0, 0, isg, true);
+            QTW_CS_GMUL(wt2, 0, 1, isg, true);
+            DWF_ACCUM_TP_TW(acc_s2, acc_s3, wt1, wt2, bc2);
+        }
+        // T-
+        {
+            int isn = ixyz + Nxyz * ((it - 1 + Nt) % Nt);
+            int isg = isn + Nst * (1 - ieo + 2 * 3);
+            bc2 = (it == 0) ? (real_t)bc_t : real_t(1.0);
+            QTW_CS_PROJ_T(1, 0, d0, isn);
+            QTW_CS_PROJ_T(1, 1, d1, isn);
+            __syncthreads();
+            QTW_DECL(wt1); QTW_DECL(wt2);
+            QTW_CS_GMUL(wt1, 1, 0, isg, false);
+            QTW_CS_GMUL(wt2, 1, 1, isg, false);
+            DWF_ACCUM_TM_TW(acc_s0, acc_s1, wt1, wt2, bc2);
+        }
+
+        QTW_STORE6(vp, 6 * IDX_DWF_QTW(cout, 0, is, Ns, site), acc_s0);
+        QTW_STORE6(vp, 6 * IDX_DWF_QTW(cout, 1, is, Ns, site), acc_s1);
+        QTW_STORE6(vp, 6 * IDX_DWF_QTW(cout, 2, is, Ns, site), acc_s2);
+        QTW_STORE6(vp, 6 * IDX_DWF_QTW(cout, 3, is, Ns, site), acc_s3);
+
+    #undef VSH
+    #undef QTW_CS_PROJ
+    #undef QTW_CS_PROJ_T
+    #undef QTW_CS_GMUL
+}
+
 // up_mid/up_lo: when non-null, gauge link is full TW; when null, FP gauge link.
 // recon: SU(3) 3rd-column reconstruction (YAML su3_reconstruction).
 void mult_domainwall_5din_eo_hopb_qtw_dirac_5d(
@@ -1379,6 +1689,44 @@ void mult_domainwall_5din_eo_hopb_qtw_dirac_5d(
     real_t *up_mid_dev = up_mid ? (real_t *)dev_ptr(up_mid) : nullptr;
     real_t *up_lo_dev  = up_lo  ? (real_t *)dev_ptr(up_lo)  : nullptr;
     real_t *wp_dev = (real_t *)dev_ptr(wp);
+
+    // blockSize=64 (=2*NWP) is near-optimal: the QTW kernel is register-bound, so
+    // larger blocks (e.g. 256=NWP*Ns, which would cache the gauge across all Ns
+    // is-slices) collapse occupancy and regress ~30%. Measured 64~=128, 256 worse.
+    // COLOR-SPLIT + block-smem share gate (env QTW_CSPLIT=2, TW link only):
+    // one thread per (5D site, output color), 24-real accumulator => register
+    // relief (255->166, spill 0). Gated OFF by default.
+    //   - FLOAT: a dead end. Measured ~10% SLOWER on RTX 3080 (saturated GPU,
+    //     register-light float gains nothing; pays smem round-trip + lost
+    //     cross-direction ILP). The default register-resident kernel wins.
+    //   - DOUBLE-QTW (server target, A100/H100): the ONLY case where the
+    //     register relief can pay off (double busts the 255 cap and spills).
+    //     UNVALIDATED. Before production use: (a) time vs default on A100 with
+    //     do_comm=0; (b) this kernel is single-rank only (uniform __syncthreads
+    //     assumes every thread takes every direction) -> needs multi-rank halo
+    //     handling. Double-buffer below is known WORSE than single-buffer;
+    //     prefer single-buffer when re-testing on the server.
+    static const int csplit_mode = [](){ const char* e = getenv("QTW_CSPLIT"); return e ? atoi(e) : 0; }();
+    if (csplit_mode == 2 && up_mid_dev && up_lo_dev &&
+        (Nst % NWP == 0) &&
+        do_comm[0] == 0 && do_comm[1] == 0 && do_comm[2] == 0 && do_comm[3] == 0) {
+      dim3 block(NWP, NC);
+      dim3 grid (Nst_pad / NWP, Ns);
+      QTW_PROF_BEGIN();
+      if (recon)
+        mult_domainwall_5din_eo_hopb_qtw_dirac_5d_csmem_kernel<true><<<grid, block>>>(
+          vp_dev, up_dev, up_mid_dev, up_lo_dev, wp_dev, Ns,
+          bc[0], bc[1], bc[2], bc[3], Nx, Ny, Nz, Nt, ieo, jeo,
+          do_comm[0], do_comm[1], do_comm[2], do_comm[3], Nst, Nst_pad, jgm5);
+      else
+        mult_domainwall_5din_eo_hopb_qtw_dirac_5d_csmem_kernel<false><<<grid, block>>>(
+          vp_dev, up_dev, up_mid_dev, up_lo_dev, wp_dev, Ns,
+          bc[0], bc[1], bc[2], bc[3], Nx, Ny, Nz, Nt, ieo, jeo,
+          do_comm[0], do_comm[1], do_comm[2], do_comm[3], Nst, Nst_pad, jgm5);
+      QTW_PROF_END("hopb_qtw_gauge");
+      CHECK(cudaDeviceSynchronize());
+      return;
+    }
 
     int blockSize = VECTOR_LENGTH;
     // 5D-parallel: one thread per 5D site (Nst_pad*Ns), grid-stride inside.
