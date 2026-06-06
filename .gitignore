@@ -24,3 +24,7 @@ Makefile.20[0-9][0-9]*
 
 # === Local scratch ===
 *.log.tmp
+
+# === Claude Code / tooling litter (keep out of source tree) ===
+.progress_count
+*.txtopttopt
