@@ -67,6 +67,10 @@ class AFopr_Wilson : public AFopr<AFIELD>
   int m_bc[4];
   int m_bc2[4];
 
+  using MWMode = typename AFopr<AFIELD>::MWMode;
+  MWMode m_mw_mode;
+
+
 public:
   //! constructor (to be discarded).
   //  AFopr_Wilson() : AFopr<AFIELD>(){ init(); }
@@ -105,12 +109,27 @@ public:
   //! returns mult mode.
   std::string get_mode() const { return m_mode; }
 
+  //! multiplies fermion operator to a given field.
   void mult(AFIELD&, const AFIELD&);
+  //! hermitian conjugate of mult.
   void mult_dag(AFIELD&, const AFIELD&);
   void mult_gm5(AFIELD&, const AFIELD&);
 
   void mult(AFIELD&, const AFIELD&, const std::string mode);
   void mult_dag(AFIELD&, const AFIELD&, const std::string mode);
+
+  void set_mw_mode(MWMode mode) override {
+    m_mw_mode = mode;
+    if (mode == MWMode::DW) {
+      int NinF_qdw = 4 * m_Nc * m_Nd;
+      m_v2.reset(NinF_qdw, m_Nst, 1);
+    } else {
+      int NinF = 2 * m_Nc * m_Nd;
+      m_v2.reset(NinF, m_Nst, 1);
+    }
+  }
+
+  MWMode get_mw_mode() const override { return m_mw_mode; }
 
   //! upward nearest neighbor hopping term.
   virtual void mult_up(int mu, AFIELD&, const AFIELD&);

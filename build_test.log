@@ -1,0 +1,7 @@
+Loading nvhpc-hpcx-cuda13/25.11
+  Loading
+    requirement: hpcx
+make: Entering directory '/home/wlchenhome/Bridge/with_alpha/test_alt_spectrum/src'
+Makefile:5: ../../build/make.inc: No such file or directory
+make: *** No rule to make target '../../build/make.inc'.  Stop.
+make: Leaving directory '/home/wlchenhome/Bridge/with_alpha/test_alt_spectrum/src'

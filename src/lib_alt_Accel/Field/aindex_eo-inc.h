@@ -19,7 +19,8 @@ template<typename REALTYPE>
 template <typename AFIELD>
 void AIndex_eo<REALTYPE,ACCEL>::split(AFIELD& field_e,
                                       AFIELD& field_o,
-                                      const AFIELD& field_lex)
+                                      const AFIELD& field_lex,
+                                      int mw_mode)
 {
   typedef REALTYPE real_t;
 
@@ -49,8 +50,16 @@ void AIndex_eo<REALTYPE,ACCEL>::split(AFIELD& field_e,
       real_t *ve = field_e.ptr(idx_eo);
       real_t *vo = field_o.ptr(idx_eo);
 
-      BridgeACC::split(ve, vo, w,
-                       ieo_org, Nin, m_Nsize, Nvol2_pad, Nvol_pad);
+      if (mw_mode == 1) {
+        BridgeACC::split_qdw(ve, vo, w,
+                             ieo_org, Nin, m_Nsize, Nvol2_pad, Nvol_pad);
+      } else if (mw_mode == 2) {
+        BridgeACC::split_qtw(ve, vo, w,
+                             ieo_org, Nin, m_Nsize, Nvol2_pad, Nvol_pad);
+      } else {
+        BridgeACC::split(ve, vo, w,
+                         ieo_org, Nin, m_Nsize, Nvol2_pad, Nvol_pad);
+      }
     }
 
   }
@@ -135,7 +144,8 @@ void AIndex_eo<REALTYPE,ACCEL>::split_gauge(
 template<typename REALTYPE>
 template <typename AFIELD>
 void AIndex_eo<REALTYPE,ACCEL>::merge(AFIELD& field_lex,
-                         const AFIELD& field_e, const AFIELD& field_o)
+                         const AFIELD& field_e, const AFIELD& field_o,
+                         int mw_mode)
 {
   typedef REALTYPE real_t;
 
@@ -165,8 +175,16 @@ void AIndex_eo<REALTYPE,ACCEL>::merge(AFIELD& field_lex,
       real_t *we = const_cast<AFIELD*>(&field_e)->ptr(idx_eo);
       real_t *wo = const_cast<AFIELD*>(&field_o)->ptr(idx_eo);
 
-      BridgeACC::merge(v, we, wo,
-                       ieo_org, Nin, m_Nsize, Nvol2_pad, Nvol_pad);
+      if (mw_mode == 1) {
+        BridgeACC::merge_qdw(v, we, wo,
+                             ieo_org, Nin, m_Nsize, Nvol2_pad, Nvol_pad);
+      } else if (mw_mode == 2) {
+        BridgeACC::merge_qtw(v, we, wo,
+                             ieo_org, Nin, m_Nsize, Nvol2_pad, Nvol_pad);
+      } else {
+        BridgeACC::merge(v, we, wo,
+                         ieo_org, Nin, m_Nsize, Nvol2_pad, Nvol_pad);
+      }
     }
   }
 

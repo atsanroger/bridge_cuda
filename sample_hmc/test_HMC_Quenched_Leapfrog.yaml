@@ -1,0 +1,52 @@
+# Quenched (pure-gauge) HMC, cmake-native reproduction of the real 16^4 config.
+#
+# This replaces the hand-rolled sample_hmc/sample_HMC_quench.cpp workaround.
+# Pure-gauge HMC has no fermion solve, so there is nothing for the QDW/QTW
+# alt-code to accelerate -- run it through the standard CPU test suite:
+#
+#   1. build the test runner (target already configured in the cmake tree):
+#        cmake --build build/cuda-ampere-mpi --target bridge_test -j
+#   2. in a run dir, place this file (named test_HMC_Quenched_Leapfrog.yaml)
+#      next to a main.yaml whose Main.lattice_size = [16,16,16,16]:
+#        Main:
+#          lattice_size     : [16,16,16,16]
+#          grid_size        : []
+#          number_of_thread : 24
+#          number_of_color  : 3
+#          log_filename     : stdout
+#          ildg_log_filename: stdout
+#          verbose_level    : General
+#   3. run and select HMC.Quenched.Leapfrog_Nf0:
+#        ./bridge_test            # pick the quenched-leapfrog test from the menu
+#
+# Section name MUST be Test_HMC_Quenched (the old quench_HMC.yaml used
+# Test_HMC_Wilson, which only the custom sample binary read -- that mismatch
+# is exactly why the workaround existed).
+
+Test_HMC_Quenched:
+  ## gauge_config_status = {Continue,Cold_start,Hot_start}
+  gauge_config_status      : Cold_start
+  gauge_config_type_input  : Text
+  config_filename_input    : ./conf_04040408.txt
+  gauge_config_type_output : Text
+  config_filename_output   : ./conf_quench_16x16x16x16.txt
+  random_number_type       : Mseries
+  seed_for_random_number   : 20260606UL
+  trajectory_number        : 0
+  trajectory_number_step   : 800
+  save_config_interval     : 50
+  verbose_level            : General
+
+HMC_Leapfrog:
+  ## traj_length = number_of_steps * step_size
+  step_size       : 0.0015
+  number_of_steps : 67
+  order_of_exp_iP : 8
+  Metropolis_test : true
+  verbose_level   : General
+
+Action_G:
+  ## action_type = {Action_G_Plaq,Action_G_Rectangle}
+  action_type   : Action_G_Plaq
+  beta          : 6.0
+  verbose_level : General

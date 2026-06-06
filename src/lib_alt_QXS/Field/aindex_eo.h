@@ -248,10 +248,10 @@ class AIndex_eo<REALTYPE, QXS>
   int leo(const int iyzt) const { return Leo[iyzt]; }
 
   template<typename AFIELD>
-  void split(AFIELD& v_e, AFIELD& v_o, const AFIELD& v);
+  void split(AFIELD& v_e, AFIELD& v_o, const AFIELD& v, bool qdw = false);
 
   template<typename AFIELD>
-  void merge(AFIELD& v, const AFIELD& v_e, const AFIELD& v_o);
+  void merge(AFIELD& v, const AFIELD& v_e, const AFIELD& v_o, bool qdw = false);
 };
 
 #endif

@@ -24,7 +24,11 @@ void mult_domainwall_5din_5dir_dirac_kernel(
   const real_t *b_con = const_b;
   const real_t *c_con = const_c;
 
-  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize){
+  // Each thread handles one full site (all NVCD*Ns components are processed
+  // in the inner loops below), so the grid-stride range is the site count.
+  // Note: idx is used directly as the site index in IDX2, hence the bound is
+  // Nst_pad, not Nst_pad*NVC (the latter would index NVC-fold out of bounds).
+  for (int idx = ist; idx < Nst_pad; idx += GridSize){
 
       for (int is = 0; is < Ns; ++is){
 
@@ -624,9 +628,9 @@ void mult_domainwall_5din_hopb_5D_dirac_kernel(
         int ixyz = site % Nxyz;
         int idir;
 
-        __shared__ real_t u_0, u_1, u_2, u_3, u_4, u_5;
-        __shared__ real_t u_6, u_7, u_8, u_9, u10, u11;
-        __shared__ real_t u12, u13, u14, u15, u16, u17;
+        real_t u_0, u_1, u_2, u_3, u_4, u_5;
+        real_t u_6, u_7, u_8, u_9, u10, u11;
+        real_t u12, u13, u14, u15, u16, u17;
         real_t vt1_0, vt1_1, vt1_2, vt1_3, vt1_4, vt1_5;
         real_t vt2_0, vt2_1, vt2_2, vt2_3, vt2_4, vt2_5;
         real_t wt1r, wt1i, wt2r, wt2i;

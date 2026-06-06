@@ -136,8 +136,8 @@ public:
     bool check_size(const AField<REALTYPE, ACCEL>& w) const
     {
       bool chk = true;
-      if(m_nin != w.nin() || m_nvol != w.nvol() || m_nex != w.nex())
-        chk = false;
+      if(m_nvol != w.nvol() || m_nex != w.nex()) chk = false;
+      if(m_nin != w.nin() && m_nin != 2 * w.nin() && m_nin * 2 != w.nin()) chk = false;
       return chk;
     }
 
@@ -166,10 +166,10 @@ public:
     void copy(const int ex,
               const AField<real_t, ACCEL>& w, const int ex_w);
 
-    void axpy(const real_t, const AField<real_t, ACCEL>&);
+    void axpy(const real_t, const AField<real_t, ACCEL>&, const int mode = 0);
 
     void axpy(const int ex, const real_t a, 
-              const AField<real_t, ACCEL>& w, const int ex_w);
+              const AField<real_t, ACCEL>& w, const int ex_w, const int mode = 0);
 
     //! complex version of axpy: real and imaginary parts in order.
     void axpy(const real_t a_r, const real_t a_i,
@@ -187,26 +187,26 @@ public:
     void axpy(const complex_t a,
               const AField<real_t, ACCEL>& w);
 
-    void aypx(const real_t, const AField<real_t, ACCEL>&);
+    void aypx(const real_t, const AField<real_t, ACCEL>&, const int mode = 0);
 
     void aypx(const int ex, const real_t,
-              const AField<real_t, ACCEL>& w, const int ex_w);
+              const AField<real_t, ACCEL>& w, const int ex_w, const int mode = 0);
 
     //! complex version of aypx: real and imaginary parts in order.
     void aypx(const real_t a_r, const real_t a_i,
-              const AField<real_t, ACCEL>&);
+              const AField<real_t, ACCEL>&, const int mode = 0);
 
     //! complex version of aypx: real and imaginary parts in order.
     void aypx(const int ex, const real_t a_r, const real_t a_i,
-              const AField<real_t, ACCEL>& w, const int ex_w);
+              const AField<real_t, ACCEL>& w, const int ex_w, const int mode = 0);
 
     //! complex version of aypx: complex_t is set by ComplexTraits.
     void aypx(const complex_t a,
-              const AField<real_t, ACCEL>& w);
+              const AField<real_t, ACCEL>& w, const int mode = 0);
 
     //! complex version of aypx: complex_t is set by ComplexTraits.
     void aypx(const int ex, const complex_t a,
-              const AField<real_t, ACCEL>& w, const int ex_w);
+              const AField<real_t, ACCEL>& w, const int ex_w, const int mode = 0);
 
     void scal(const real_t);
 
@@ -216,16 +216,54 @@ public:
 
     void scal(const complex_t, const int ex);
 
-    real_t dot(const AField<real_t, ACCEL>&);
+    real_t dot(const AField<real_t, ACCEL>&, const int mode = 0);
 
     //! complex inner-product: real and imaginary parts in order.
-    void dotc(real_t&, real_t&, const AField<real_t, ACCEL>&) const;
+    void dotc(real_t&, real_t&, const AField<real_t, ACCEL>&, const int mode = 0) const;
 
     //! square norm squared (|v|^2).
-    real_t norm2(void) const;
+    real_t norm2(const int mode = 0) const;
 
     //! square norm squared (|v|^2).
     real_t norm2_host(void) const;
+
+    //! DD-pair reductions (carry float-pair across device→host so CG can do
+    //! coefficient arithmetic without collapsing to single precision).
+    void norm2_pair(real_t& h, real_t& l, const int mode = 0) const;
+    void dot_pair(real_t& h, real_t& l,
+                  const AField<real_t, ACCEL>& w, const int mode = 0);
+    void dotc_pair(real_t& ar_h, real_t& ar_l, real_t& ai_h, real_t& ai_l,
+                   const AField<real_t, ACCEL>& w, const int mode = 0) const;
+
+    //! DD-pair axpy/aypx: scalar carried as (h, l) float-pair.
+    void axpy_pair(const real_t a_h, const real_t a_l,
+                   const AField<real_t, ACCEL>& w, const int mode = 0);
+    void aypx_pair(const real_t a_h, const real_t a_l,
+                   const AField<real_t, ACCEL>& w, const int mode = 0);
+
+    //! TW (triple-word) reductions: carry float-triple (h,m,l) across device->host.
+    //! Field layout when m_mw_mode==TW: 6 reals/cplx {rh, ih, rm, im, rl, il}.
+    void norm2_triple(real_t& h, real_t& m, real_t& l, const int mode = 0) const;
+    void dot_triple(real_t& h, real_t& m, real_t& l,
+                    const AField<real_t, ACCEL>& w, const int mode = 0);
+    void dotc_triple(real_t& ar_h, real_t& ar_m, real_t& ar_l,
+                     real_t& ai_h, real_t& ai_m, real_t& ai_l,
+                     const AField<real_t, ACCEL>& w, const int mode = 0) const;
+
+    //! TW axpy/aypx: real-scalar variants and triple-scalar (h,m,l) variants.
+    void axpy_triple(const real_t a,
+                     const AField<real_t, ACCEL>& w, const int mode = 0);
+    void axpy_triple(const real_t a_h, const real_t a_m, const real_t a_l,
+                     const AField<real_t, ACCEL>& w, const int mode = 0);
+    void aypx_triple(const real_t a,
+                     const AField<real_t, ACCEL>& w, const int mode = 0);
+    void aypx_triple(const real_t a_h, const real_t a_m, const real_t a_l,
+                     const AField<real_t, ACCEL>& w, const int mode = 0);
+    //! TW renormalize: in-place 3-word renormalization on this field.
+    void normalize_triple();
+
+    //! normalize QDW/QTW drift
+    void normalize(const int mode = 0);
 
     //! multiplying imaginary unit.
     void xI();

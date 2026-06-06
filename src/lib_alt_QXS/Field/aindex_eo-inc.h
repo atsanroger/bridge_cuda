@@ -18,7 +18,8 @@ template<typename REALTYPE>
 template<typename AFIELD>
 void AIndex_eo<REALTYPE, QXS>::split(AFIELD& field_e,
                                      AFIELD& field_o,
-                                     const AFIELD& field_lex)
+                                     const AFIELD& field_lex,
+                                     bool /*qdw*/)
 {
 #pragma omp barrier
 
@@ -66,7 +67,8 @@ template<typename REALTYPE>
 template<typename AFIELD>
 void AIndex_eo<REALTYPE, QXS>::merge(AFIELD& field_lex,
                                      const AFIELD& field_e,
-                                     const AFIELD& field_o)
+                                     const AFIELD& field_o,
+                                     bool /*qdw*/)
 {
 #pragma omp barrier
 

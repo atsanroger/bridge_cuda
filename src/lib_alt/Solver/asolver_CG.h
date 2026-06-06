@@ -49,6 +49,15 @@ class ASolver_CG : public ASolver<AFIELD>
   //! working vectors.
   AFIELD m_x, m_r, m_p, m_s;
 
+  using MWMode = typename AFopr<AFIELD>::MWMode;
+  MWMode m_mw_mode;
+
+  //! >0 = log the TRUE residual ||b - A x|| every this-many iterations
+  //! (in the field's own multiword precision) so a single solve yields the
+  //! true-residual descent curve. 0 = off. The recursively-updated residual
+  //! is NOT usable for precision comparison (it decouples from the true one).
+  int m_trueres_interval = 0;
+
  public:
   //! constructor.
   ASolver_CG(AFopr<AFIELD> *fopr)
@@ -95,11 +104,26 @@ class ASolver_CG : public ASolver<AFIELD>
 
   void solve_CG_step(real_t& rrp, real_t& rr);
 
+  //! DD-pair CG: maintains rrp/rr as float-pairs across iterations to keep
+  //! ~48-bit precision in the coefficients on FP32 ALUs.
+  void solve_CG_init_pair(real_t& rr);
+  void solve_CG_step_pair(real_t& rr);
+
+  //! TW-triple CG: carries rrp/rr as (h, m, l) float-triples for ~72-bit
+  //! coefficient precision on FP32 ALUs.
+  void solve_CG_init_triple(real_t& rr);
+  void solve_CG_step_triple(real_t& rr);
+
   //! for FP16 implementation
   void solve_CG_init_double(double& rrp, double& rr);
 
   //! for FP16 implementation
   void solve_CG_step_double(double& rrp, double& rr);
+
+  //! DD pair state used by solve_CG_*_pair when m_mw_mode == DW.
+  real_t m_rrp_h, m_rrp_l;
+  //! TW triple state used by solve_CG_*_triple when m_mw_mode == TW.
+  real_t m_rrp_th, m_rrp_tm, m_rrp_tl;
 
 
 #ifdef USE_FACTORY

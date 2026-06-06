@@ -1,0 +1,30 @@
+# === Build trees / artifacts ===
+build/
+*.o
+*.o.d
+*.a
+*.elf
+*.so
+*.lo
+*.obj
+
+# === Generated gauge configs (HMC output, large) ===
+sample_hmc/conf_quench_*
+sample_hmc/conf_hmc_*
+sample_hmc/conf_output*
+**/conf_real16.txt
+
+# === Editor / tool backups ===
+*.orig
+*.bak
+*.bak_*
+Makefile.20[0-9][0-9]*
+*~
+*.plotbak
+
+# === Local scratch ===
+*.log.tmp
+
+# === Claude Code / tooling litter (keep out of source tree) ===
+.progress_count
+*.txtopttopt

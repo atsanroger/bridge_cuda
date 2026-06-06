@@ -91,6 +91,12 @@ class AFopr
     return std::string();
   }
 
+  //! multiword arithmetic mode: FP = standard, DW = double-word, TW = triple-word.
+  enum class MWMode : int { FP = 0, DW = 1, TW = 2 };
+
+  virtual void set_mw_mode(MWMode mode) {}
+  virtual MWMode get_mw_mode() const { return MWMode::FP; }
+
   //! multiplies fermion operator to a given field.
   virtual void mult(AFIELD&, const AFIELD&)
   {

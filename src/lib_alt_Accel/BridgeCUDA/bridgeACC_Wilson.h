@@ -29,6 +29,16 @@ void mult_wilson_D_chiral(double* v2, double* u,
                           double* v1,
                           int *Nsize, int *bc, double kappa);
 
+// QDW Wrappers
+void mult_wilson_qdw_D_dirac(double* v2, double* u,
+                             double* v1,
+                             int *Nsize, int *bc, double kappa);
+
+void mult_wilson_qdw_D_chiral(double* v2, double* u,
+                              double* v1,
+                              int *Nsize, int *bc, double kappa);
+
+
 void mult_wilson_1_dirac(
                     double* buf_xp, double* buf_xm,
                     double* buf_yp, double* buf_ym,
@@ -132,6 +142,10 @@ void mult_wilson_gm5_aypx_dirac(double a, double* v2,
 
 void mult_wilson_gm5_chiral(double* v2, double* v1,
                             int *Nsize, int Nc);
+
+void mult_wilson_qdw_gm5_dirac(double* v2, double* v1, int *Nsize, int Nc);
+
+void mult_wilson_qdw_gm5_chiral(double* v2, double* v1, int *Nsize, int Nc);
 
 void mult_wilson_gm5_aypx_chiral(double a, double* v2,
                                  double* v1, int *Nsize, int Nc);
@@ -292,6 +306,15 @@ void mult_wilson_D_chiral(float* v2, float* u,
                           float* v1,
                           int *Nsize, int *bc, float kappa);
 
+// QDW Wrappers (float stubs)
+void mult_wilson_qdw_D_dirac(float* v2, float* u,
+                             float* v1,
+                             int *Nsize, int *bc, float kappa);
+
+void mult_wilson_qdw_D_chiral(float* v2, float* u,
+                              float* v1,
+                              int *Nsize, int *bc, float kappa);
+
 void mult_wilson_1_dirac(
                     float* buf_xp, float* buf_xm,
                     float* buf_yp, float* buf_ym,
@@ -394,6 +417,10 @@ void mult_wilson_gm5_aypx_dirac(float a, float* v2,
 
 void mult_wilson_gm5_chiral(float* v2, float* v1,
                             int *Nsize, int Nc);
+
+void mult_wilson_qdw_gm5_dirac(float* v2, float* v1, int *Nsize, int Nc);
+
+void mult_wilson_qdw_gm5_chiral(float* v2, float* v1, int *Nsize, int Nc);
 
 void mult_wilson_gm5_aypx_chiral(float a, float* v2,
                                  float* v1, int *Nsize, int Nc);

@@ -70,8 +70,16 @@ class AFopr_Domainwall_5din_eo : public AFopr<AFIELD>
   AIndex_eo<real_t,AFIELD::IMPL> m_index_eo;
 
   AFIELD m_Ueo;   //!< copied gauge config. with boundary conditions.
+  AFIELD m_Ueo_lo;   //!< low word of extended-precision gauge (QDW float-float).
+  AFIELD m_Ueo_mid;  //!< mid word of TW gauge link (allocated only when TW path uses TW-gauge).
+  bool   m_extended_precision;   //!< use float-float/double-double gauge links in QDW.
+  bool   m_su3_reconstruction = false;  //!< QTW hopping: reconstruct SU(3) 3rd column (YAML su3_reconstruction). Off by default (regressed on RTX 3080).
 
-  AFIELD m_w1, m_v1, m_v2;        //!< woking vectors
+  AFIELD m_w1, m_v1, m_v2;        //!< working vectors
+  using MWMode = typename AFopr<AFIELD>::MWMode;
+  MWMode m_mw_mode;
+  AFIELD m_w1_qdw;                //!< QDW-sized intermediate for D_eo (2 x m_NinF)
+  AFIELD m_w1_qtw;                //!< QTW-sized intermediate for D_eo (3 x m_NinF)
 
   // for preconditioning
   std::vector<real_t> m_dp;
@@ -80,6 +88,13 @@ class AFopr_Domainwall_5din_eo : public AFopr<AFIELD>
   std::vector<real_t> m_e;
   std::vector<real_t> m_f;
   real_t m_g;
+
+  // extended-precision (double) copies of the coefficients, used when
+  // m_extended_precision is set so a float base carries ~double coefficients.
+  double m_M0_d, m_mq_d, m_alpha_d;
+  std::vector<double> m_b_d, m_c_d;
+  std::vector<double> m_dp_d, m_dpinv_d, m_dm_d, m_e_d, m_f_d;
+  double m_g_d;
 
   int do_comm[4];  //!< communication switch (4=Ndim): (0: n, 1: y)
   int do_comm_any; //!< communication switch (if any): (0: n, 1: y)
@@ -161,6 +176,12 @@ class AFopr_Domainwall_5din_eo : public AFopr<AFIELD>
   void DdagD(AFIELD&, const AFIELD&);
   void D(AFIELD&, const AFIELD&);
   void Ddag(AFIELD&, const AFIELD&);
+
+  //! y += a*x in the CURRENT multiword precision. The Schur-complement combine
+  //! (y = w - LU_inv D_eo ... ) was previously a mode-less (single-float) axpy,
+  //! which catastrophically cancels and capped the assembled operator — and thus
+  //! the CG true residual — at ~1e-8. Route through the genuine DW/TW axpy.
+  void axpy_mw(AFIELD& y, const real_t a, const AFIELD& x);
   // void H(AFIELD&, const AFIELD&);
   // void Hdag(AFIELD&, const AFIELD&);
 
@@ -183,11 +204,18 @@ class AFopr_Domainwall_5din_eo : public AFopr<AFIELD>
   void mult_gm5R(AFIELD&, const AFIELD&);
   void mult_R(AFIELD&, const AFIELD&);
 
+  void set_mw_mode(MWMode mode) override;
+  MWMode get_mw_mode() const override { return m_mw_mode; }
+
   //  preconditioner
   void LU_inv(AFIELD&, const AFIELD&);
   void LUdag_inv(AFIELD&, const AFIELD&);
 
-  int field_nin() { return m_NinF; }
+  int field_nin() {
+    if (m_mw_mode == MWMode::DW) return m_NinF * 2;
+    if (m_mw_mode == MWMode::TW) return m_NinF * 3;
+    return m_NinF;
+  }
   int field_nvol() { return m_Nst2; }
   int field_nex() { return 1; }
 

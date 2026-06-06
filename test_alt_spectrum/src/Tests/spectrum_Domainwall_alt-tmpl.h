@@ -18,6 +18,7 @@
 #include "lib/Measurements/Fermion/fprop_Standard_lex.h"
 #include "lib/Tools/gammaMatrixSet.h"
 #include "lib/Tools/randomNumberManager.h"
+#include "lib/Tools/randomNumbers_Mseries.h"
 #include "lib/Solver/solver.h"
 #include "lib/Measurements/Fermion/source.h"
 #include "lib/Measurements/Fermion/fprop_Standard_Precond.h"
@@ -80,6 +81,30 @@ void apply_smearing(Field_G *u, const Parameters& params){
   // done!
 }
 
+
+// TWDIAG helper: apply one named eo sub-operator to the odd half of a source,
+// reverse the result to a double Field_F. Works for any AField type / mw mode.
+template<typename AF, Impl AIMPL>
+static Field_F twdiag_subop(AFopr<AF>* fopr, const Field& src,
+                            int Nvol, int Ns, int nex, int mwi, const char* op)
+{
+  typedef typename AF::real_t real_t;
+  AIndex_eo<real_t, AIMPL> index_eo;
+  const int nin2  = fopr->field_nin();
+  const int nvol2 = Nvol / 2;
+  AF aq(nin2, Nvol, nex);
+  fopr->convert(aq, src);
+  AF be(nin2, nvol2, nex), bo(nin2, nvol2, nex);
+  AF out(nin2, nvol2, nex), zero(nin2, nvol2, nex);
+  index_eo.split(be, bo, aq, mwi);
+  zero.set(0.0);
+  fopr->mult(out, bo, op);
+  AF axq(nin2, Nvol, nex);
+  index_eo.merge(axq, out, zero, mwi);
+  Field_F z(Nvol, Ns);
+  fopr->reverse((Field&)z, axq);
+  return z;
+}
 
 // class name
 template<Impl IMPL>
@@ -275,7 +300,10 @@ int Spectrum_Domainwall_alt<IMPL>::hadron_2ptFunction(
                   params_fopr, params_solver));
     fprop->set_mode("D");
   } else if (mode == "float_eo") {
-    params_solver.set_double("convergence_criterion_squared", 1.0e-14);
+    // TW operator now runs GENUINE triple-word. Use the SAME convergence
+    // criterion as the yaml (and as double_eo) so the float-triple vs FP64
+    // comparison is fair: previously this was hardcoded to 1e-20 (rel.resid
+    // ~1e-10), which capped the QTW solve 6 orders above the FP64 floor.
     fprop.reset(new Fprop_alt_Standard_eo<AField<float, IMPL> >(
                   params_fopr, params_solver));
     fprop->set_mode("D");
@@ -416,6 +444,8 @@ int Spectrum_Domainwall_alt<IMPL>::hadron_2ptFunction(
   vout.general(m_vl, "2-point correlator:\n");
 
   double result = corr.meson_all(sq, sq);
+
+  vout.general(m_vl, "RESULT_HIPREC: %.17e\n", result);
 
   timer->report();
   //RandomNumberManager::finalize();
@@ -629,6 +659,61 @@ int Spectrum_Domainwall_alt<IMPL>::check_operator_eo(
   }
 
   double abqnorm = (double)abq.norm2();
+
+  // --- TWDIAG: localize the structural FP-vs-TW operator gap ---
+  // The FP alt operator is validated against the reference (the D check below
+  // passes < 1e-16). So comparing each TW sub-operator against its FP version
+  // (both reversed to double) isolates which TW kernel deviates. Run with
+  // TWDIAG=1 in the environment; it prints per-sub-op rel diffs and returns.
+  if (getenv("TWDIAG")) {
+    vout.general(m_vl, "\n=== TWDIAG: TW sub-ops vs EXACT double sub-ops (CG operator pieces) ===\n");
+
+    // TWDIAG_RAND: replace the (smooth, operator-evolved) source with a random
+    // Gaussian vector so the sub-op comparison sees ROUGH/full-spectrum modes,
+    // which is what the CG Krylov space explores. If the TW operator deviates
+    // from QDW much more on a random vector than on the smooth source, the
+    // operator (not the BLAS) is what stalls the CG true residual at ~1e-8.
+    if (getenv("TWDIAG_RAND")) {
+      RandomNumbers_Mseries rng(1234567);
+      rng.gauss_lex_global((Field&)b5);
+      double bn = b5.norm2(); scal(b5, 1.0 / sqrt(bn));
+      vout.general(m_vl, "  [TWDIAG_RAND] using RANDOM Gaussian source vector\n");
+    }
+
+    // Two references: plain double (FP) and double-double (QDW, DW mode).
+    // QDW (~1e-30) is effectively exact; double (FP) carries its own rounding.
+    string fopr_type2 = params_fopr.get_string("fermion_type") + "_eo";
+    unique_ptr<AFopr<AField<double, IMPL>>>
+        fopr_dbl(AFopr<AField<double, IMPL>>::New(fopr_type2, params_fopr));
+    fopr_dbl->set_config(U.get());           // FP double
+
+    unique_ptr<AFopr<AField<double, IMPL>>>
+        fopr_qdw(AFopr<AField<double, IMPL>>::New(fopr_type2, params_fopr));
+    fopr_qdw->set_mw_mode(AFopr<AField<double, IMPL>>::MWMode::DW);
+    fopr_qdw->set_config(U.get());           // double-double reference
+
+    // TW float operator (the one the CG uses): set mode, then (re)convert gauge.
+    fopr_alt->set_mw_mode(AFopr<AFIELD>::MWMode::TW);
+    fopr_alt->set_config(U.get());
+
+    // The CG operator D() uses only these: D_eo (Deo/Doe) and LU_inv (Dee_inv/Doo_inv).
+    // Compare both double(FP) and TW(float-triple) against the QDW(dd) reference.
+    // If |TW-QDW| << |double-QDW|, TW genuinely beats double (triple-word OK).
+    const char* ops[] = {"Deo", "Doe", "Dee_inv", "Doo_inv", "Dee", "Doo"};
+    for (const char* op : ops) {
+      Field_F zq = twdiag_subop<AField<double, IMPL>, IMPL>(fopr_qdw.get(), (Field&)b5, Nvol, Ns, nex, 1, op);
+      Field_F zd = twdiag_subop<AField<double, IMPL>, IMPL>(fopr_dbl.get(), (Field&)b5, Nvol, Ns, nex, 0, op);
+      Field_F zt = twdiag_subop<AFIELD, IMPL>(fopr_alt.get(),               (Field&)b5, Nvol, Ns, nex, 2, op);
+      double nq = zq.norm2();
+      Field_F ed = zq; axpy(ed, -1.0, zd);   // QDW - double(FP)
+      Field_F et = zq; axpy(et, -1.0, zt);   // QDW - TW
+      vout.general(m_vl, "  %-8s : |QDW-double|/|QDW|=%.6e   |QDW-TW|/|QDW|=%.6e\n",
+                   op, sqrt(ed.norm2()/nq), sqrt(et.norm2()/nq));
+    }
+    fopr_alt->set_mw_mode(AFopr<AFIELD>::MWMode::FP);
+    fopr_alt->set_config(U.get());
+    return 0;
+  }
 
   // --- D check ---
   {

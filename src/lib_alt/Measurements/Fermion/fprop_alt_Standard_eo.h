@@ -44,6 +44,12 @@ class Fprop_alt_Standard_eo : public Fprop_alt<AFIELD>
   AFopr<AFIELD> *m_fopr;
   ASolver<AFIELD> *m_solver;
 
+  //! Iterative refinement passes on the eo-preconditioned solve (0 = off).
+  //! Residual is recomputed in the field's own (multiword) precision, so for
+  //! the float-triple QTW path it stays FP32-only and breaks the CGNR kappa^2
+  //! wall, letting the float base solve past FP64. YAML: refinement_iterations.
+  int m_n_refine = 0;
+
   Timer m_timer;
   double m_flop_count;
   double m_elapsed_time;

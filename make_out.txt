@@ -1,0 +1,591 @@
+----------------------------------------------------------------
+Compilation Environment Summary
+
+Options:
+  target              = CUDA ( CUDA )
+  use_mpi             = yes
+  use_thread          = omp
+  use_opt_code        = yes
+  use_opt_level       = high
+  use_static          = no
+  use_debug           = no
+  use_gauge_group     = su3
+  use_complex         = std
+  use_cpp11           = yes
+  use_testmanager     = no
+  use_lime_library    = no
+  use_sfmt_library    = no
+  use_ntl_library     = no
+  use_fftw_library    = no
+  use_yamlcpp_library = no
+  use_tinyxml2_library= no
+  use_qws_library     = no
+
+Compiler and options:
+  CXX         = nvcc -ccbin mpic++
+  CXXFLAGS    = -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80
+  LD          = nvcc -ccbin mpic++
+  LDFLAGS     = -Xcompiler -fopenmp -gencode=arch=compute_80,code=sm_80
+  LDLIBS      = -lm -lnvidia-ml -lcuda -lcudart
+  CXXDEP      = nvcc -ccbin mpic++
+  CXXDEPFLAGS = -MM
+  CPPFLAGS    = -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA
+----------------------------------------------------------------
+cd ./src/lib_alt_Accel/; ln -s BridgeCUDA BridgeACC ; cd ../../
+ln: failed to create symbolic link 'BridgeACC/BridgeCUDA': File exists
+generating make.inc file ...
+make -f src/Makefile build_dir=./build lib
+make[1]: Entering directory '/home/wlchenhome/Bridge/with_alpha'
+----------------------------------------------------------------
+Compilation Environment Summary
+
+Options:
+  target              = CUDA ( CUDA )
+  use_mpi             = yes
+  use_thread          = omp
+  use_opt_code        = yes
+  use_opt_level       = high
+  use_static          = no
+  use_debug           = no
+  use_gauge_group     = su3
+  use_complex         = std
+  use_cpp11           = yes
+  use_testmanager     = no
+  use_lime_library    = no
+  use_sfmt_library    = no
+  use_ntl_library     = no
+  use_fftw_library    = no
+  use_yamlcpp_library = no
+  use_tinyxml2_library= no
+
+Compiler and options:
+  CXX         = nvcc -ccbin mpic++
+  CXXFLAGS    = -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80
+  LD          = nvcc -ccbin mpic++
+  LDFLAGS     = -Xcompiler -fopenmp -gencode=arch=compute_80,code=sm_80
+  LDLIBS      = -lm -lnvidia-ml -lcuda -lcudart
+  CXXDEP      = nvcc -ccbin mpic++
+  CXXDEPFLAGS = -MM
+  CPPFLAGS    = -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -Isrc/lib_alt -Isrc/lib_alt_Accel -Isrc -Isrc/lib
+----------------------------------------------------------------
+copy library header files ...
+find: ‘src/lib_alt/Measurements/Gauge’: No such file or directory
+bridge_complex.h
+complexTraits.h
+find: ‘src/lib_alt_Accel/extra’: No such file or directory
+bridge.h
+find: ‘src/lib_alt_Accel/Action/Fermion’: No such file or directory
+aligned_allocator_impl.h
+bridge_long.h
+find: ‘src/lib_alt_Accel/Force/Fermion’: No such file or directory
+configure.h
+bridge_defs.h
+find: ‘src/lib_alt_Accel/BridgeACC/BridgeCUDA’: Too many levels of symbolic links
+doxygen.h
+lib/bridge_init_factory.h
+lib/bridge_setup.h
+lib/Action/action.h
+lib/Action/Fermion/action_F_Ratio_lex.h
+lib/Action/Fermion/action_F_Standard_SF.h
+lib/Action/Fermion/action_F_Ratio_eo.h
+lib/Action/Fermion/action_F_Rational.h
+lib/Action/Fermion/action_F_Overlap_Nf2.h
+lib/Action/Fermion/action_F_Rational_SF.h
+lib/Action/Fermion/action_F_Standard_eo.h
+lib/Action/Fermion/action_F_Standard_lex.h
+lib/Action/Fermion/action_F_Staggered_eo.h
+lib/Action/Fermion/action_F_Staggered_lex.h
+lib/Action/Gauge/action_G_Rectangle.h
+lib/Action/Gauge/action_G_Plaq_SF.h
+lib/Action/Gauge/action_G_Rectangle_SF.h
+lib/Action/Gauge/action_G_Plaq.h
+lib/Communicator/communicator.h
+lib/Communicator/communicator_impl.h
+lib/Communicator/MPI/layout.h
+lib/Communicator/MPI/channel.h
+lib/Communicator/MPI/communicator_mpi.h
+lib/Eigen/aeigensolver_IRLanczos-tmpl.h
+lib/Eigen/aeigensolver_IRArnoldi-tmpl.h
+lib/Eigen/aeigensolver.h
+lib/Eigen/aeigensolver_IRLanczos.h
+lib/Eigen/eigensolver.h
+lib/Eigen/eigensolver_IRArnoldi.h
+lib/Eigen/aeigensolver_IRArnoldi.h
+lib/Eigen/eigensolver_IRLanczos.h
+lib/Field/field.h
+lib/Field/shiftField_lex.h
+lib/Field/shiftField_eo.h
+lib/Field/field_thread-inc.h
+lib/Field/index_lex.h
+lib/Field/field_SF.h
+lib/Field/index_eo.h
+lib/Field/field_F_1spinor.h
+lib/Field/field_G.h
+lib/Field/field_F.h
+lib/Field/Imp/field_F_imp_SU2-inc.h
+lib/Field/Imp/field_F_imp_SU3-inc.h
+lib/Field/Imp/field_G_imp_SU2-inc.h
+lib/Field/Imp/field_F_imp_SU_N-inc.h
+lib/Field/Imp/field_G_imp_SU3-inc.h
+lib/Field/Imp/field_G_imp_SU_N-inc.h
+lib/Fopr/afopr_Smeared_alt.h
+lib/Fopr/afopr_Chebyshev.h
+lib/Fopr/afopr_Domainwall_eo-tmpl.h
+lib/Fopr/afopr_Sign-tmpl.h
+lib/Fopr/fopr_Overlap.h
+lib/Fopr/fopr_Sign.h
+lib/Fopr/afopr_Smeared_alt-tmpl.h
+lib/Fopr/fopr_Staggered.h
+lib/Fopr/afopr_eo.h
+lib/Fopr/afopr_Wilson_TwistedMass-tmpl.h
+lib/Fopr/fopr_Overlap_5d.h
+lib/Fopr/afopr_Wilson_TwistedMass.h
+lib/Fopr/fopr_CloverTerm_eo.h
+lib/Fopr/fopr_Staggered_eo.h
+lib/Fopr/fopr_Smeared_alt.h
+lib/Fopr/fopr_Wilson_TwistedMass.h
+lib/Fopr/afopr_Clover_Chemical.h
+lib/Fopr/afopr_Overlap_5d.h
+lib/Fopr/fopr_Clover_eo.h
+lib/Fopr/fopr_Clover_SF.h
+lib/Fopr/afopr_Rational.h
+lib/Fopr/afopr_Overlap-tmpl.h
+lib/Fopr/fopr_CloverTerm.h
+lib/Fopr/fopr_WilsonGeneral.h
+lib/Fopr/fopr_Domainwall_eo.h
+lib/Fopr/fopr_CRS.h
+lib/Fopr/afopr_Smeared-tmpl.h
+lib/Fopr/fopr_Clover.h
+lib/Fopr/afopr_Wilson_Chemical.h
+lib/Fopr/afopr_Domainwall.h
+lib/Fopr/afopr_Overlap.h
+lib/Fopr/fopr_Wilson_Chemical.h
+lib/Fopr/fopr_CloverGeneral.h
+lib/Fopr/afopr_Overlap_5d-tmpl.h
+lib/Fopr/fopr_NonRelativistic.h
+lib/Fopr/afopr_Sign.h
+lib/Fopr/fopr_eo.h
+lib/Fopr/fopr_Wilson_SF.h
+lib/Fopr/afopr_Rational-tmpl.h
+lib/Fopr/fopr_Rational.h
+lib/Fopr/afopr_Chebyshev-tmpl.h
+lib/Fopr/fopr_Smeared_eo.h
+lib/Fopr/afopr_Wilson_Chemical-tmpl.h
+lib/Fopr/fopr_Clover_Chemical.h
+lib/Fopr/fopr_thread-inc.h
+lib/Fopr/fopr_Rational_SF.h
+lib/Fopr/afopr_Smeared_eo.h
+lib/Fopr/fopr_Chebyshev.h
+lib/Fopr/afopr_Domainwall_eo.h
+lib/Fopr/afopr_Smeared_eo-tmpl.h
+lib/Fopr/fopr_Wilson.h
+lib/Fopr/fopr_Domainwall.h
+lib/Fopr/fopr.h
+lib/Fopr/afopr_Clover_Chemical-tmpl.h
+lib/Fopr/afopr_Smeared.h
+lib/Fopr/fopr_Wilson_eo.h
+lib/Fopr/fopr_Smeared.h
+lib/Fopr/fopr_CloverTerm_General.h
+lib/Fopr/afopr.h
+lib/Fopr/afopr_Domainwall-tmpl.h
+lib/Fopr/Org/fopr_CloverTerm_General_impl.h
+lib/Fopr/Org/fopr_Wilson_eo_impl.h
+lib/Fopr/Org/fopr_CloverTerm_eo_impl.h
+lib/Fopr/Org/fopr_CloverTerm_impl.h
+lib/Fopr/Org/fopr_Wilson_impl.h
+lib/Fopr/Org/fopr_WilsonGeneral_impl.h
+lib/Fopr/Imp/fopr_CloverTerm_General_impl.h
+lib/Fopr/Imp/fopr_Wilson_impl_SU3-inc.h
+lib/Fopr/Imp/fopr_Wilson_eo_impl.h
+lib/Fopr/Imp/fopr_Wilson_impl_SU_N-inc.h
+lib/Fopr/Imp/fopr_CloverTerm_eo_impl.h
+lib/Fopr/Imp/fopr_Wilson_impl_common-inc.h
+lib/Fopr/Imp/fopr_CloverTerm_impl.h
+lib/Fopr/Imp/fopr_Wilson_impl_SU2-inc.h
+lib/Fopr/Imp/fopr_Wilson_impl.h
+lib/Fopr/Imp/fopr_WilsonGeneral_impl.h
+lib/Force/Fermion/force_F_Clover_Nf2_Isochemical.h
+lib/Force/Fermion/force_F_Clover_SF.h
+lib/Force/Fermion/force_F_Smeared.h
+lib/Force/Fermion/force_F_Wilson_SF.h
+lib/Force/Fermion/force_F_CloverTerm.h
+lib/Force/Fermion/force_F_Wilson_Nf2_Isochemical.h
+lib/Force/Fermion/force_F_Wilson_Nf2.h
+lib/Force/Fermion/tensorProd.h
+lib/Force/Fermion/force_F_Wilson_TwistedMass_Nf2.h
+lib/Force/Fermion/force_F_Overlap_Nf2.h
+lib/Force/Fermion/force_F_Rational.h
+lib/Force/Fermion/force_F_Domainwall.h
+lib/Force/Fermion/force_F_Staggered_eo.h
+lib/Force/Fermion/force_F.h
+lib/Force/Fermion/force_F_Clover_Nf2.h
+lib/Force/Fermion/force_F_Staggered.h
+lib/Force/Fermion/aforce_F.h
+lib/Force/Fermion/force_F_Wilson_eo.h
+lib/Force/Gauge/force_G_Plaq_SF.h
+lib/Force/Gauge/force_G.h
+lib/Force/Gauge/force_G_Rectangle_SF.h
+lib/Force/Gauge/force_G_Rectangle.h
+lib/Force/Gauge/force_G_Plaq.h
+lib/HMC/hmc_General.h
+lib/HMC/integrator_Leapfrog.h
+lib/HMC/integrator_Omelyan.h
+lib/HMC/hmc_Leapfrog.h
+lib/HMC/action_list.h
+lib/HMC/integrator_UpdateU.h
+lib/HMC/builder_Integrator.h
+lib/HMC/integrator_UpdateP.h
+lib/HMC/langevin_Momentum.h
+lib/HMC/integrator.h
+lib/IO/gaugeConfig_SF.h
+lib/IO/dataIO_Text.h
+lib/IO/fieldIO_Binary_Parallel.h
+lib/IO/fieldIO_Text_4x4x4x8.h
+lib/IO/fieldIO_LIME_Parallel.h
+lib/IO/fieldIO_Text.h
+lib/IO/bridgeIO.h
+lib/IO/fieldIO_NERSC.h
+lib/IO/io_format_gauge.h
+lib/IO/fieldIO_Binary.h
+lib/IO/fieldIO_LIME.h
+lib/IO/fieldIO_Fortran.h
+lib/IO/fieldIO.h
+lib/IO/gaugeConfig.h
+lib/IO/dataIO.h
+lib/IO/fieldIO_None.h
+lib/IO/io_format.h
+lib/IO/fieldIO_Binary_Distributed.h
+lib/IO/dataIO_Text_impl.h
+lib/Measurements/Fermion/fermionFlow.h
+lib/Measurements/Fermion/fprop_Standard_lex.h
+lib/Measurements/Fermion/source_Staggered_Wall_Evenodd.h
+lib/Measurements/Fermion/source_Staggered_Wall.h
+lib/Measurements/Fermion/contract_4spinor.h
+lib/Measurements/Fermion/source_Staggered_Wall_Cube.h
+lib/Measurements/Fermion/source_Wall.h
+lib/Measurements/Fermion/source_MomentumWall.h
+lib/Measurements/Fermion/corr2pt_Staggered_Extended.h
+lib/Measurements/Fermion/corr2pt_Staggered_Local.h
+lib/Measurements/Fermion/source_Local.h
+lib/Measurements/Fermion/corr2pt_Wilson_SF.h
+lib/Measurements/Fermion/corr4pt_4spinor.h
+lib/Measurements/Fermion/fprop.h
+lib/Measurements/Fermion/quarkNumberSusceptibility_Wilson.h
+lib/Measurements/Fermion/corr2pt_4spinor.h
+lib/Measurements/Fermion/fprop_Standard_eo.h
+lib/Measurements/Fermion/fprop_Overlap_5d.h
+lib/Measurements/Fermion/noiseVector.h
+lib/Measurements/Fermion/fermionFlow_2pt_Function.h
+lib/Measurements/Fermion/noiseVector_Z2.h
+lib/Measurements/Fermion/source_Wall_SF.h
+lib/Measurements/Fermion/source_Random.h
+lib/Measurements/Fermion/corr2pt_Staggered.h
+lib/Measurements/Fermion/fprop_Wilson_Shift.h
+lib/Measurements/Fermion/fprop_Standard_Precond.h
+lib/Measurements/Fermion/source.h
+lib/Measurements/Fermion/source_Exponential.h
+lib/Measurements/Fermion/fermionFlow_1pt_Function.h
+lib/Measurements/Gauge/energyMomentumTensor.h
+lib/Measurements/Gauge/gaugeFixing.h
+lib/Measurements/Gauge/polyakovLoop.h
+lib/Measurements/Gauge/staple_eo.h
+lib/Measurements/Gauge/wilsonLoop.h
+lib/Measurements/Gauge/gradientFlow_RungeKutta_2nd.h
+lib/Measurements/Gauge/gaugeFixing_Coulomb.h
+lib/Measurements/Gauge/gradientFlow.h
+lib/Measurements/Gauge/gaugeFixing_None.h
+lib/Measurements/Gauge/fieldStrength.h
+lib/Measurements/Gauge/energyDensity.h
+lib/Measurements/Gauge/gaugeFixing_Landau.h
+lib/Measurements/Gauge/gradientFlow_RungeKutta_4th.h
+lib/Measurements/Gauge/gradientFlow_RungeKutta.h
+lib/Measurements/Gauge/gradientFlow_RungeKutta_3rd.h
+lib/Measurements/Gauge/gradientFlow_AdaptiveRungeKutta.h
+lib/Measurements/Gauge/staple.h
+lib/Measurements/Gauge/staple_SF.h
+lib/Measurements/Gauge/topologicalCharge.h
+lib/Measurements/Gauge/staple_lex.h
+lib/Measurements/Gauge/gradientFlow_RungeKutta_1st.h
+lib/Parameters/parameterCheck.h
+lib/Parameters/parameterManager_XML.h
+lib/Parameters/parameters.h
+lib/Parameters/parameterManager_YAML.h
+lib/Parameters/commonParameters.h
+lib/Parameters/parameterManager.h
+lib/ResourceManager/threadManager.h
+lib/Smear/director_Smear.h
+lib/Smear/smear.h
+lib/Smear/forceSmear_HYP_SF.h
+lib/Smear/forceSmear_APE.h
+lib/Smear/projection_Maximum_SU_N.h
+lib/Smear/projection.h
+lib/Smear/asmear.h
+lib/Smear/smear_HYP_SF.h
+lib/Smear/projection_Stout_SU3.h
+lib/Smear/smear_HYP.h
+lib/Smear/aforceSmear.h
+lib/Smear/smear_APE.h
+lib/Smear/forceSmear_APE_SF.h
+lib/Smear/smear_APE_spatial.h
+lib/Smear/forceSmear.h
+lib/Smear/smear_APE_SF.h
+lib/Smear/forceSmear_HYP.h
+lib/Smear/aprojection.h
+lib/Solver/solver.h
+lib/Solver/solver_CGNE.h
+lib/Solver/solver_CG.h
+lib/Solver/solver_BiCGStab_DS_L_Cmplx.h
+lib/Solver/solver_BiCGStab_L_Cmplx.h
+lib/Solver/ashiftsolver.h
+lib/Solver/ashiftsolver_CG.h
+lib/Solver/solver_BiCGStab_Cmplx.h
+lib/Solver/solver_BiCGStab_IDS_L_Cmplx.h
+lib/Solver/solver_GMRES_m_Cmplx.h
+lib/Solver/shiftsolver.h
+lib/Solver/ashiftsolver_CG-tmpl.h
+lib/Solver/solver_CGNR.h
+lib/Solver/shiftsolver_CG.h
+lib/Tools/fft_xyz_3dim.h
+lib/Tools/gammaMatrixSet.h
+lib/Tools/fft.h
+lib/Tools/gammaMatrixSet_Dirac.h
+lib/Tools/filename.h
+lib/Tools/fft_3d_parallel1d.h
+lib/Tools/fft_3d_parallel3d.h
+lib/Tools/gammaMatrixSet_Chiral.h
+lib/Tools/position.hh
+lib/Tools/location.hh
+lib/Tools/fft_3d_local.h
+lib/Tools/randomNumbers.h
+lib/Tools/mat_SU_N.h
+lib/Tools/evalexpr_parser.h
+lib/Tools/generatorSet_Mat_SU_N.h
+lib/Tools/decompose_LU_Cmplx.h
+lib/Tools/factory.h
+lib/Tools/evalexpr_symbol.h
+lib/Tools/vec_SU_N.h
+lib/Tools/gammaMatrix.h
+lib/Tools/director.h
+lib/Tools/math_Sign_Zolotarev.h
+lib/Tools/sorter_alt.h
+lib/Tools/sorter.h
+lib/Tools/decompose_QR_Cmplx.h
+lib/Tools/evalexpr.h
+lib/Tools/fft_3d.h
+lib/Tools/timer.h
+lib/Tools/evalexpr_global.h
+lib/Tools/unique_pointer.h
+lib/Tools/epsilonTensor.h
+lib/Tools/fft_xyz_1dim.h
+lib/Tools/randomNumbers_MT19937.h
+lib/Tools/math_Rational.h
+lib/Tools/randomNumbers_SFMT.h
+lib/Tools/stack.hh
+lib/Tools/file_utils.h
+lib/Tools/randomNumberManager.h
+lib/Tools/decompose_LUP_Cmplx.h
+lib/Tools/eigen_QR_Cmplx.h
+lib/Tools/math_Sign_Zolotarev_Omega.h
+lib/Tools/randomNumbers_Mseries.h
+lib/Tools/decompose_Hessenberg_Cmplx.h
+lib_alt/alt_impl.h
+lib_alt/bridge_alt_init.h
+lib_alt/Action/Fermion/action_F_alt_Rational.h
+lib_alt/Action/Fermion/action_F_alt_Rational_Ratio-tmpl.h
+lib_alt/Action/Fermion/action_F_alt_Standard_lex.h
+lib_alt/Action/Fermion/action_F_alt_Rational_Ratio.h
+lib_alt/Action/Fermion/action_F_alt_Ratio_eo.h
+lib_alt/Action/Fermion/action_F_alt_Standard_eo.h
+lib_alt/Action/Fermion/action_F_alt_Standard_eo-tmpl.h
+lib_alt/Action/Fermion/action_F_alt_Rational-tmpl.h
+lib_alt/Action/Fermion/action_F_alt_Ratio_lex-tmpl.h
+lib_alt/Action/Fermion/action_F_alt_Ratio_eo-tmpl.h
+lib_alt/Action/Fermion/action_F_alt_Standard_lex-tmpl.h
+lib_alt/Action/Fermion/action_F_alt_Ratio_lex.h
+lib_alt/Eigen/aeigensolver_IRArnoldi_block.h
+lib_alt/Eigen/aeigensolver_IRArnoldi_block-tmpl.h
+lib_alt/Field/aindex_eo_base.h
+lib_alt/Field/aindex_lex_base.h
+lib_alt/Field/aindex_coarse_lex_base.h
+lib_alt/Field/afield_base.h
+lib_alt/Field/aindex_block_lex_base.h
+lib_alt/Fopr/afopr_dd.h
+lib_alt/Fopr/afopr_OptimalDomainwall-tmpl.h
+lib_alt/Fopr/afopr_Domainwall_dd.h
+lib_alt/Fopr/afopr_Domainwall_dd-tmpl.h
+lib_alt/Fopr/afopr_OptimalDomainwall.h
+lib_alt/Force/Fermion/aforce_F_Domainwall_eo.h
+lib_alt/Force/Fermion/aforce_F_Rational-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Wilson_Nf2.h
+lib_alt/Force/Fermion/aforce_F_Wilson_eo_Nf2.h
+lib_alt/Force/Fermion/aforce_F_Clover_Nf2-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Domainwall-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Smeared_alt.h
+lib_alt/Force/Fermion/aforce_F_Domainwall_eo-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Domainwall.h
+lib_alt/Force/Fermion/aforce_F_Clover_Nf2.h
+lib_alt/Force/Fermion/aforce_F_Wilson_Nf2-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Smeared.h
+lib_alt/Force/Fermion/aforce_F_Smeared-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Rational.h
+lib_alt/Force/Fermion/aforce_F_CloverTerm-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Wilson_eo_Nf2-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Smeared_alt-tmpl.h
+lib_alt/Force/Fermion/aforce_F_CloverTerm.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_eo.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_lex_Mixedprec-tmpl.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_lex-tmpl.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_eo-tmpl.h
+lib_alt/Measurements/Fermion/eigenmode_Standard_alt.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_eo_Mixedprec-tmpl.h
+lib_alt/Measurements/Fermion/fprop_alt.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_lex.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_SAP-tmpl.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_eo_Richardson.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_lex_Mixedprec.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_SAP.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_eo_Richardson-tmpl.h
+lib_alt/Measurements/Fermion/eigenmode_Standard_alt-tmpl.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_eo_Mixedprec.h
+lib_alt/Solver/asolver_CG_fp16-tmpl.h
+lib_alt/Solver/asolver_FGMRES-tmpl.h
+lib_alt/Solver/asolver_MG.h
+lib_alt/Solver/asolver.h
+lib_alt/Solver/asolver_BiCGStab_Cmplx-tmpl.h
+lib_alt/Solver/asolver_BiCGStab_Cmplx.h
+lib_alt/Solver/asolver_BiCGStab_fp64-tmpl.h
+lib_alt/Solver/MultiGrid_Clover.h
+lib_alt/Solver/asolver_MG_double.h
+lib_alt/Solver/aprecond_Mixedprec.h
+lib_alt/Solver/asolver_BiCGStab_fp16-tmpl.h
+lib_alt/Solver/asolver_Richardson-tmpl.h
+lib_alt/Solver/asolver_BiCGStab.h
+lib_alt/Solver/asolver_CGNR.h
+lib_alt/Solver/asolver_CG-tmpl.h
+lib_alt/Solver/asolver_BiCGStab-tmpl.h
+lib_alt/Solver/asolver_SAP.h
+lib_alt/Solver/MultiGrid.h
+lib_alt/Solver/asolver_CGNR-tmpl.h
+lib_alt/Solver/aprecond_MG.h
+lib_alt/Solver/asolver_FBiCGStab-tmpl.h
+lib_alt/Solver/asolver_CG.h
+lib_alt/Solver/aprecond_MG-tmpl.h
+lib_alt/Solver/asolver_FBiCGStab.h
+lib_alt/Solver/asolver_BiCGStab_Cmplx_fp16-tmpl.h
+lib_alt/Solver/aprecond_Mixedprec-tmpl.h
+lib_alt/Solver/asolver_SAP_MINRES.h
+lib_alt/Solver/asolver_GMRES_m_Cmplx.h
+lib_alt/Solver/aprecond.h
+lib_alt/Solver/asolver_SAP-tmpl.h
+lib_alt/Solver/asolver_Richardson.h
+lib_alt/Solver/asolver_FGMRES.h
+lib_alt/Solver/asolver_MG_double-tmpl.h
+lib_alt/Solver/asolver_BiCGStab_Precond.h
+lib_alt/Solver/MultiGrid_Clover-tmpl.h
+lib_alt/Solver/asolver_SAP_MINRES-tmpl.h
+lib_alt/Solver/asolver_GMRES_m_Cmplx-tmpl.h
+lib_alt/Solver/asolver_BiCGStab_Precond-tmpl.h
+lib_alt/Solver/asolver_MG-tmpl.h
+lib_alt/Smear/director_alt_Smear-tmpl.h
+lib_alt/Smear/director_alt_Smear.h
+lib_alt_Accel/bridge_init_factory_alt_Accel.h
+lib_alt_Accel/bridge_alt_accel.h
+lib_alt_Accel/init_alt_Accel.h
+lib_alt_Accel/inline/define_index.h
+lib_alt_Accel/inline/afield_th-inc.h
+lib_alt_Accel/inline/constant_memory.h
+lib_alt_Accel/inline/constant_memory_inline.h
+lib_alt_Accel/inline/define_params.h
+lib_alt_Accel/inline/mult_Wilson_cuda_inline-inc.h
+lib_alt_Accel/ResourceManager/deviceManager_OpenACC.h
+lib_alt_Accel/ResourceManager/deviceManager_NVSHMEM.h
+lib_alt_Accel/ResourceManager/deviceManager_CUDA.h
+lib_alt_Accel/Field/afield-tmpl.h
+lib_alt_Accel/Field/shiftAField_lex-tmpl.h
+lib_alt_Accel/Field/shiftAField_lex.h
+lib_alt_Accel/Field/afield_dd-inc.h
+lib_alt_Accel/Field/aindex_eo.h
+lib_alt_Accel/Field/aindex_block_lex.h
+lib_alt_Accel/Field/aindex_eo-tmpl.h
+lib_alt_Accel/Field/aindex_lex.h
+lib_alt_Accel/Field/afield_Gauge-inc.h
+lib_alt_Accel/Field/afield-inc.h
+lib_alt_Accel/Field/aindex_coarse_lex.h
+lib_alt_Accel/Field/afield.h
+lib_alt_Accel/Field/aindex_eo-inc.h
+lib_alt_Accel/Field/afield_4spinor-inc.h
+lib_alt_Accel/Fopr/afopr_Wilson-tmpl.h
+lib_alt_Accel/Fopr/afopr_Domainwall_coarse.h
+lib_alt_Accel/Fopr/afopr_Domainwall_5din_eo-tmpl.h
+lib_alt_Accel/Fopr/afopr_Wilson_CLE.h
+lib_alt_Accel/Fopr/afopr_Clover_eo-tmpl.h
+lib_alt_Accel/Fopr/afopr_Clover_eo.h
+lib_alt_Accel/Fopr/afopr_Clover_coarse.h
+lib_alt_Accel/Fopr/afopr_Domainwall_5din_eo.h
+lib_alt_Accel/Fopr/afopr_Clover.h
+lib_alt_Accel/Fopr/afopr_Staggered_CLE.h
+lib_alt_Accel/Fopr/afopr_Clover_dd.h
+lib_alt_Accel/Fopr/afopr_Domainwall_5din_dd-tmpl.h
+lib_alt_Accel/Fopr/afopr_Wilson_eo.h
+lib_alt_Accel/Fopr/afopr_Domainwall_coarse-tmpl.h
+lib_alt_Accel/Fopr/afopr_Wilson_dd.h
+lib_alt_Accel/Fopr/afopr_Wilson.h
+lib_alt_Accel/Fopr/afopr_Domainwall_5din.h
+lib_alt_Accel/Fopr/afopr_Wilson_CLE-tmpl.h
+lib_alt_Accel/Fopr/afopr_Clover_coarse-tmpl.h
+lib_alt_Accel/Fopr/afopr_Wilson_SU3-inc.h
+lib_alt_Accel/Fopr/afopr_Staggered_eo-tmpl.h
+lib_alt_Accel/Fopr/afopr_common_th-inc.h
+lib_alt_Accel/Fopr/afopr_Staggered.h
+lib_alt_Accel/Fopr/afopr_Domainwall_5din_dd.h
+lib_alt_Accel/Fopr/afopr_Clover_dd-tmpl.h
+lib_alt_Accel/Fopr/afopr_Domainwall_5din-tmpl.h
+lib_alt_Accel/Fopr/afopr_CloverTerm.h
+lib_alt_Accel/Fopr/afopr_Wilson_mult-inc.h
+lib_alt_Accel/Fopr/afopr_Staggered_CLE-tmpl.h
+lib_alt_Accel/Fopr/afopr_Wilson_dd-tmpl.h
+lib_alt_Accel/Fopr/afopr_Staggered_eo.h
+lib_alt_Accel/Fopr/afopr_Staggered-tmpl.h
+lib_alt_Accel/Fopr/afopr_Wilson_eo-tmpl.h
+lib_alt_Accel/Fopr/afopr_CloverTerm-tmpl.h
+lib_alt_Accel/Fopr/afopr_Clover-tmpl.h
+lib_alt_Accel/Measurements/Gauge/astaple_lex.h
+lib_alt_Accel/Measurements/Gauge/astaple_lex-tmpl.h
+lib_alt_Accel/BridgeACC/bridgeACC_Domainwall.h
+lib_alt_Accel/BridgeACC/bridgeACC_Clover.h
+lib_alt_Accel/BridgeACC/bridgeACC_Clover_coarse.h
+lib_alt_Accel/BridgeACC/bridgeACC_AField_dd.h
+lib_alt_Accel/BridgeACC/bridgeACC_Index_eo_alt.h
+lib_alt_Accel/BridgeACC/bridgeACC_AField_Gauge.h
+lib_alt_Accel/BridgeACC/bridgeACC_Wilson_CLE.h
+lib_alt_Accel/BridgeACC/bridgeACC_ShiftAField_lex.h
+lib_alt_Accel/BridgeACC/bridgeACC_AField.h
+lib_alt_Accel/BridgeACC/constant_memory.h
+lib_alt_Accel/BridgeACC/bridgeACC_Domainwall_coarse.h
+lib_alt_Accel/BridgeACC/bridgeACC_Wilson.h
+lib_alt_Accel/BridgeACC/bridgeACC.h
+lib_alt_Accel/BridgeACC/bridgeACC_Staggered.h
+
+Bridge library is successfully compiled.
+
+make[1]: Leaving directory '/home/wlchenhome/Bridge/with_alpha'
+build_dir_path=`cd ./build && pwd`; \
+test_dir_path=`cd ./build/tests && pwd`; \
+cd tests && make bridge_install_path=$build_dir_path test_dir=$test_dir_path test="""all""" test_flags=""""""
+make[1]: Entering directory '/home/wlchenhome/Bridge/with_alpha/tests'
+----------------------------------------------------------------
+Target:
+  test_dir      = /home/wlchenhome/Bridge/with_alpha/build/tests
+  test          = all
+  test_list     = Eigensolver FFT Gauge GradientFlow HMC HotStart IO Mult PolyakovLoop QuarkNumberSusceptibility RandomNumbers Rational SF_fAfP Solver Spectrum TopologicalCharge WilsonLoop
+  program       = /home/wlchenhome/Bridge/with_alpha/build/tests/bridge.all.elf
+  CPPFLAGS_TEST = -Isrc -DUSE_TEST_EIGENSOLVER -DUSE_TEST_FFT -DUSE_TEST_GAUGE -DUSE_TEST_GRADIENTFLOW -DUSE_TEST_HMC -DUSE_TEST_HOTSTART -DUSE_TEST_IO -DUSE_TEST_MULT -DUSE_TEST_POLYAKOVLOOP -DUSE_TEST_QUARKNUMSUSCEPT -DUSE_TEST_RANDOMNUMBERS -DUSE_TEST_RATIONAL -DUSE_TEST_SF_FAFP -DUSE_TEST_SOLVER -DUSE_TEST_SPECTRUM -DUSE_TEST_TOPOLOGICALCHARGE -DUSE_TEST_WILSONLOOP
+----------------------------------------------------------------
+nvcc -ccbin mpic++ -MM -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel   -Isrc -DUSE_TEST_EIGENSOLVER -DUSE_TEST_FFT -DUSE_TEST_GAUGE -DUSE_TEST_GRADIENTFLOW -DUSE_TEST_HMC -DUSE_TEST_HOTSTART -DUSE_TEST_IO -DUSE_TEST_MULT -DUSE_TEST_POLYAKOVLOOP -DUSE_TEST_QUARKNUMSUSCEPT -DUSE_TEST_RANDOMNUMBERS -DUSE_TEST_RATIONAL -DUSE_TEST_SF_FAFP -DUSE_TEST_SOLVER -DUSE_TEST_SPECTRUM -DUSE_TEST_TOPOLOGICALCHARGE -DUSE_TEST_WILSONLOOP -DUSE_TEST_EIGENSOLVER -DUSE_TEST_FFT -DUSE_TEST_GAUGE -DUSE_TEST_GRADIENTFLOW -DUSE_TEST_HMC -DUSE_TEST_HOTSTART -DUSE_TEST_IO -DUSE_TEST_MULT -DUSE_TEST_POLYAKOVLOOP -DUSE_TEST_QUARKNUMSUSCEPT -DUSE_TEST_RANDOMNUMBERS -DUSE_TEST_RATIONAL -DUSE_TEST_SF_FAFP -DUSE_TEST_SOLVER -DUSE_TEST_SPECTRUM -DUSE_TEST_TOPOLOGICALCHARGE -DUSE_TEST_WILSONLOOP src/run_test.cpp \
+| sed 's|^\([^\.]*\)\.o|/home/wlchenhome/Bridge/with_alpha/build/tests/src/\1\.o|' > /home/wlchenhome/Bridge/with_alpha/build/tests/src/run_test.o.d
+/bin/sh: 1: nvcc: not found
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel   -Isrc -DUSE_TEST_EIGENSOLVER -DUSE_TEST_FFT -DUSE_TEST_GAUGE -DUSE_TEST_GRADIENTFLOW -DUSE_TEST_HMC -DUSE_TEST_HOTSTART -DUSE_TEST_IO -DUSE_TEST_MULT -DUSE_TEST_POLYAKOVLOOP -DUSE_TEST_QUARKNUMSUSCEPT -DUSE_TEST_RANDOMNUMBERS -DUSE_TEST_RATIONAL -DUSE_TEST_SF_FAFP -DUSE_TEST_SOLVER -DUSE_TEST_SPECTRUM -DUSE_TEST_TOPOLOGICALCHARGE -DUSE_TEST_WILSONLOOP -DUSE_TEST_EIGENSOLVER -DUSE_TEST_FFT -DUSE_TEST_GAUGE -DUSE_TEST_GRADIENTFLOW -DUSE_TEST_HMC -DUSE_TEST_HOTSTART -DUSE_TEST_IO -DUSE_TEST_MULT -DUSE_TEST_POLYAKOVLOOP -DUSE_TEST_QUARKNUMSUSCEPT -DUSE_TEST_RANDOMNUMBERS -DUSE_TEST_RATIONAL -DUSE_TEST_SF_FAFP -DUSE_TEST_SOLVER -DUSE_TEST_SPECTRUM -DUSE_TEST_TOPOLOGICALCHARGE -DUSE_TEST_WILSONLOOP -c -o /home/wlchenhome/Bridge/with_alpha/build/tests/src/run_test.o src/run_test.cpp
+make[1]: nvcc: Not a directory
+make[1]: *** [Makefile:147: /home/wlchenhome/Bridge/with_alpha/build/tests/src/run_test.o] Error 127
+make[1]: Leaving directory '/home/wlchenhome/Bridge/with_alpha/tests'
+make: *** [Makefile:548: program-with-lib] Error 2

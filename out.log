@@ -1,0 +1,1202 @@
+cd ./src/lib_alt_Accel/; ln -s BridgeCUDA BridgeACC ; cd ../../
+ln: generating make.inc file ...
+failed to create symbolic link 'BridgeACC/BridgeCUDA': File exists
+Starting build_bridgecuda...
+make -C src/lib_alt_Accel/BridgeCUDA all
+make[1]: Entering directory '/home/wlchenhome/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA'
+Bridge++'s CUDA LIBRARY STARTING
+Total source files: 17
+make[1]: Leaving directory '/home/wlchenhome/Bridge/with_alpha/src/lib_alt_Accel/BridgeCUDA'
+Creating symbolic link for libbridgecuda.a...
+rm -f ./build/libbridgecuda.a
+----------------------------------------------------------------
+Compilation Environment Summary
+
+Options:
+  target              = CUDA ( CUDA )
+  use_mpi             = yes
+  use_thread          = omp
+  use_opt_code        = yes
+  use_opt_level       = high
+  use_static          = no
+  use_debug           = no
+  use_gauge_group     = su3
+  use_complex         = std
+  use_cpp11           = yes
+  use_testmanager     = no
+  use_lime_library    = no
+  use_sfmt_library    = no
+  use_ntl_library     = no
+  use_fftw_library    = no
+  use_yamlcpp_library = no
+  use_tinyxml2_library= no
+  use_qws_library     = no
+
+Compiler and options:
+  CXX         = nvcc -ccbin mpic++
+  CXXFLAGS    = -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80
+  LD          = nvcc -ccbin mpic++
+  LDFLAGS     = -Xcompiler -fopenmp -gencode=arch=compute_80,code=sm_80
+  LDLIBS      = -lm -lnvidia-ml -lcuda -lcudart
+  CXXDEP      = nvcc -ccbin mpic++
+  CXXDEPFLAGS = -MM
+  CPPFLAGS    = -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA
+----------------------------------------------------------------
+make -f src/Makefile build_dir=./build lib
+ln -s ../src/lib_alt_Accel/BridgeCUDA/libbridgecuda.a ./build/libbridgecuda.a
+Finished building BridgeCUDA
+make[1]: Entering directory '/home/wlchenhome/Bridge/with_alpha'
+----------------------------------------------------------------
+Compilation Environment Summary
+
+Options:
+  target              = CUDA ( CUDA )
+  use_mpi             = yes
+  use_thread          = omp
+  use_opt_code        = yes
+  use_opt_level       = high
+  use_static          = no
+  use_debug           = no
+  use_gauge_group     = su3
+  use_complex         = std
+  use_cpp11           = yes
+  use_testmanager     = no
+  use_lime_library    = no
+  use_sfmt_library    = no
+  use_ntl_library     = no
+  use_fftw_library    = no
+  use_yamlcpp_library = no
+  use_tinyxml2_library= no
+
+Compiler and options:
+  CXX         = nvcc -ccbin mpic++
+  CXXFLAGS    = -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80
+  LD          = nvcc -ccbin mpic++
+  LDFLAGS     = -Xcompiler -fopenmp -gencode=arch=compute_80,code=sm_80
+  LDLIBS      = -lm -lnvidia-ml -lcuda -lcudart
+  CXXDEP      = nvcc -ccbin mpic++
+  CXXDEPFLAGS = -MM
+  CPPFLAGS    = -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -Isrc/lib_alt -Isrc/lib_alt_Accel -Isrc -Isrc/lib
+----------------------------------------------------------------
+
+Bridge library is successfully compiled.
+copy library header files ...
+
+find: ‘src/lib_alt/Measurements/Gauge’: No such file or directory
+find: ‘src/lib_alt_Accel/extra’: No such file or directory
+find: ‘src/lib_alt_Accel/Action/Fermion’: No such file or directory
+find: ‘src/lib_alt_Accel/Force/Fermion’: No such file or directory
+find: ‘src/lib_alt_Accel/BridgeACC/BridgeCUDA’: Too many levels of symbolic links
+bridge_complex.h
+complexTraits.h
+bridge.h
+aligned_allocator_impl.h
+bridge_long.h
+configure.h
+bridge_defs.h
+doxygen.h
+lib/bridge_init_factory.h
+lib/bridge_setup.h
+lib/Action/action.h
+lib/Action/Fermion/action_F_Ratio_lex.h
+lib/Action/Fermion/action_F_Standard_SF.h
+lib/Action/Fermion/action_F_Ratio_eo.h
+lib/Action/Fermion/action_F_Rational.h
+lib/Action/Fermion/action_F_Overlap_Nf2.h
+lib/Action/Fermion/action_F_Rational_SF.h
+lib/Action/Fermion/action_F_Standard_eo.h
+lib/Action/Fermion/action_F_Standard_lex.h
+lib/Action/Fermion/action_F_Staggered_eo.h
+lib/Action/Fermion/action_F_Staggered_lex.h
+lib/Action/Gauge/action_G_Rectangle.h
+lib/Action/Gauge/action_G_Plaq_SF.h
+lib/Action/Gauge/action_G_Rectangle_SF.h
+lib/Action/Gauge/action_G_Plaq.h
+lib/Communicator/communicator.h
+lib/Communicator/communicator_impl.h
+lib/Communicator/MPI/layout.h
+lib/Communicator/MPI/channel.h
+lib/Communicator/MPI/communicator_mpi.h
+lib/Eigen/aeigensolver_IRLanczos-tmpl.h
+lib/Eigen/aeigensolver_IRArnoldi-tmpl.h
+lib/Eigen/aeigensolver.h
+lib/Eigen/aeigensolver_IRLanczos.h
+lib/Eigen/eigensolver.h
+lib/Eigen/eigensolver_IRArnoldi.h
+lib/Eigen/aeigensolver_IRArnoldi.h
+lib/Eigen/eigensolver_IRLanczos.h
+lib/Field/field.h
+lib/Field/shiftField_lex.h
+lib/Field/shiftField_eo.h
+lib/Field/field_thread-inc.h
+lib/Field/index_lex.h
+lib/Field/field_SF.h
+lib/Field/index_eo.h
+lib/Field/field_F_1spinor.h
+lib/Field/field_G.h
+lib/Field/field_F.h
+lib/Field/Imp/field_F_imp_SU2-inc.h
+lib/Field/Imp/field_F_imp_SU3-inc.h
+lib/Field/Imp/field_G_imp_SU2-inc.h
+lib/Field/Imp/field_F_imp_SU_N-inc.h
+lib/Field/Imp/field_G_imp_SU3-inc.h
+lib/Field/Imp/field_G_imp_SU_N-inc.h
+lib/Fopr/afopr_Smeared_alt.h
+lib/Fopr/afopr_Chebyshev.h
+lib/Fopr/afopr_Domainwall_eo-tmpl.h
+lib/Fopr/afopr_Sign-tmpl.h
+lib/Fopr/fopr_Overlap.h
+lib/Fopr/fopr_Sign.h
+lib/Fopr/afopr_Smeared_alt-tmpl.h
+lib/Fopr/fopr_Staggered.h
+lib/Fopr/afopr_eo.h
+lib/Fopr/afopr_Wilson_TwistedMass-tmpl.h
+lib/Fopr/fopr_Overlap_5d.h
+lib/Fopr/afopr_Wilson_TwistedMass.h
+lib/Fopr/fopr_CloverTerm_eo.h
+lib/Fopr/fopr_Staggered_eo.h
+lib/Fopr/fopr_Smeared_alt.h
+lib/Fopr/fopr_Wilson_TwistedMass.h
+lib/Fopr/afopr_Clover_Chemical.h
+lib/Fopr/afopr_Overlap_5d.h
+lib/Fopr/fopr_Clover_eo.h
+lib/Fopr/fopr_Clover_SF.h
+lib/Fopr/afopr_Rational.h
+lib/Fopr/afopr_Overlap-tmpl.h
+lib/Fopr/fopr_CloverTerm.h
+lib/Fopr/fopr_WilsonGeneral.h
+lib/Fopr/fopr_Domainwall_eo.h
+lib/Fopr/fopr_CRS.h
+lib/Fopr/afopr_Smeared-tmpl.h
+lib/Fopr/fopr_Clover.h
+lib/Fopr/afopr_Wilson_Chemical.h
+lib/Fopr/afopr_Domainwall.h
+lib/Fopr/afopr_Overlap.h
+lib/Fopr/fopr_Wilson_Chemical.h
+lib/Fopr/fopr_CloverGeneral.h
+lib/Fopr/afopr_Overlap_5d-tmpl.h
+lib/Fopr/fopr_NonRelativistic.h
+lib/Fopr/afopr_Sign.h
+lib/Fopr/fopr_eo.h
+lib/Fopr/fopr_Wilson_SF.h
+lib/Fopr/afopr_Rational-tmpl.h
+lib/Fopr/fopr_Rational.h
+lib/Fopr/afopr_Chebyshev-tmpl.h
+lib/Fopr/fopr_Smeared_eo.h
+lib/Fopr/afopr_Wilson_Chemical-tmpl.h
+lib/Fopr/fopr_Clover_Chemical.h
+lib/Fopr/fopr_thread-inc.h
+lib/Fopr/fopr_Rational_SF.h
+lib/Fopr/afopr_Smeared_eo.h
+lib/Fopr/fopr_Chebyshev.h
+lib/Fopr/afopr_Domainwall_eo.h
+lib/Fopr/afopr_Smeared_eo-tmpl.h
+lib/Fopr/fopr_Wilson.h
+lib/Fopr/fopr_Domainwall.h
+lib/Fopr/fopr.h
+lib/Fopr/afopr_Clover_Chemical-tmpl.h
+lib/Fopr/afopr_Smeared.h
+lib/Fopr/fopr_Wilson_eo.h
+lib/Fopr/fopr_Smeared.h
+lib/Fopr/fopr_CloverTerm_General.h
+lib/Fopr/afopr.h
+lib/Fopr/afopr_Domainwall-tmpl.h
+lib/Fopr/Org/fopr_CloverTerm_General_impl.h
+lib/Fopr/Org/fopr_Wilson_eo_impl.h
+lib/Fopr/Org/fopr_CloverTerm_eo_impl.h
+lib/Fopr/Org/fopr_CloverTerm_impl.h
+lib/Fopr/Org/fopr_Wilson_impl.h
+lib/Fopr/Org/fopr_WilsonGeneral_impl.h
+lib/Fopr/Imp/fopr_CloverTerm_General_impl.h
+lib/Fopr/Imp/fopr_Wilson_impl_SU3-inc.h
+lib/Fopr/Imp/fopr_Wilson_eo_impl.h
+lib/Fopr/Imp/fopr_Wilson_impl_SU_N-inc.h
+lib/Fopr/Imp/fopr_CloverTerm_eo_impl.h
+lib/Fopr/Imp/fopr_Wilson_impl_common-inc.h
+lib/Fopr/Imp/fopr_CloverTerm_impl.h
+lib/Fopr/Imp/fopr_Wilson_impl_SU2-inc.h
+lib/Fopr/Imp/fopr_Wilson_impl.h
+lib/Fopr/Imp/fopr_WilsonGeneral_impl.h
+lib/Force/Fermion/force_F_Clover_Nf2_Isochemical.h
+lib/Force/Fermion/force_F_Clover_SF.h
+lib/Force/Fermion/force_F_Smeared.h
+lib/Force/Fermion/force_F_Wilson_SF.h
+lib/Force/Fermion/force_F_CloverTerm.h
+lib/Force/Fermion/force_F_Wilson_Nf2_Isochemical.h
+lib/Force/Fermion/force_F_Wilson_Nf2.h
+lib/Force/Fermion/tensorProd.h
+lib/Force/Fermion/force_F_Wilson_TwistedMass_Nf2.h
+lib/Force/Fermion/force_F_Overlap_Nf2.h
+lib/Force/Fermion/force_F_Rational.h
+lib/Force/Fermion/force_F_Domainwall.h
+lib/Force/Fermion/force_F_Staggered_eo.h
+lib/Force/Fermion/force_F.h
+lib/Force/Fermion/force_F_Clover_Nf2.h
+lib/Force/Fermion/force_F_Staggered.h
+lib/Force/Fermion/aforce_F.h
+lib/Force/Fermion/force_F_Wilson_eo.h
+lib/Force/Gauge/force_G_Plaq_SF.h
+lib/Force/Gauge/force_G.h
+lib/Force/Gauge/force_G_Rectangle_SF.h
+lib/Force/Gauge/force_G_Rectangle.h
+lib/Force/Gauge/force_G_Plaq.h
+lib/HMC/hmc_General.h
+lib/HMC/integrator_Leapfrog.h
+lib/HMC/integrator_Omelyan.h
+lib/HMC/hmc_Leapfrog.h
+lib/HMC/action_list.h
+lib/HMC/integrator_UpdateU.h
+lib/HMC/builder_Integrator.h
+lib/HMC/integrator_UpdateP.h
+lib/HMC/langevin_Momentum.h
+lib/HMC/integrator.h
+lib/IO/gaugeConfig_SF.h
+lib/IO/dataIO_Text.h
+lib/IO/fieldIO_Binary_Parallel.h
+lib/IO/fieldIO_Text_4x4x4x8.h
+lib/IO/fieldIO_LIME_Parallel.h
+lib/IO/fieldIO_Text.h
+lib/IO/bridgeIO.h
+lib/IO/fieldIO_NERSC.h
+lib/IO/io_format_gauge.h
+lib/IO/fieldIO_Binary.h
+lib/IO/fieldIO_LIME.h
+lib/IO/fieldIO_Fortran.h
+lib/IO/fieldIO.h
+lib/IO/gaugeConfig.h
+lib/IO/dataIO.h
+lib/IO/fieldIO_None.h
+lib/IO/io_format.h
+lib/IO/fieldIO_Binary_Distributed.h
+lib/IO/dataIO_Text_impl.h
+lib/Measurements/Fermion/fermionFlow.h
+lib/Measurements/Fermion/fprop_Standard_lex.h
+lib/Measurements/Fermion/source_Staggered_Wall_Evenodd.h
+lib/Measurements/Fermion/source_Staggered_Wall.h
+lib/Measurements/Fermion/contract_4spinor.h
+lib/Measurements/Fermion/source_Staggered_Wall_Cube.h
+lib/Measurements/Fermion/source_Wall.h
+lib/Measurements/Fermion/source_MomentumWall.h
+lib/Measurements/Fermion/corr2pt_Staggered_Extended.h
+lib/Measurements/Fermion/corr2pt_Staggered_Local.h
+lib/Measurements/Fermion/source_Local.h
+lib/Measurements/Fermion/corr2pt_Wilson_SF.h
+lib/Measurements/Fermion/corr4pt_4spinor.h
+lib/Measurements/Fermion/fprop.h
+lib/Measurements/Fermion/quarkNumberSusceptibility_Wilson.h
+lib/Measurements/Fermion/corr2pt_4spinor.h
+lib/Measurements/Fermion/fprop_Standard_eo.h
+lib/Measurements/Fermion/fprop_Overlap_5d.h
+lib/Measurements/Fermion/noiseVector.h
+lib/Measurements/Fermion/fermionFlow_2pt_Function.h
+lib/Measurements/Fermion/noiseVector_Z2.h
+lib/Measurements/Fermion/source_Wall_SF.h
+lib/Measurements/Fermion/source_Random.h
+lib/Measurements/Fermion/corr2pt_Staggered.h
+lib/Measurements/Fermion/fprop_Wilson_Shift.h
+lib/Measurements/Fermion/fprop_Standard_Precond.h
+lib/Measurements/Fermion/source.h
+lib/Measurements/Fermion/source_Exponential.h
+lib/Measurements/Fermion/fermionFlow_1pt_Function.h
+lib/Measurements/Gauge/energyMomentumTensor.h
+lib/Measurements/Gauge/gaugeFixing.h
+lib/Measurements/Gauge/polyakovLoop.h
+lib/Measurements/Gauge/staple_eo.h
+lib/Measurements/Gauge/wilsonLoop.h
+lib/Measurements/Gauge/gradientFlow_RungeKutta_2nd.h
+lib/Measurements/Gauge/gaugeFixing_Coulomb.h
+lib/Measurements/Gauge/gradientFlow.h
+lib/Measurements/Gauge/gaugeFixing_None.h
+lib/Measurements/Gauge/fieldStrength.h
+lib/Measurements/Gauge/energyDensity.h
+lib/Measurements/Gauge/gaugeFixing_Landau.h
+lib/Measurements/Gauge/gradientFlow_RungeKutta_4th.h
+lib/Measurements/Gauge/gradientFlow_RungeKutta.h
+lib/Measurements/Gauge/gradientFlow_RungeKutta_3rd.h
+lib/Measurements/Gauge/gradientFlow_AdaptiveRungeKutta.h
+lib/Measurements/Gauge/staple.h
+lib/Measurements/Gauge/staple_SF.h
+lib/Measurements/Gauge/topologicalCharge.h
+lib/Measurements/Gauge/staple_lex.h
+lib/Measurements/Gauge/gradientFlow_RungeKutta_1st.h
+lib/Parameters/parameterCheck.h
+lib/Parameters/parameterManager_XML.h
+lib/Parameters/parameters.h
+lib/Parameters/parameterManager_YAML.h
+lib/Parameters/commonParameters.h
+lib/Parameters/parameterManager.h
+lib/ResourceManager/threadManager.h
+lib/Smear/director_Smear.h
+lib/Smear/smear.h
+lib/Smear/forceSmear_HYP_SF.h
+lib/Smear/forceSmear_APE.h
+lib/Smear/projection_Maximum_SU_N.h
+lib/Smear/projection.h
+lib/Smear/asmear.h
+lib/Smear/smear_HYP_SF.h
+lib/Smear/projection_Stout_SU3.h
+lib/Smear/smear_HYP.h
+lib/Smear/aforceSmear.h
+lib/Smear/smear_APE.h
+lib/Smear/forceSmear_APE_SF.h
+lib/Smear/smear_APE_spatial.h
+lib/Smear/forceSmear.h
+lib/Smear/smear_APE_SF.h
+lib/Smear/forceSmear_HYP.h
+lib/Smear/aprojection.h
+lib/Solver/solver.h
+lib/Solver/solver_CGNE.h
+lib/Solver/solver_CG.h
+lib/Solver/solver_BiCGStab_DS_L_Cmplx.h
+lib/Solver/solver_BiCGStab_L_Cmplx.h
+lib/Solver/ashiftsolver.h
+lib/Solver/ashiftsolver_CG.h
+lib/Solver/solver_BiCGStab_Cmplx.h
+lib/Solver/solver_BiCGStab_IDS_L_Cmplx.h
+lib/Solver/solver_GMRES_m_Cmplx.h
+lib/Solver/shiftsolver.h
+lib/Solver/ashiftsolver_CG-tmpl.h
+lib/Solver/solver_CGNR.h
+lib/Solver/shiftsolver_CG.h
+lib/Tools/fft_xyz_3dim.h
+lib/Tools/gammaMatrixSet.h
+lib/Tools/fft.h
+lib/Tools/gammaMatrixSet_Dirac.h
+lib/Tools/filename.h
+lib/Tools/fft_3d_parallel1d.h
+lib/Tools/fft_3d_parallel3d.h
+lib/Tools/gammaMatrixSet_Chiral.h
+lib/Tools/position.hh
+lib/Tools/location.hh
+lib/Tools/fft_3d_local.h
+lib/Tools/randomNumbers.h
+lib/Tools/mat_SU_N.h
+lib/Tools/evalexpr_parser.h
+lib/Tools/generatorSet_Mat_SU_N.h
+lib/Tools/decompose_LU_Cmplx.h
+lib/Tools/factory.h
+lib/Tools/evalexpr_symbol.h
+lib/Tools/vec_SU_N.h
+lib/Tools/gammaMatrix.h
+lib/Tools/director.h
+lib/Tools/math_Sign_Zolotarev.h
+lib/Tools/sorter_alt.h
+lib/Tools/sorter.h
+lib/Tools/decompose_QR_Cmplx.h
+lib/Tools/evalexpr.h
+lib/Tools/fft_3d.h
+lib/Tools/timer.h
+lib/Tools/evalexpr_global.h
+lib/Tools/unique_pointer.h
+lib/Tools/epsilonTensor.h
+lib/Tools/fft_xyz_1dim.h
+lib/Tools/randomNumbers_MT19937.h
+lib/Tools/math_Rational.h
+lib/Tools/randomNumbers_SFMT.h
+lib/Tools/stack.hh
+lib/Tools/file_utils.h
+lib/Tools/randomNumberManager.h
+lib/Tools/decompose_LUP_Cmplx.h
+lib/Tools/eigen_QR_Cmplx.h
+lib/Tools/math_Sign_Zolotarev_Omega.h
+lib/Tools/randomNumbers_Mseries.h
+lib/Tools/decompose_Hessenberg_Cmplx.h
+lib_alt/alt_impl.h
+lib_alt/bridge_alt_init.h
+lib_alt/Action/Fermion/action_F_alt_Rational.h
+lib_alt/Action/Fermion/action_F_alt_Rational_Ratio-tmpl.h
+lib_alt/Action/Fermion/action_F_alt_Standard_lex.h
+lib_alt/Action/Fermion/action_F_alt_Rational_Ratio.h
+lib_alt/Action/Fermion/action_F_alt_Ratio_eo.h
+lib_alt/Action/Fermion/action_F_alt_Standard_eo.h
+lib_alt/Action/Fermion/action_F_alt_Standard_eo-tmpl.h
+lib_alt/Action/Fermion/action_F_alt_Rational-tmpl.h
+lib_alt/Action/Fermion/action_F_alt_Ratio_lex-tmpl.h
+lib_alt/Action/Fermion/action_F_alt_Ratio_eo-tmpl.h
+lib_alt/Action/Fermion/action_F_alt_Standard_lex-tmpl.h
+lib_alt/Action/Fermion/action_F_alt_Ratio_lex.h
+lib_alt/Eigen/aeigensolver_IRArnoldi_block.h
+lib_alt/Eigen/aeigensolver_IRArnoldi_block-tmpl.h
+lib_alt/Field/aindex_eo_base.h
+lib_alt/Field/aindex_lex_base.h
+lib_alt/Field/aindex_coarse_lex_base.h
+lib_alt/Field/afield_base.h
+lib_alt/Field/aindex_block_lex_base.h
+lib_alt/Fopr/afopr_dd.h
+lib_alt/Fopr/afopr_OptimalDomainwall-tmpl.h
+lib_alt/Fopr/afopr_Domainwall_dd.h
+lib_alt/Fopr/afopr_Domainwall_dd-tmpl.h
+lib_alt/Fopr/afopr_OptimalDomainwall.h
+lib_alt/Force/Fermion/aforce_F_Domainwall_eo.h
+lib_alt/Force/Fermion/aforce_F_Rational-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Wilson_Nf2.h
+lib_alt/Force/Fermion/aforce_F_Wilson_eo_Nf2.h
+lib_alt/Force/Fermion/aforce_F_Clover_Nf2-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Domainwall-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Smeared_alt.h
+lib_alt/Force/Fermion/aforce_F_Domainwall_eo-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Domainwall.h
+lib_alt/Force/Fermion/aforce_F_Clover_Nf2.h
+lib_alt/Force/Fermion/aforce_F_Wilson_Nf2-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Smeared.h
+lib_alt/Force/Fermion/aforce_F_Smeared-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Rational.h
+lib_alt/Force/Fermion/aforce_F_CloverTerm-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Wilson_eo_Nf2-tmpl.h
+lib_alt/Force/Fermion/aforce_F_Smeared_alt-tmpl.h
+lib_alt/Force/Fermion/aforce_F_CloverTerm.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_eo.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_lex_Mixedprec-tmpl.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_lex-tmpl.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_eo-tmpl.h
+lib_alt/Measurements/Fermion/eigenmode_Standard_alt.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_eo_Mixedprec-tmpl.h
+lib_alt/Measurements/Fermion/fprop_alt.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_lex.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_SAP-tmpl.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_eo_Richardson.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_lex_Mixedprec.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_SAP.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_eo_Richardson-tmpl.h
+lib_alt/Measurements/Fermion/eigenmode_Standard_alt-tmpl.h
+lib_alt/Measurements/Fermion/fprop_alt_Standard_eo_Mixedprec.h
+lib_alt/Solver/asolver_CG_fp16-tmpl.h
+lib_alt/Solver/asolver_FGMRES-tmpl.h
+lib_alt/Solver/asolver_MG.h
+lib_alt/Solver/asolver.h
+lib_alt/Solver/asolver_BiCGStab_Cmplx-tmpl.h
+lib_alt/Solver/asolver_BiCGStab_Cmplx.h
+lib_alt/Solver/asolver_BiCGStab_fp64-tmpl.h
+lib_alt/Solver/MultiGrid_Clover.h
+lib_alt/Solver/asolver_MG_double.h
+lib_alt/Solver/aprecond_Mixedprec.h
+lib_alt/Solver/asolver_BiCGStab_fp16-tmpl.h
+lib_alt/Solver/asolver_Richardson-tmpl.h
+lib_alt/Solver/asolver_BiCGStab.h
+lib_alt/Solver/asolver_CGNR.h
+lib_alt/Solver/asolver_CG-tmpl.h
+lib_alt/Solver/asolver_BiCGStab-tmpl.h
+lib_alt/Solver/asolver_SAP.h
+lib_alt/Solver/MultiGrid.h
+lib_alt/Solver/asolver_CGNR-tmpl.h
+lib_alt/Solver/aprecond_MG.h
+lib_alt/Solver/asolver_FBiCGStab-tmpl.h
+lib_alt/Solver/asolver_CG.h
+lib_alt/Solver/aprecond_MG-tmpl.h
+lib_alt/Solver/asolver_FBiCGStab.h
+lib_alt/Solver/asolver_BiCGStab_Cmplx_fp16-tmpl.h
+lib_alt/Solver/aprecond_Mixedprec-tmpl.h
+lib_alt/Solver/asolver_SAP_MINRES.h
+lib_alt/Solver/asolver_GMRES_m_Cmplx.h
+lib_alt/Solver/aprecond.h
+lib_alt/Solver/asolver_SAP-tmpl.h
+lib_alt/Solver/asolver_Richardson.h
+lib_alt/Solver/asolver_FGMRES.h
+lib_alt/Solver/asolver_MG_double-tmpl.h
+lib_alt/Solver/asolver_BiCGStab_Precond.h
+lib_alt/Solver/MultiGrid_Clover-tmpl.h
+lib_alt/Solver/asolver_SAP_MINRES-tmpl.h
+lib_alt/Solver/asolver_GMRES_m_Cmplx-tmpl.h
+lib_alt/Solver/asolver_BiCGStab_Precond-tmpl.h
+lib_alt/Solver/asolver_MG-tmpl.h
+lib_alt/Smear/director_alt_Smear-tmpl.h
+lib_alt/Smear/director_alt_Smear.h
+lib_alt_Accel/bridge_init_factory_alt_Accel.h
+lib_alt_Accel/bridge_alt_accel.h
+lib_alt_Accel/init_alt_Accel.h
+lib_alt_Accel/inline/define_index.h
+lib_alt_Accel/inline/afield_th-inc.h
+lib_alt_Accel/inline/constant_memory.h
+lib_alt_Accel/inline/constant_memory_inline.h
+lib_alt_Accel/inline/define_params.h
+lib_alt_Accel/inline/mult_Wilson_cuda_inline-inc.h
+lib_alt_Accel/ResourceManager/deviceManager_OpenACC.h
+lib_alt_Accel/ResourceManager/deviceManager_NVSHMEM.h
+lib_alt_Accel/ResourceManager/deviceManager_CUDA.h
+lib_alt_Accel/Field/afield-tmpl.h
+lib_alt_Accel/Field/shiftAField_lex-tmpl.h
+lib_alt_Accel/Field/shiftAField_lex.h
+lib_alt_Accel/Field/afield_dd-inc.h
+lib_alt_Accel/Field/aindex_eo.h
+lib_alt_Accel/Field/aindex_block_lex.h
+lib_alt_Accel/Field/aindex_eo-tmpl.h
+lib_alt_Accel/Field/aindex_lex.h
+lib_alt_Accel/Field/afield_Gauge-inc.h
+lib_alt_Accel/Field/afield-inc.h
+lib_alt_Accel/Field/aindex_coarse_lex.h
+lib_alt_Accel/Field/afield.h
+lib_alt_Accel/Field/aindex_eo-inc.h
+lib_alt_Accel/Field/afield_4spinor-inc.h
+lib_alt_Accel/Fopr/afopr_Wilson-tmpl.h
+lib_alt_Accel/Fopr/afopr_Domainwall_coarse.h
+lib_alt_Accel/Fopr/afopr_Domainwall_5din_eo-tmpl.h
+lib_alt_Accel/Fopr/afopr_Wilson_CLE.h
+lib_alt_Accel/Fopr/afopr_Clover_eo-tmpl.h
+lib_alt_Accel/Fopr/afopr_Clover_eo.h
+lib_alt_Accel/Fopr/afopr_Clover_coarse.h
+lib_alt_Accel/Fopr/afopr_Domainwall_5din_eo.h
+lib_alt_Accel/Fopr/afopr_Clover.h
+lib_alt_Accel/Fopr/afopr_Staggered_CLE.h
+lib_alt_Accel/Fopr/afopr_Clover_dd.h
+lib_alt_Accel/Fopr/afopr_Domainwall_5din_dd-tmpl.h
+lib_alt_Accel/Fopr/afopr_Wilson_eo.h
+lib_alt_Accel/Fopr/afopr_Domainwall_coarse-tmpl.h
+lib_alt_Accel/Fopr/afopr_Wilson_dd.h
+lib_alt_Accel/Fopr/afopr_Wilson.h
+lib_alt_Accel/Fopr/afopr_Domainwall_5din.h
+lib_alt_Accel/Fopr/afopr_Wilson_CLE-tmpl.h
+lib_alt_Accel/Fopr/afopr_Clover_coarse-tmpl.h
+lib_alt_Accel/Fopr/afopr_Wilson_SU3-inc.h
+lib_alt_Accel/Fopr/afopr_Staggered_eo-tmpl.h
+lib_alt_Accel/Fopr/afopr_common_th-inc.h
+lib_alt_Accel/Fopr/afopr_Staggered.h
+lib_alt_Accel/Fopr/afopr_Domainwall_5din_dd.h
+lib_alt_Accel/Fopr/afopr_Clover_dd-tmpl.h
+lib_alt_Accel/Fopr/afopr_Domainwall_5din-tmpl.h
+lib_alt_Accel/Fopr/afopr_CloverTerm.h
+lib_alt_Accel/Fopr/afopr_Wilson_mult-inc.h
+lib_alt_Accel/Fopr/afopr_Staggered_CLE-tmpl.h
+lib_alt_Accel/Fopr/afopr_Wilson_dd-tmpl.h
+lib_alt_Accel/Fopr/afopr_Staggered_eo.h
+lib_alt_Accel/Fopr/afopr_Staggered-tmpl.h
+lib_alt_Accel/Fopr/afopr_Wilson_eo-tmpl.h
+lib_alt_Accel/Fopr/afopr_CloverTerm-tmpl.h
+lib_alt_Accel/Fopr/afopr_Clover-tmpl.h
+lib_alt_Accel/Measurements/Gauge/astaple_lex.h
+lib_alt_Accel/Measurements/Gauge/astaple_lex-tmpl.h
+lib_alt_Accel/BridgeACC/bridgeACC_Domainwall.h
+lib_alt_Accel/BridgeACC/bridgeACC_Clover.h
+lib_alt_Accel/BridgeACC/bridgeACC_Clover_coarse.h
+lib_alt_Accel/BridgeACC/bridgeACC_AField_dd.h
+lib_alt_Accel/BridgeACC/bridgeACC_Index_eo_alt.h
+lib_alt_Accel/BridgeACC/bridgeACC_AField_Gauge.h
+lib_alt_Accel/BridgeACC/bridgeACC_Wilson_CLE.h
+lib_alt_Accel/BridgeACC/bridgeACC_ShiftAField_lex.h
+lib_alt_Accel/BridgeACC/bridgeACC_AField.h
+lib_alt_Accel/BridgeACC/constant_memory.h
+lib_alt_Accel/BridgeACC/bridgeACC_Domainwall_coarse.h
+lib_alt_Accel/BridgeACC/bridgeACC_Wilson.h
+lib_alt_Accel/BridgeACC/bridgeACC.h
+lib_alt_Accel/BridgeACC/bridgeACC_Staggered.h
+make[1]: Leaving directory '/home/wlchenhome/Bridge/with_alpha'
+build_dir_path=`cd ./build && pwd`; \
+test_dir_path=`cd ./build/tests && pwd`; \
+cd tests && make bridge_install_path=$build_dir_path test_dir=$test_dir_path test="""all""" test_flags=""""""
+make[1]: Entering directory '/home/wlchenhome/Bridge/with_alpha/tests'
+----------------------------------------------------------------
+Target:
+  test_dir      = /home/wlchenhome/Bridge/with_alpha/build/tests
+  test          = all
+  test_list     = Eigensolver FFT Gauge GradientFlow HMC HotStart IO Mult PolyakovLoop QuarkNumberSusceptibility RandomNumbers Rational SF_fAfP Solver Spectrum TopologicalCharge WilsonLoop
+  program       = /home/wlchenhome/Bridge/with_alpha/build/tests/bridge.all.elf
+  CPPFLAGS_TEST = -Isrc -DUSE_TEST_EIGENSOLVER -DUSE_TEST_FFT -DUSE_TEST_GAUGE -DUSE_TEST_GRADIENTFLOW -DUSE_TEST_HMC -DUSE_TEST_HOTSTART -DUSE_TEST_IO -DUSE_TEST_MULT -DUSE_TEST_POLYAKOVLOOP -DUSE_TEST_QUARKNUMSUSCEPT -DUSE_TEST_RANDOMNUMBERS -DUSE_TEST_RATIONAL -DUSE_TEST_SF_FAFP -DUSE_TEST_SOLVER -DUSE_TEST_SPECTRUM -DUSE_TEST_TOPOLOGICALCHARGE -DUSE_TEST_WILSONLOOP
+----------------------------------------------------------------
+nvcc -ccbin mpic++ -MM -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel   -Isrc -DUSE_TEST_EIGENSOLVER -DUSE_TEST_FFT -DUSE_TEST_GAUGE -DUSE_TEST_GRADIENTFLOW -DUSE_TEST_HMC -DUSE_TEST_HOTSTART -DUSE_TEST_IO -DUSE_TEST_MULT -DUSE_TEST_POLYAKOVLOOP -DUSE_TEST_QUARKNUMSUSCEPT -DUSE_TEST_RANDOMNUMBERS -DUSE_TEST_RATIONAL -DUSE_TEST_SF_FAFP -DUSE_TEST_SOLVER -DUSE_TEST_SPECTRUM -DUSE_TEST_TOPOLOGICALCHARGE -DUSE_TEST_WILSONLOOP -DUSE_TEST_EIGENSOLVER -DUSE_TEST_FFT -DUSE_TEST_GAUGE -DUSE_TEST_GRADIENTFLOW -DUSE_TEST_HMC -DUSE_TEST_HOTSTART -DUSE_TEST_IO -DUSE_TEST_MULT -DUSE_TEST_POLYAKOVLOOP -DUSE_TEST_QUARKNUMSUSCEPT -DUSE_TEST_RANDOMNUMBERS -DUSE_TEST_RATIONAL -DUSE_TEST_SF_FAFP -DUSE_TEST_SOLVER -DUSE_TEST_SPECTRUM -DUSE_TEST_TOPOLOGICALCHARGE -DUSE_TEST_WILSONLOOP src/run_test.cpp \
+| sed 's|^\([^\.]*\)\.o|/home/wlchenhome/Bridge/with_alpha/build/tests/src/\1\.o|' > /home/wlchenhome/Bridge/with_alpha/build/tests/src/run_test.o.d
+----------------------------------------------------------------
+skip Configurations/conf_04040408.txt
+skip ParameterFiles/parameter_rational.1_2inv_16_0.00010000_010.000
+skip ParameterFiles/parameter_rational.1_4_16_0.00010000_010.000
+skip ParameterFiles/main.yaml
+skip ParameterFiles/Eigensolver/test_Eigensolver.yaml
+skip ParameterFiles/Eigensolver/test_Eigensolver_Chebyshev.yaml
+skip ParameterFiles/Eigensolver/test_Eigensolver_Clover_SF.yaml
+skip ParameterFiles/FFT/test_FFT.yaml
+skip ParameterFiles/FFT/test_FFT_check.yaml
+skip ParameterFiles/Gauge/test_Gauge_EnergyDensity.yaml
+skip ParameterFiles/Gauge/test_Gauge_eo.yaml
+skip ParameterFiles/Gauge/test_Gauge_lex.yaml
+skip ParameterFiles/GradientFlow/test_GradientFlow_EnergyMomentumTensor_Fermion_1pt_Function.yaml
+skip ParameterFiles/GradientFlow/test_GradientFlow_EnergyMomentumTensor_Fermion_2pt_Function.yaml
+skip ParameterFiles/GradientFlow/test_GradientFlow_EnergyMomentumTensor_Gauge_RK4.yaml
+skip ParameterFiles/GradientFlow/test_GradientFlow_Nf0_RK1.yaml
+skip ParameterFiles/GradientFlow/test_GradientFlow_Nf0_RK2.yaml
+skip ParameterFiles/GradientFlow/test_GradientFlow_Nf0_RK3.yaml
+skip ParameterFiles/GradientFlow/test_GradientFlow_Nf0_RK4.yaml
+skip ParameterFiles/GradientFlow/test_GradientFlow_Nf0_RK_adaptive.yaml
+skip ParameterFiles/HMC/test_HMC_Clover_Isochemical_Nf2.yaml
+skip ParameterFiles/HMC/test_HMC_Clover_Isochemical_RHMC_Nf2p1.yaml
+skip ParameterFiles/HMC/test_HMC_Clover_Nf2.yaml
+skip ParameterFiles/HMC/test_HMC_Clover_Nf2_HYP.yaml
+skip ParameterFiles/HMC/test_HMC_Clover_RHMC_Nf2p1.yaml
+skip ParameterFiles/HMC/test_HMC_Clover_SF_Nf2.yaml
+skip ParameterFiles/HMC/test_HMC_Clover_SF_RHMC_Nf2p1.yaml
+skip ParameterFiles/HMC/test_HMC_Domainwall_Nf2.yaml
+skip ParameterFiles/HMC/test_HMC_Domainwall_Nf2_PV.yaml
+skip ParameterFiles/HMC/test_HMC_Overlap_Nf2.yaml
+skip ParameterFiles/HMC/test_HMC_Quenched.yaml
+skip ParameterFiles/HMC/test_HMC_Quenched_Leapfrog.yaml
+skip ParameterFiles/HMC/test_HMC_Staggered_Nf4.yaml
+skip ParameterFiles/HMC/test_HMC_Wilson_Leapfrog_Nf2.yaml
+skip ParameterFiles/HMC/test_HMC_Wilson_Nf2.yaml
+skip ParameterFiles/HMC/test_HMC_Wilson_Nf2_TopologyFixing.yaml
+skip ParameterFiles/HMC/test_HMC_Wilson_TwistedMass_Nf2.yaml
+skip ParameterFiles/HotStart/test_HotStart_Determinant.yaml
+skip ParameterFiles/HotStart/test_HotStart_Eigenvalue.yaml
+skip ParameterFiles/HotStart/test_HotStart_Unitary.yaml
+skip ParameterFiles/IO/test_IO_Data_Text.yaml
+skip ParameterFiles/IO/test_IO_GaugeConfig_Binary.yaml
+skip ParameterFiles/IO/test_IO_GaugeConfig_BinaryDistributed.yaml
+skip ParameterFiles/IO/test_IO_GaugeConfig_BinaryParallel.yaml
+skip ParameterFiles/IO/test_IO_GaugeConfig_Fortran.yaml
+skip ParameterFiles/IO/test_IO_GaugeConfig_ILDG.yaml
+skip ParameterFiles/IO/test_IO_GaugeConfig_ILDG_Parallel.yaml
+skip ParameterFiles/IO/test_IO_GaugeConfig_Text.yaml
+skip ParameterFiles/Mult/test_Mult_Clover.yaml
+skip ParameterFiles/Mult/test_Mult_CloverGeneral.yaml
+skip ParameterFiles/Mult/test_Mult_Clover_Chemical.yaml
+skip ParameterFiles/Mult/test_Mult_Clover_SF.yaml
+skip ParameterFiles/Mult/test_Mult_Clover_eo.yaml
+skip ParameterFiles/Mult/test_Mult_Domainwall.yaml
+skip ParameterFiles/Mult/test_Mult_Overlap.yaml
+skip ParameterFiles/Mult/test_Mult_Wilson.yaml
+skip ParameterFiles/Mult/test_Mult_WilsonGeneral.yaml
+skip ParameterFiles/Mult/test_Mult_Wilson_Chemical.yaml
+skip ParameterFiles/Mult/test_Mult_Wilson_SF.yaml
+skip ParameterFiles/Mult/test_Mult_Wilson_TwistedMass.yaml
+skip ParameterFiles/Mult/test_Mult_Wilson_eo.yaml
+skip ParameterFiles/PolyakovLoop/test_PolyakovLoop.yaml
+skip ParameterFiles/QuarkNumberSusceptibility/test_QuarkNumberSusceptibility_Clover_Isochemical.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_MT19937_Field_Gaussian.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_MT19937_Field_U1.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_MT19937_Field_Z2.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_MT19937_Global.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_MT19937_Uniform.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_Mseries_Field_Gaussian.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_Mseries_Field_U1.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_Mseries_Field_Z2.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_Mseries_Gaussian.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_Mseries_Global.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_Mseries_Uniform.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_SFMT_Field_Gaussian.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_SFMT_Field_U1.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_SFMT_Field_Z2.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_SFMT_Global.yaml
+skip ParameterFiles/RandomNumbers/test_RandomNumbers_SFMT_Uniform.yaml
+skip ParameterFiles/Rational/test_Rational_Approx.yaml
+skip ParameterFiles/Rational/test_Rational_Inverse.yaml
+skip ParameterFiles/Rational/test_Rational_Smeared.yaml
+skip ParameterFiles/SF_fAfP/test_SF_fAfP_Boundary_Meson_2ptFunction.yaml
+skip ParameterFiles/Solver/test_Solver_Wilson_BiCGStab_Cmplx.yaml
+skip ParameterFiles/Solver/test_Solver_Wilson_BiCGStab_DS_L_Cmplx.yaml
+skip ParameterFiles/Solver/test_Solver_Wilson_BiCGStab_IDS_L_Cmplx.yaml
+skip ParameterFiles/Solver/test_Solver_Wilson_BiCGStab_L_Cmplx.yaml
+skip ParameterFiles/Solver/test_Solver_Wilson_CGNE.yaml
+skip ParameterFiles/Solver/test_Solver_Wilson_CGNR.yaml
+skip ParameterFiles/Solver/test_Solver_Wilson_GMRES_m_Cmplx.yaml
+skip ParameterFiles/Solver/test_Solver_Wilson_ShiftCG.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_CRSMatrix_Clover_Lexical.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_CRSMatrix_Domainwall.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_CRSMatrix_Overlap5d.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_CloverGeneral_Hadron2ptFunction.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Clover_Hadron2ptFunction.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Clover_Hadron2ptFunction_initial_guess.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Clover_Hadron4ptFunction.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Domainwall_Hadron2ptFunction.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_NonRelativistic_heavy_heavy_2ptFunction.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Overlap_CheckSignFunction.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Overlap_Hadron2ptFunction.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Overlap_Hadron2ptFunction_5dSolver.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Staggered_Hadron2ptFunction_WallSource.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_WilsonGeneral_Hadron2ptFunction.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Wilson_Hadron2ptFunction.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Wilson_Hadron2ptFunction_2.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Wilson_Hadron2ptFunction_ShiftOrigin.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Wilson_Hadron2ptFunction_WallSource.yaml
+skip ParameterFiles/Spectrum/test_Spectrum_Wilson_TwistedMass_Hadron2ptFunction.yaml
+skip ParameterFiles/TopologicalCharge/test_TopologicalCharge.yaml
+skip ParameterFiles/WilsonLoop/test_WilsonLoop.yaml
+----------------------------------------------------------------
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel   -Isrc -DUSE_TEST_EIGENSOLVER -DUSE_TEST_FFT -DUSE_TEST_GAUGE -DUSE_TEST_GRADIENTFLOW -DUSE_TEST_HMC -DUSE_TEST_HOTSTART -DUSE_TEST_IO -DUSE_TEST_MULT -DUSE_TEST_POLYAKOVLOOP -DUSE_TEST_QUARKNUMSUSCEPT -DUSE_TEST_RANDOMNUMBERS -DUSE_TEST_RATIONAL -DUSE_TEST_SF_FAFP -DUSE_TEST_SOLVER -DUSE_TEST_SPECTRUM -DUSE_TEST_TOPOLOGICALCHARGE -DUSE_TEST_WILSONLOOP -DUSE_TEST_EIGENSOLVER -DUSE_TEST_FFT -DUSE_TEST_GAUGE -DUSE_TEST_GRADIENTFLOW -DUSE_TEST_HMC -DUSE_TEST_HOTSTART -DUSE_TEST_IO -DUSE_TEST_MULT -DUSE_TEST_POLYAKOVLOOP -DUSE_TEST_QUARKNUMSUSCEPT -DUSE_TEST_RANDOMNUMBERS -DUSE_TEST_RATIONAL -DUSE_TEST_SF_FAFP -DUSE_TEST_SOLVER -DUSE_TEST_SPECTRUM -DUSE_TEST_TOPOLOGICALCHARGE -DUSE_TEST_WILSONLOOP -c -o /home/wlchenhome/Bridge/with_alpha/build/tests/src/run_test.o src/run_test.cpp
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -gencode=arch=compute_80,code=sm_80 -o /home/wlchenhome/Bridge/with_alpha/build/tests/bridge.all.elf /home/wlchenhome/Bridge/with_alpha/build/tests/src/main.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/run_test.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/run_testmanager.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/test.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/testManager.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Eigensolver/test_Eigensolver.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Eigensolver/test_Eigensolver_Chebyshev.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Eigensolver/test_Eigensolver_Clover_SF.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/FFT/test_FFT.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/FFT/test_FFT_check.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Gauge/test_Gauge_EnergyDensity.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Gauge/test_Gauge_Plaquette.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Gauge/test_Gauge_Shift.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/GradientFlow/test_GradientFlow_EnergyMomentumTensor_Fermion_1pt_Function.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/GradientFlow/test_GradientFlow_EnergyMomentumTensor_Fermion_2pt_Function.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/GradientFlow/test_GradientFlow_EnergyMomentumTensor_Gauge.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/GradientFlow/test_GradientFlow_Nf0.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Clover_Isochemical_Nf2.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Clover_Isochemical_RHMC_Nf2p1.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Clover_Nf2.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Clover_Nf2_eo.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Clover_RHMC_Nf2p1.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Clover_RHMC_Nf2p1_eo.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Clover_SF_Nf2.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Clover_SF_RHMC_Nf2p1.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Domainwall_Nf2.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Domainwall_Nf2_PV.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Overlap_Nf2.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Quenched.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Quenched_Leapfrog.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Staggered_Nf4_eo.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Wilson_Leapfrog_Nf2.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Wilson_Nf2.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Wilson_Nf2_TopologyFixing.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HMC/test_HMC_Wilson_TwistedMass_Nf2.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HotStart/test_HotStart_Determinant.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HotStart/test_HotStart_Eigenvalue.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/HotStart/test_HotStart_Unitary.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/IO/test_IO_Data_Text.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/IO/test_IO_GaugeConfig.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Mult/test_Mult.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Mult/test_Mult_Domainwall.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Mult/test_Mult_Overlap.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Mult/test_Mult_Wilson.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Mult/test_Mult_eo.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/PolyakovLoop/test_PolyakovLoop.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/QuarkNumberSusceptibility/test_QuarkNumberSusceptibility_Clover_Isochemical.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/RandomNumbers/test_RandomNumbers_Field.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/RandomNumbers/test_RandomNumbers_MT19937_Global.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/RandomNumbers/test_RandomNumbers_MT19937_Uniform.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/RandomNumbers/test_RandomNumbers_Mseries_Gaussian.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/RandomNumbers/test_RandomNumbers_Mseries_Global.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/RandomNumbers/test_RandomNumbers_Mseries_Uniform.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/RandomNumbers/test_RandomNumbers_SFMT_Global.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/RandomNumbers/test_RandomNumbers_SFMT_Uniform.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Rational/test_Rational_Approx.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Rational/test_Rational_Inverse.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Rational/test_Rational_Smeared.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/SF_fAfP/test_SF_fAfP_Boundary_Meson_2ptFunction.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Solver/test_Solver_Wilson.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Solver/test_Solver_Wilson_ShiftCG.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_2ptFunction.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_2ptFunction_eo.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_2ptFunction_eo_withFileIO.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_2ptFunction_withFileIO.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_2ptFunction_withFileIO_initial_guess.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_4ptFunction.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_CRSMatrix_CRSsolver.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_CRSMatrix_Clover_Lexical.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_CRSMatrix_Domainwall.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_CRSMatrix_Overlap5d.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_Domainwall_2ptFunction.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_Nonrelativistic_2ptFunction.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_Overlap_2ptFunction.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_Overlap_2ptFunction_5dSolver.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_Overlap_checkSignFunction.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_Staggered_2ptFunction_WallSource.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_Staggered_2ptFunction_eo_WallSource.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/Spectrum/test_Spectrum_Wilson_2ptFunction.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/TopologicalCharge/test_TopologicalCharge.o /home/wlchenhome/Bridge/with_alpha/build/tests/src/WilsonLoop/test_WilsonLoop.o -lm -lnvidia-ml -lcuda -lcudart -L/home/wlchenhome/Bridge/with_alpha/build -lbridge -lbridgecuda
+
+/home/wlchenhome/Bridge/with_alpha/build/tests/bridge.all.elf is successfully compiled.
+
+make[1]: Leaving directory '/home/wlchenhome/Bridge/with_alpha/tests'
+
+Bridge code compilation is successful
+
+rm -f bridge.elf main.o Tests/job_Utils.o Tests/test.o Tests/spectrum_alt.o Tests/test_alt_QXS.o Tests/test_alt_Vector.o Tests/test_alt_Accel.o
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel  -I./ -c -o main.o main.cpp
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel  -I./ -c -o Tests/job_Utils.o Tests/job_Utils.cpp
+----------------------------------------------------------------
+Compilation Environment Summary
+
+Options:
+  target              = CUDA ( CUDA )
+  use_mpi             = yes
+  use_thread          = omp
+  use_opt_code        = yes
+  use_opt_level       = high
+  use_static          = no
+  use_debug           = no
+  use_gauge_group     = su3
+  use_complex         = std
+  use_cpp11           = yes
+  use_testmanager     = no
+  use_lime_library    = no
+  use_sfmt_library    = no
+  use_ntl_library     = no
+  use_fftw_library    = no
+  use_yamlcpp_library = no
+  use_tinyxml2_library= no
+  use_qws_library     = no
+
+Compiler and options:
+  CXX         = nvcc -ccbin mpic++
+  CXXFLAGS    = -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80
+  LD          = nvcc -ccbin mpic++
+  LDFLAGS     = -Xcompiler -fopenmp -gencode=arch=compute_80,code=sm_80
+  LDLIBS      = -lm -lnvidia-ml -lcuda -lcudart
+  CXXDEP      = nvcc -ccbin mpic++
+  CXXDEPFLAGS = -MM
+  CPPFLAGS    = -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA
+----------------------------------------------------------------
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel  -I./ -c -o Tests/test.o Tests/test.cpp
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel  -I./ -c -o Tests/spectrum_alt.o Tests/spectrum_alt.cpp
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel  -I./ -c -o Tests/test_alt_QXS.o Tests/test_alt_QXS.cpp
+✅ Build complete! Output: bridge.elf
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel  -I./ -c -o Tests/test_alt_Vector.o Tests/test_alt_Vector.cpp
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel  -I./ -c -o Tests/test_alt_Accel.o Tests/test_alt_Accel.cpp
+"/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib/Fopr/fopr_Staggered.h", line 65: warning: unknown attribute "deprecated" [unrecognized_attribute]
+    DEPRECATED
+    ^
+
+Remark: individual warnings can be suppressed with "--diag_suppress <warning-name>"
+
+"/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib/Fopr/fopr_Staggered.h", line 29: warning: overloaded virtual function "AFopr<AFIELD>::mult [with AFIELD=Field]" is only partially overridden in class "Fopr_Staggered" [partial_override]
+  class Fopr_Staggered : public Fopr
+        ^
+
+"/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib/Fopr/fopr_Staggered.h", line 29: warning: overloaded virtual function "AFopr<AFIELD>::mult_dag [with AFIELD=Field]" is only partially overridden in class "Fopr_Staggered" [partial_override]
+  class Fopr_Staggered : public Fopr
+        ^
+
+"/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel/Field/aindex_eo-inc.h", line 33: warning: variable "Nvol2" was declared but never referenced [declared_but_not_referenced]
+      int Nvol2 = Nvol/2;
+          ^
+          detected during:
+            instantiation of "int Spectrum_Wilson_alt<ACCEL>::check_operator_eo<AFIELD>(std::unique_ptr<Fopr, std::default_delete<Fopr>> &, Parameters &) [with ACCEL=ACCEL, AFIELD=AField<double, ACCEL>]" at line 112 of "Tests/spectrum_Wilson_alt-tmpl.h"
+            instantiation of "int Spectrum_Wilson_alt<ACCEL>::hadron_2ptFunction(std::string, std::string) [with ACCEL=ACCEL]" at line 70 of "Tests/test_alt_Accel.cpp"
+
+"/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel/Field/aindex_eo-inc.h", line 149: warning: variable "Nvol2" was declared but never referenced [declared_but_not_referenced]
+      int Nvol2 = Nvol/2;
+          ^
+          detected during:
+            instantiation of "int Spectrum_Wilson_alt<ACCEL>::check_operator_eo<AFIELD>(std::unique_ptr<Fopr, std::default_delete<Fopr>> &, Parameters &) [with ACCEL=ACCEL, AFIELD=AField<double, ACCEL>]" at line 112 of "Tests/spectrum_Wilson_alt-tmpl.h"
+            instantiation of "int Spectrum_Wilson_alt<ACCEL>::hadron_2ptFunction(std::string, std::string) [with ACCEL=ACCEL]" at line 70 of "Tests/test_alt_Accel.cpp"
+
+"Tests/spectrum_Domainwall_alt-tmpl.h", line 152: warning: non-void function "Spectrum_Domainwall_alt<ACCEL>::hadron_2ptFunction" should return a value [no_value_returned_in_non_void_function]
+      return;
+            ^
+
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -gencode=arch=compute_80,code=sm_80 -o bridge.elf main.o Tests/job_Utils.o Tests/test.o Tests/spectrum_alt.o Tests/test_alt_QXS.o Tests/test_alt_Vector.o Tests/test_alt_Accel.o -lm -lnvidia-ml -lcuda -lcudart -L/home/wlchenhome/Bridge/with_alpha/build -lbridge -lbridgecuda -lbridgecuda
+Bridge++ 2.0.0
+
+input filename : main.yaml
+
+file = main.yaml
+
+Lattice parameters:
+  Lx = 32,  Ly = 8,  Lz = 8,  Lt = 12,
+  Nx = 32,  Ny = 8,  Nz = 8,  Nt = 12,
+  NPEx = 1,  NPEy  = 1,  NPEz  = 1,  NPEt  = 1,
+  Lvol = 24576,  Nvol = 24576,  NPE = 1,
+  Ndim = 4
+  Nc   = 3
+  Nd   = 4
+
+ThreadManager: initialization
+Warning at ThreadManager: Nthread(env) != Nthread(input)
+  Number of threads(env)   = 2
+  Number of threads(input) = 1
+  reset Nthread = Nthread(input).
+  Number of threads = 1
+Main: input parameters
+  lattice_size     = [32, 8, 8, 12]
+  grid_size        = [1, 1, 1, 1]
+  number of thread = 1
+  number of color  = 3
+  logfile          = stdout
+  ildg_logfile     = stdout
+  vlevel           = General
+
+Alt_Accel code is being setup.
+DeviceManager_CUDA: being initialized.
+  process_id = 0
+  number of devices = 1
+  device_id = 0  is used on process = 0
+------------------------------------------------
+Alt_Accel: Factory entries
+------------------------------------------------
+AFopr<double, ACCEL> >(void):
+AFopr<double, ACCEL>(Parameters&):
+	Clover
+	CloverTerm
+	Clover_dd
+	Domainwall
+	Domainwall_5din
+	Domainwall_5din_dd
+	Domainwall_5din_eo
+	Domainwall_eo
+	Wilson
+	Wilson_dd
+AFopr<double, ACCEL>(Fopr*):
+	Domainwall
+AFopr<double, ACCEL>(Fopr*, Director*):
+AFopr<float, ACCEL> >(void):
+AFopr<float, ACCEL>(Parameters&):
+	Clover
+	CloverTerm
+	Clover_dd
+	Domainwall
+	Domainwall_5din
+	Domainwall_5din_dd
+	Domainwall_5din_eo
+	Domainwall_eo
+	Wilson
+	Wilson_dd
+AFopr<float, ACCEL>(Fopr*):
+	Domainwall
+AFopr<float, ACCEL>(Fopr*, Director*):
+AEigensolver<AField<float, ACCEL> >, Afopr>(Fopr*):
+	IRArnoldi
+	IRLanczos
+------------------------------------------------
+Timer: timestamp: 2026/02/27 23:59:48 +0900
+
+--------------------------------------------------------------------
+test name: Spectrum_Wilson_althadron_2ptFunction
+test file: test_alt_Spectrum_Wilson_Hadron2ptFunction.yaml
+test mode: double
+file = test_alt_Spectrum_Wilson_Hadron2ptFunction.yaml
+  vlevel       = General
+ Random number init: ndelay =   1234567
+
+Configuration setup:
+  gconf_status = Continue
+  gconf_read   = Text_4x4x4x8
+  readfile     = ./conf_04040408.txt
+  plaq = 0.597969
+
+Gauge fixing:
+  Gauge fixing type = None
+
+gmset_type   = Dirac
+Gamma matrix: dirac representation.
+Imp::Fopr_Wilson: construction
+  Gauge group implementation: SU(3)
+  Imp::Fopr_Wilson: input parameters
+    gamma-matrix type = Dirac
+    kappa  =   0.12000000
+    boundary[0] = -1
+    boundary[1] = -1
+    boundary[2] = -1
+    boundary[3] = -1
+Imp::Fopr_Wilson: construction finished.
+
+Check of fermion operator
+  sizeof(real_t) = 8
+norm of source vector: 1.000000
+AFopr_Wilson<AField<double,ACCEL> >: construction
+  do_comm[0] = 0
+  do_comm[1] = 0
+  do_comm[2] = 0
+  do_comm[3] = 0
+Parameters of AFopr_Wilson<AField<double,ACCEL> >:
+  gamma-matrix type = Dirac
+  kappa =   0.1200
+  boundary[0] = -1
+  boundary[1] = -1
+  boundary[2] = -1
+  boundary[3] = -1
+AFopr_Wilson<AField<double,ACCEL> >: construction finished.
+ nin = 24  nvol = 24576  nex = 1
+convert not required.
+b norm2 = 1.000000e+00
+abq norm2 = 1.000000e+00
+
+norm2(ref) = 8.702661
+norm2(alt) = 8.702661
+norm2(alt) = 8.702661
+diff2 = 0.000000
+Fprop_alt_Standard_lex<Afield<double,ACCEL> >: construction (without link smearing).
+AFopr_Wilson<AField<double,ACCEL> >: construction
+  do_comm[0] = 0
+  do_comm[1] = 0
+  do_comm[2] = 0
+  do_comm[3] = 0
+Parameters of AFopr_Wilson<AField<double,ACCEL> >:
+  gamma-matrix type = Dirac
+  kappa =   0.1200
+  boundary[0] = -1
+  boundary[1] = -1
+  boundary[2] = -1
+  boundary[3] = -1
+AFopr_Wilson<AField<double,ACCEL> >: construction finished.
+ASolver_CGNR<Afield<double,ACCEL> >:
+ASolver_CG<Afield<double,ACCEL> >:
+  Precision: double
+  Niter     = 400
+  Stop_cond =   1.00000000e-28
+  init_guess_mode: 0
+Fprop_alt_Standard_lex<Afield<double,ACCEL> >: construction finished.
+
+Fprop_alt_Standard_lex<Afield<double,ACCEL> >: mult performance:
+  mult mode = D
+  Number of mult =                 20
+  Elapsed time   =       0.003588 sec
+  Flop(Fopr)     =           33619968
+  Flop(total)    =          672399360
+  Performance    =     187.404 GFlops
+
+Fprop_alt_Standard_lex<Afield<double,ACCEL> >: mult performance:
+  mult mode = D
+  Number of mult =               1000
+  Elapsed time   =       0.171836 sec
+  Flop(Fopr)     =           33619968
+  Flop(total)    =        33619968000
+  Performance    =     195.652 GFlops
+source_type  = Local
+Source for spinor field - local:
+  source_position[0] = 0
+  source_position[1] = 0
+  source_position[2] = 0
+  source_position[3] = 0
+
+Solving quark propagator:
+  color spin   Nconv      diff           diff2
+ASolver_CG solve_CG_init: m_x.nin() = 48, m_s.nin() = 48
+Error at ASolver_CG<Afield<double,ACCEL> >: not converged
+  iter(final):      400   1.588286780176475e+07
+    0    0       -1     1.0907e+08     7.9602e+07
+ASolver_CG solve_CG_init: m_x.nin() = 48, m_s.nin() = 48
+Error at ASolver_CG<Afield<double,ACCEL> >: not converged
+  iter(final):      400   1.298660791598829e+07
+    1    0       -1     9.0568e+07     6.6565e+07
+ASolver_CG solve_CG_init: m_x.nin() = 48, m_s.nin() = 48
+Error at ASolver_CG<Afield<double,ACCEL> >: not converged
+  iter(final):      400   1.618630234232744e+07
+    2    0       -1     1.1373e+08     8.4091e+07
+ASolver_CG solve_CG_init: m_x.nin() = 48, m_s.nin() = 48
+Error at ASolver_CG<Afield<double,ACCEL> >: not converged
+  iter(final):      400   1.308709241495769e+07
+    0    1       -1     9.3617e+07     6.8014e+07
+ASolver_CG solve_CG_init: m_x.nin() = 48, m_s.nin() = 48
+Error at ASolver_CG<Afield<double,ACCEL> >: not converged
+  iter(final):      400   1.090529945419098e+07
+    1    1       -1     7.3958e+07     5.3849e+07
+ASolver_CG solve_CG_init: m_x.nin() = 48, m_s.nin() = 48
+Error at ASolver_CG<Afield<double,ACCEL> >: not converged
+  iter(final):      400   1.291017936246964e+07
+    2    1       -1     8.2475e+07     6.1290e+07
+ASolver_CG solve_CG_init: m_x.nin() = 48, m_s.nin() = 48
+Error at ASolver_CG<Afield<double,ACCEL> >: not converged
+  iter(final):      400   1.610715165068626e+07
+    0    2       -1     9.9564e+07     7.1798e+07
+ASolver_CG solve_CG_init: m_x.nin() = 48, m_s.nin() = 48
+Error at ASolver_CG<Afield<double,ACCEL> >: not converged
+  iter(final):      400   8.494402551013047e+06
+    1    2       -1     5.3390e+07     3.8905e+07
+ASolver_CG solve_CG_init: m_x.nin() = 48, m_s.nin() = 48
+Error at ASolver_CG<Afield<double,ACCEL> >: not converged
+  iter(final):      400   1.080172683736230e+07
+    2    2       -1     7.1113e+07     5.2042e+07
+ASolver_CG solve_CG_init: m_x.nin() = 48, m_s.nin() = 48
+Error at ASolver_CG<Afield<double,ACCEL> >: not converged
+  iter(final):      400   1.760001221572545e+07
+    0    3       -1     1.2113e+08     8.7556e+07
+ASolver_CG solve_CG_init: m_x.nin() = 48, m_s.nin() = 48
+Error at ASolver_CG<Afield<double,ACCEL> >: not converged
+  iter(final):      400   1.167020575759012e+07
+    1    3       -1     8.1702e+07     6.0072e+07
+ASolver_CG solve_CG_init: m_x.nin() = 48, m_s.nin() = 48
+Error at ASolver_CG<Afield<double,ACCEL> >: not converged
+  iter(final):      400   1.139098553759004e+07
+    2    3       -1     7.7381e+07     5.6742e+07
+Fprop_alt_Standard_lex<Afield<double,ACCEL> >: solver performance:
+  Elapsed time =      20.478911 sec
+  Flop(total)  =         1203240960
+  Performance  =       0.059 GFlops
+
+2-point correlator:
+PS <-- PS correlator:
+     0    6.626489081232e+07    1.880665163620e-11
+     1    1.017700140131e+08    1.792036573495e-11
+     2    1.152940618158e+08    4.231557920758e-11
+     3    9.851214020841e+07   -6.187522088988e-11
+     4    6.200494494826e+07   -9.025572243847e-11
+     5    2.725459647176e+07   -2.615682072239e-11
+     6    1.613351832534e+07    3.881230669865e-12
+     7    2.685819298968e+07   -9.455845049157e-12
+     8    5.810770194220e+07   -4.515926135646e-11
+     9    9.041150804848e+07    1.640321620833e-11
+    10    9.543420887565e+07    1.291724127658e-11
+    11    7.718972295419e+07   -2.865872983744e-11
+V1 <-- V1 correlator:
+     0   -4.314762813751e+06    0.000000000000e+00
+     1    3.051485460773e+07   -1.746229827404e-10
+     2    5.758208622559e+07    0.000000000000e+00
+     3    6.078460280520e+07   -2.619344741106e-10
+     4    4.494239170737e+07   -1.455191522837e-11
+     5    2.167223079103e+07   -2.728484105319e-12
+     6    1.317736026733e+07   -1.091393642128e-11
+     7    2.116143188268e+07    1.364242052659e-11
+     8    4.206597482785e+07   -5.820766091347e-11
+     9    5.497736708366e+07   -2.328306436539e-10
+    10    4.350390685633e+07   -4.656612873077e-10
+    11    1.732828638575e+07    0.000000000000e+00
+V2 <-- V2 correlator:
+     0    4.750970397201e+07    1.164153218269e-10
+     1    7.316261161027e+07   -1.746229827404e-10
+     2    8.251450300769e+07    0.000000000000e+00
+     3    7.117330543011e+07   -2.910383045673e-10
+     4    4.749270170095e+07   -4.365574568510e-11
+     5    2.124618920669e+07   -1.818989403546e-11
+     6    1.263145989622e+07   -1.818989403546e-11
+     7    2.094907212402e+07    2.432898327243e-11
+     8    4.442385452649e+07   -1.164153218269e-10
+     9    6.587585272810e+07    0.000000000000e+00
+    10    6.749166790650e+07   -6.984919309616e-10
+    11    5.625799882609e+07   -2.328306436539e-10
+V3 <-- V3 correlator:
+     0    5.618597605541e+07    1.713542300689e-11
+     1    8.434744015659e+07    1.856272682989e-11
+     2    9.061041943416e+07    4.881923522826e-11
+     3    7.505688998015e+07   -5.137323868305e-11
+     4    4.869426790899e+07   -9.246059460550e-11
+     5    2.154314706331e+07   -3.062428252550e-11
+     6    1.312816848594e+07    4.966665291033e-12
+     7    2.195687212218e+07   -1.010584530704e-11
+     8    4.615552904801e+07   -5.582145479701e-11
+     9    6.918761981425e+07    1.650564886542e-11
+    10    7.326018615612e+07    7.287184119652e-12
+    11    6.117376009756e+07   -3.015135347664e-11
+A4 <-- PS correlator:
+     0    2.905068894856e+06   -1.583312511074e-11
+     1   -6.966441587813e+07   -1.172880996225e-11
+     2   -9.764107126927e+07   -5.145614491207e-11
+     3   -8.820989710394e+07    6.585359545780e-11
+     4   -5.611863561947e+07    8.883923353590e-11
+     5   -2.080782118626e+07    2.268855141430e-11
+     6    1.456455066641e+05    3.814852022952e-12
+     7    2.042178908428e+07   -8.762866233023e-12
+     8    5.227690708168e+07   -4.270696386562e-11
+     9    8.090228586558e+07    1.502126065224e-11
+    10    8.092059774715e+07    1.663809242243e-11
+    11    5.194888573319e+07   -2.350647281441e-11
+PS <-- A4 correlator:
+     0   -1.008563672709e+07   -3.272412873954e-11
+     1   -5.609022102105e+07    1.256396889169e-13
+     2   -7.318163569249e+07   -2.096924513683e-11
+     3   -6.688471846183e+07    4.872587877719e-11
+     4   -4.429779435170e+07    9.087439658897e-11
+     5   -1.649108275910e+07    2.529895528699e-11
+     6    4.780626678188e+05    3.727354026479e-12
+     7    1.778278279272e+07   -9.684668934414e-12
+     8    4.295312580272e+07   -4.876397492828e-11
+     9    6.118941944714e+07    2.357341202061e-12
+    10    5.587782084625e+07   -1.212050651502e-12
+    11    3.123819999171e+07   -9.139348199572e-12
+S <-- S correlator:
+     0    3.161745517725e+05    1.164153218269e-10
+     1   -7.692269175390e+06    0.000000000000e+00
+     2   -1.528079679629e+06   -8.731149137020e-11
+     3   -1.168472745603e+06    1.164153218269e-10
+     4   -6.991935694616e+05   -2.546585164964e-11
+     5   -4.525263156079e+05    3.637978807092e-11
+     6    1.292662164973e+05   -2.182787284255e-11
+     7   -3.241941917694e+05    1.236912794411e-10
+     8   -2.830065388786e+05    6.548361852765e-11
+     9   -1.767401138809e+05    1.746229827404e-10
+    10   -2.826740708361e+06   -1.368789526168e-10
+    11   -7.156508373616e+06   -3.492459654808e-10
+GAMMA51 <-- GAMMA51 correlator:
+     0   -3.319701547166e+07   -8.731149137020e-11
+     1   -7.110209869982e+06   -2.328306436539e-10
+     2   -2.240932565191e+06    1.164153218269e-10
+     3   -7.919931257607e+05   -1.091393642128e-10
+     4   -1.703409128249e+05   -1.455191522837e-11
+     5    4.172245469432e+05   -1.455191522837e-11
+     6   -1.015073969519e+05   -4.365574568510e-11
+     7    4.098177416627e+05   -1.455191522837e-11
+     8   -1.769963404281e+04   -1.455191522837e-11
+     9   -1.430067503387e+06   -1.455191522837e-11
+    10   -2.957925762389e+06   -5.820766091347e-11
+    11   -2.323804312483e+06   -4.656612873077e-10
+GAMMA52 <-- GAMMA52 correlator:
+     0   -4.963764747487e+06    7.275957614183e-12
+     1    8.893447117903e+06    4.656612873077e-10
+     2    1.568030615139e+06   -1.164153218269e-10
+     3    1.022532971608e+06   -5.820766091347e-11
+     4    6.941308718617e+05   -3.456079866737e-11
+     5    4.270686695317e+05   -4.365574568510e-11
+     6   -1.334737357586e+05   -2.910383045673e-11
+     7    3.150066921137e+05   -1.455191522837e-11
+     8    8.851922564923e+04   -2.910383045673e-11
+     9    1.810343913924e+04   -3.637978807092e-11
+    10    3.007913873336e+06    8.003553375602e-11
+    11    7.424159442936e+06   -3.492459654808e-10
+GAMMA53 <-- GAMMA53 correlator:
+     0   -1.056453922265e+06    0.000000000000e+00
+     1    8.158144009678e+06    0.000000000000e+00
+     2    1.972726116872e+06    1.746229827404e-10
+     3    1.286141563638e+06   -5.820766091347e-11
+     4    4.364320200271e+05    4.001776687801e-11
+     5    2.801454214880e+05   -1.455191522837e-11
+     6   -8.986910415876e+04    1.818989403546e-11
+     7    3.672865701571e+05   -8.003553375602e-11
+     8    2.147156294768e+05   -2.000888343900e-11
+     9    2.833390563977e+05   -5.820766091347e-11
+    10    2.704614525573e+06    6.548361852765e-11
+    11    8.097330748848e+06    1.164153218269e-10
+SIGMA12 <-- SIGMA12 correlator:
+     0    2.877511275741e+07   -1.164153218269e-10
+     1    6.777644915207e+06    0.000000000000e+00
+     2    2.124908441037e+06   -5.820766091347e-11
+     3    9.516768439778e+05    1.327862264588e-10
+     4    4.406959013070e+05   -4.365574568510e-11
+     5   -3.990600370590e+05   -4.001776687801e-11
+     6    1.971353879817e+05   -8.003553375602e-11
+     7   -2.888230751999e+05    6.548361852765e-11
+     8    2.418014575308e+05   -2.910383045673e-11
+     9    1.594644912598e+06    2.037268131971e-10
+    10    3.472143315463e+06   -8.731149137020e-11
+    11    2.452242093302e+06    2.328306436539e-10
+SIGMA23 <-- SIGMA23 correlator:
+     0    4.782679327608e+06   -2.255546860397e-10
+     1   -9.110438028112e+06   -4.074536263943e-10
+     2   -2.103583319612e+06    2.910383045673e-11
+     3   -1.257799966952e+06    0.000000000000e+00
+     4   -4.522797610647e+05    1.455191522837e-11
+     5   -2.513838525551e+05    2.910383045673e-11
+     6    8.121650572877e+04    1.018634065986e-10
+     7   -3.782210047168e+05    4.365574568510e-11
+     8    6.197876360872e+04   -2.182787284255e-11
+     9   -1.537846526209e+05    4.365574568510e-11
+    10   -3.063392956382e+06   -8.731149137020e-11
+    11   -7.972111711130e+06    4.656612873077e-10
+SIGMA31 <-- SIGMA31 correlator:
+     0    3.943722249151e+07    1.164153218269e-10
+     1    7.012186278810e+06    2.328306436539e-10
+     2    2.713371211992e+06   -8.731149137020e-11
+     3    1.054584802900e+06    1.818989403546e-10
+     4    5.786836017570e+05   -2.910383045673e-11
+     5   -2.763816269548e+05    8.731149137020e-11
+     6    1.078820311456e+05    7.275957614183e-11
+     7   -5.054570879148e+05    5.456968210638e-11
+     8   -1.318003493360e+05   -7.275957614183e-12
+     9    1.238698305987e+06   -9.094947017729e-11
+    10    2.954228359440e+06    2.910383045673e-11
+    11    2.480305119166e+06    2.328306436539e-10
+Elapsed time: Spectrum_Wilson_althadron_2ptFunction: total         0.13 sec, count    1, average         0.13 sec
+
+check test data
+check precision = 1.0e-11
+result: 6.62648908123194e+07  expected: 1.45449619163833e+01
+test result: incorrect! (T_T)
+diff: expected - result = 4.55586454253396e+06
+
+Test result for Accel = 1
+Elapsed time: Main: total        21.36 sec, count    1, average        21.36 sec
+Timer: timestamp: 2026/02/28 00:00:09 +0900
