@@ -86,6 +86,25 @@ confirming, **some correcting** the paper. Update it carefully and honestly.
    FP64-fast A100/H100 (FP64 1:2); on the 3080 (FP64 1:64) timing is meaningless but
    correctness/precision are demonstrable.
 
+6. **Collapse `\subsection{Memory Layout for GPU Implementation}`
+   (\label{sec:layout}, ~lines 1360–1547).** It is currently written in
+   design-exploration voice — enumerating "Three Options for DW Extension"
+   (A: ri 2→4, B: separate hi/lo SoA, C: double4) with pros/cons and a "Layout
+   Comparison" table — but the implementation is now **settled**, so the
+   alternatives-to-evaluate framing contradicts the measured-results narrative.
+   - **Delete** the Option A/B/C enumeration and the Layout Comparison table.
+   - Replace with one short paragraph stating the *implemented* layout: **double4
+     `{r_hi,i_hi,r_lo,i_lo}` for QDW, and SoA×3 (three `double2` hi/mid/lo buffers)
+     for QTW**; both keep all words coalesced (32×32 B = 1024 B / 32×16 B = 512 B
+     per warp); the 48-byte packed struct is rejected for alignment. Keep the
+     `index_d4` equation (\eqref{eq:d4_index}).
+   - The two CUDA listings (`qdw_hopping_kernel`, `normalize_*`) are **simplified
+     schematics** (e.g. `gauge[/*neighbor index*/0]` is a placeholder), not the
+     real kernels — either delete them, move to an appendix clearly labelled
+     "schematic", or replace with a real excerpt from
+     `src/lib_alt_Accel/BridgeCUDA/`. Do not present toy kernels as the actual
+     implementation. Net target: ~190 lines → ~15–20 lines.
+
 ## Deliverable
 A revised `multiword.tex` that turns the relevant proposal/prediction text into a
 *measured-results* narrative — adding the double-triple reach result and figures,
