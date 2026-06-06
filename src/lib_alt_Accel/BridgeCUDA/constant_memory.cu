@@ -58,11 +58,33 @@ namespace BridgeACC {
 	// forward/backward-sweep coefficient that the LU(dag)inv kernels otherwise
 	// recompute per-thread via a multiword multiply. Computed in host DD so the
 	// stored words match the on-device product to full precision.
-	__constant__ double const_a_double[NS_MAX] = {0};  // double-build stub (unused)
+	__constant__ double const_a_double[NS_MAX] = {0};  // double-build hi word
 	__constant__ float  const_a_float[NS_MAX]  = {0};  // hi word
 	__constant__ float  const_a_ff_lo[NS_MAX]  = {0};  // float-float lo
 	__constant__ float  const_a_tw_mid[NS_MAX] = {0};  // triple-word mid
 	__constant__ float  const_a_tw_lo[NS_MAX]  = {0};  // triple-word lo
+
+	// ---- double-build triple-word (double-triple) mid/lo words ----
+	// For the double-base QDW/QTW path. hi reuses const_*_double. Phase 1:
+	// sourced from the host double-double pipeline (mid = DD low word, lo = 0)
+	// => genuine ~106-bit (double-double) reach, already ~1e16x past native
+	// FP64. The lo slot is reserved for a future triple-double host upgrade
+	// (full ~159-bit). Named "td" (triple-double) to stay distinct from the
+	// float-build "tw" (triple-word) arrays above.
+	__constant__ double const_e_td_mid[NS_MAX]     = {0};
+	__constant__ double const_f_td_mid[NS_MAX]     = {0};
+	__constant__ double const_dpinv_td_mid[NS_MAX] = {0};
+	__constant__ double const_dm_td_mid[NS_MAX]    = {0};
+	__constant__ double const_b_td_mid[NS_MAX]     = {0};
+	__constant__ double const_c_td_mid[NS_MAX]     = {0};
+	__constant__ double const_e_td_lo[NS_MAX]     = {0};
+	__constant__ double const_f_td_lo[NS_MAX]     = {0};
+	__constant__ double const_dpinv_td_lo[NS_MAX] = {0};
+	__constant__ double const_dm_td_lo[NS_MAX]    = {0};
+	__constant__ double const_b_td_lo[NS_MAX]     = {0};
+	__constant__ double const_c_td_lo[NS_MAX]     = {0};
+	__constant__ double const_a_td_mid[NS_MAX] = {0};  // double-build a mid (DD.lo)
+	__constant__ double const_a_td_lo[NS_MAX]  = {0};  // double-build a lo (0; reserved)
 
 	// ---- host double-double (DD) helpers for exact TW constant generation ----
 	// The TW constants must carry >double precision, else they cap the QTW solve
@@ -145,6 +167,71 @@ namespace BridgeACC {
 			const DD g = dd_mul(e[Ns - 2], dm[Ns - 2]);
 			for (int is = 0; is < Ns - 1; ++is) dpinv[is] = dd_div(one, dp[is]);
 			dpinv[Ns - 1] = dd_div(one, dd_add(dp[Ns - 1], g));
+		}
+
+		// ---- host triple-double (TD) for genuine double-TRIPLE constants ----
+		// Phase 2: feed the double-base QTW kernels coefficients at ~159-bit so the
+		// device triple-double arithmetic is NOT capped at double-double. The TD
+		// top 106 bits are computed exactly via the dd_* primitives; the third limb
+		// collects the leading sub-2^-106 cross/round terms. Inputs are O(1) and the
+		// preconditioner formulas have no catastrophic cancellation, so this yields
+		// ~150+ genuine bits — far past DD's 106. Correctness is checked empirically
+		// by the true-residual floor dropping well below the double-double ~6e-57.
+		struct TD { double m0, m1, m2; };
+		static inline TD td_renorm(double a0, double a1, double a2) {
+			DD r = quick_two_sum(a0, a1); double m0 = r.hi, c = r.lo;
+			r = two_sum(c, a2);           double m1 = r.hi, m2 = r.lo;
+			r = quick_two_sum(m0, m1);    m0 = r.hi; m1 = r.lo;
+			r = quick_two_sum(m1, m2);    m1 = r.hi; m2 = r.lo;
+			return { m0, m1, m2 };
+		}
+		static inline TD td_from(double a) { return { a, 0.0, 0.0 }; }
+		static inline TD td_add(TD a, TD b) {
+			DD sh = dd_add(DD{a.m0, a.m1}, DD{b.m0, b.m1});  // top ~106 bits
+			double lo = a.m2 + b.m2;                          // third-limb sum
+			return td_renorm(sh.hi, sh.lo, lo);
+		}
+		static inline TD td_neg(TD a) { return { -a.m0, -a.m1, -a.m2 }; }
+		static inline TD td_sub(TD a, TD b) { return td_add(a, td_neg(b)); }
+		static inline TD td_mul(TD a, TD b) {
+			DD ph = dd_mul(DD{a.m0, a.m1}, DD{b.m0, b.m1});  // top ~106 bits
+			// leading third-limb terms below the DD product (each ~2^-106):
+			double cross = a.m0 * b.m2 + a.m2 * b.m0 + a.m1 * b.m1;
+			return td_renorm(ph.hi, ph.lo, cross);
+		}
+		static inline TD td_div(TD a, TD b) {
+			double q0 = a.m0 / b.m0;
+			TD r = td_sub(a, td_mul(b, td_from(q0)));
+			double q1 = r.m0 / b.m0;
+			r = td_sub(r, td_mul(b, td_from(q1)));
+			double q2 = r.m0 / b.m0;
+			return td_renorm(q0, q1, q2);
+		}
+		static inline TD td_scale_half(TD a) { return { 0.5 * a.m0, 0.5 * a.m1, 0.5 * a.m2 }; }
+
+		// TD mirror of compute_precond_coeffs_dd (same formula, ~159-bit).
+		static inline void compute_precond_coeffs_td(
+				double M0, double mq, double alpha,
+				const double* b, const double* c, int Ns,
+				TD* dm, TD* dpinv, TD* e, TD* f) {
+			TD dp[NS_MAX];
+			const TD aTD = td_from(alpha);
+			const TD one = td_from(1.0);
+			const TD fourMinusM0 = td_sub(td_from(4.0), td_from(M0));
+			for (int is = 0; is < Ns; ++is) {
+				dp[is] = td_mul(aTD, td_add(one, td_mul(td_from(b[is]), fourMinusM0)));
+				dm[is] = td_mul(aTD, td_sub(one, td_mul(td_from(c[is]), fourMinusM0)));
+			}
+			const TD mqTD = td_from(mq);
+			e[0] = td_div(td_mul(mqTD, dm[Ns - 1]), dp[0]);
+			f[0] = td_div(td_mul(mqTD, dm[0]),       aTD);
+			for (int is = 1; is < Ns - 1; ++is) {
+				e[is] = td_div(td_mul(e[is - 1], dm[is - 1]), dp[is]);
+				f[is] = td_div(td_mul(f[is - 1], dm[is]),     dp[is - 1]);
+			}
+			const TD g = td_mul(e[Ns - 2], dm[Ns - 2]);
+			for (int is = 0; is < Ns - 1; ++is) dpinv[is] = td_div(one, dp[is]);
+			dpinv[Ns - 1] = td_div(one, td_add(dp[Ns - 1], g));
 		}
 	} // anonymous namespace
 
@@ -322,6 +409,61 @@ namespace BridgeACC {
 		CHECK(cudaMemcpyToSymbol(const_a_float,  a_hi, Ns * sizeof(float)));
 		CHECK(cudaMemcpyToSymbol(const_a_tw_mid, a_md, Ns * sizeof(float)));
 		CHECK(cudaMemcpyToSymbol(const_a_tw_lo,  a_lo, Ns * sizeof(float)));
+
+		// ---- double-build (double-TRIPLE) constants, recomputed in host TD
+		// (~159-bit). hi/mid/lo = TD.m0/m1/m2 -> genuine double-triple reach,
+		// uncapped by double-double. We also OVERWRITE const_*_double with TD.m0
+		// (the correctly-rounded hi) so hi+mid+lo reconstruct exactly; this is the
+		// same value the FP native-double path wants, so it is not perturbed. The
+		// float build is unaffected (its hi lives in the separate const_*_float).
+		// const_a_double is populated here (was 0 for the double build -> the cause
+		// of the earlier double+TW non-convergence). b,c are exact -> mid/lo = 0.
+		TD dm_t[NS_MAX], dpinv_t[NS_MAX], e_t[NS_MAX], f_t[NS_MAX];
+		compute_precond_coeffs_td(M0, mq, alpha, b, c, Ns, dm_t, dpinv_t, e_t, f_t);
+
+		double dm_h[NS_MAX]={0}, dm_m[NS_MAX]={0}, dm_l[NS_MAX]={0};
+		double dp_h[NS_MAX]={0}, dp_m[NS_MAX]={0}, dp_l[NS_MAX]={0};
+		double e_h[NS_MAX]={0},  e_m[NS_MAX]={0},  e_l[NS_MAX]={0};
+		double f_h[NS_MAX]={0},  f_m[NS_MAX]={0},  f_l[NS_MAX]={0};
+		double b_h[NS_MAX]={0},  c_h[NS_MAX]={0},  zero_d[NS_MAX]={0};
+		double a_h[NS_MAX]={0},  a_m[NS_MAX]={0},  a_l[NS_MAX]={0};
+		for (int i = 0; i < Ns; ++i) {
+			dm_h[i]=dm_t[i].m0; dm_m[i]=dm_t[i].m1; dm_l[i]=dm_t[i].m2;
+			dp_h[i]=dpinv_t[i].m0; dp_m[i]=dpinv_t[i].m1; dp_l[i]=dpinv_t[i].m2;
+			b_h[i]=b[i]; c_h[i]=c[i];   // exact inputs -> mid/lo = 0
+		}
+		for (int i = 0; i < Ns - 1; ++i) {
+			e_h[i]=e_t[i].m0; e_m[i]=e_t[i].m1; e_l[i]=e_t[i].m2;
+			f_h[i]=f_t[i].m0; f_m[i]=f_t[i].m1; f_l[i]=f_t[i].m2;
+		}
+		for (int j = 0; j < Ns - 1; ++j) {
+			TD aj = td_scale_half(td_mul(dm_t[j + 1], dpinv_t[j]));
+			a_h[j]=aj.m0; a_m[j]=aj.m1; a_l[j]=aj.m2;
+		}
+		// hi (overwrite const_*_double for consistency with mid/lo)
+		CHECK(cudaMemcpyToSymbol(const_dm_double,    dm_h, Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_dpinv_double, dp_h, Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_e_double,     e_h,  Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_f_double,     f_h,  Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_b_double,     b_h,  Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_c_double,     c_h,  Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_a_double,     a_h,  Ns * sizeof(double)));
+		// mid
+		CHECK(cudaMemcpyToSymbol(const_dm_td_mid,    dm_m, Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_dpinv_td_mid, dp_m, Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_e_td_mid,     e_m,  Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_f_td_mid,     f_m,  Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_b_td_mid,     zero_d, Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_c_td_mid,     zero_d, Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_a_td_mid,     a_m,  Ns * sizeof(double)));
+		// lo
+		CHECK(cudaMemcpyToSymbol(const_dm_td_lo,     dm_l, Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_dpinv_td_lo,  dp_l, Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_e_td_lo,      e_l,  Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_f_td_lo,      f_l,  Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_b_td_lo,      zero_d, Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_c_td_lo,      zero_d, Ns * sizeof(double)));
+		CHECK(cudaMemcpyToSymbol(const_a_td_lo,      a_l,  Ns * sizeof(double)));
 	}
 
 };

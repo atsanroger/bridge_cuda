@@ -55,6 +55,22 @@ extern __constant__ float  const_a_ff_lo[NS_MAX];
 extern __constant__ float  const_a_tw_mid[NS_MAX];
 extern __constant__ float  const_a_tw_lo[NS_MAX];
 
+// Double-build triple-word (double-triple) mid/lo words. hi reuses const_*_double.
+extern __constant__ double const_e_td_mid[NS_MAX];
+extern __constant__ double const_f_td_mid[NS_MAX];
+extern __constant__ double const_dpinv_td_mid[NS_MAX];
+extern __constant__ double const_dm_td_mid[NS_MAX];
+extern __constant__ double const_b_td_mid[NS_MAX];
+extern __constant__ double const_c_td_mid[NS_MAX];
+extern __constant__ double const_e_td_lo[NS_MAX];
+extern __constant__ double const_f_td_lo[NS_MAX];
+extern __constant__ double const_dpinv_td_lo[NS_MAX];
+extern __constant__ double const_dm_td_lo[NS_MAX];
+extern __constant__ double const_b_td_lo[NS_MAX];
+extern __constant__ double const_c_td_lo[NS_MAX];
+extern __constant__ double const_a_td_mid[NS_MAX];
+extern __constant__ double const_a_td_lo[NS_MAX];
+
 template<typename T> struct ConstantMemoryTraits;
 
 template<> struct ConstantMemoryTraits<double> {
@@ -64,34 +80,32 @@ template<> struct ConstantMemoryTraits<double> {
     static __device__ __forceinline__ const double* dm() { return const_dm_double; }
     static __device__ __forceinline__ const double* b() { return const_b_double; }
     static __device__ __forceinline__ const double* c() { return const_c_double; }
-    // Stubs for the float-float (FP32-only DD) path. Never actually invoked
-    // when real_t=double — host wrappers dispatch around the _ff kernels —
-    // but the kernel template body must still compile. Return hi-word arrays
-    // so values are valid (lo would be zero in true DD math).
-    static __device__ __forceinline__ const double* e_lo() { return const_e_double; }
-    static __device__ __forceinline__ const double* f_lo() { return const_f_double; }
-    static __device__ __forceinline__ const double* dpinv_lo() { return const_dpinv_double; }
-    static __device__ __forceinline__ const double* dm_lo() { return const_dm_double; }
-    static __device__ __forceinline__ const double* b_lo() { return const_b_double; }
-    static __device__ __forceinline__ const double* c_lo() { return const_c_double; }
-    // TW (triple-word) stubs — same rationale as the FF stubs above.
-    static __device__ __forceinline__ const double* e_mid() { return const_e_double; }
-    static __device__ __forceinline__ const double* f_mid() { return const_f_double; }
-    static __device__ __forceinline__ const double* dpinv_mid() { return const_dpinv_double; }
-    static __device__ __forceinline__ const double* dm_mid() { return const_dm_double; }
-    static __device__ __forceinline__ const double* b_mid() { return const_b_double; }
-    static __device__ __forceinline__ const double* c_mid() { return const_c_double; }
-    static __device__ __forceinline__ const double* e_lo_tw() { return const_e_double; }
-    static __device__ __forceinline__ const double* f_lo_tw() { return const_f_double; }
-    static __device__ __forceinline__ const double* dpinv_lo_tw() { return const_dpinv_double; }
-    static __device__ __forceinline__ const double* dm_lo_tw() { return const_dm_double; }
-    static __device__ __forceinline__ const double* b_lo_tw() { return const_b_double; }
-    static __device__ __forceinline__ const double* c_lo_tw() { return const_c_double; }
-    // Precomputed coupling a (double-build stub; multiword kernels not invoked).
+    // Double-double (QDW) low words: the DD low word of each coefficient.
+    static __device__ __forceinline__ const double* e_lo() { return const_e_td_mid; }
+    static __device__ __forceinline__ const double* f_lo() { return const_f_td_mid; }
+    static __device__ __forceinline__ const double* dpinv_lo() { return const_dpinv_td_mid; }
+    static __device__ __forceinline__ const double* dm_lo() { return const_dm_td_mid; }
+    static __device__ __forceinline__ const double* b_lo() { return const_b_td_mid; }
+    static __device__ __forceinline__ const double* c_lo() { return const_c_td_mid; }
+    // Triple-word (QTW) mid = DD low word; lo = 0 (reserved for a future
+    // triple-double host upgrade). Together hi+mid+lo = genuine double-double.
+    static __device__ __forceinline__ const double* e_mid() { return const_e_td_mid; }
+    static __device__ __forceinline__ const double* f_mid() { return const_f_td_mid; }
+    static __device__ __forceinline__ const double* dpinv_mid() { return const_dpinv_td_mid; }
+    static __device__ __forceinline__ const double* dm_mid() { return const_dm_td_mid; }
+    static __device__ __forceinline__ const double* b_mid() { return const_b_td_mid; }
+    static __device__ __forceinline__ const double* c_mid() { return const_c_td_mid; }
+    static __device__ __forceinline__ const double* e_lo_tw() { return const_e_td_lo; }
+    static __device__ __forceinline__ const double* f_lo_tw() { return const_f_td_lo; }
+    static __device__ __forceinline__ const double* dpinv_lo_tw() { return const_dpinv_td_lo; }
+    static __device__ __forceinline__ const double* dm_lo_tw() { return const_dm_td_lo; }
+    static __device__ __forceinline__ const double* b_lo_tw() { return const_b_td_lo; }
+    static __device__ __forceinline__ const double* c_lo_tw() { return const_c_td_lo; }
+    // Precomputed coupling a: hi / dd-lo / td mid+lo (now populated for double).
     static __device__ __forceinline__ const double* a() { return const_a_double; }
-    static __device__ __forceinline__ const double* a_lo() { return const_a_double; }
-    static __device__ __forceinline__ const double* a_mid() { return const_a_double; }
-    static __device__ __forceinline__ const double* a_lo_tw() { return const_a_double; }
+    static __device__ __forceinline__ const double* a_lo() { return const_a_td_mid; }
+    static __device__ __forceinline__ const double* a_mid() { return const_a_td_mid; }
+    static __device__ __forceinline__ const double* a_lo_tw() { return const_a_td_lo; }
 };
 
 template<> struct ConstantMemoryTraits<float> {
