@@ -58,6 +58,10 @@ public:
   //! calculation of complex eigenvalues.
   int eigenvalue_Arnoldi(const std::string file_params);
 
+  // NOTE: the linear-solver drivers on the PV-preconditioned operator A
+  // (formerly solve_bicgstab here) now live in Spectrum_Domainwall_PVprec_alt
+  // (solve_PVprec_alt.h) -- this class is for the eigenvalue/spectrum study.
+
  private:
 
   //! initial setup

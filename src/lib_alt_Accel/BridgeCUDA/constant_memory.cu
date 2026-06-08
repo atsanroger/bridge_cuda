@@ -266,6 +266,26 @@ namespace BridgeACC {
 
 		};
 
+	// Upload ONLY the Moebius b/c coefficients (no e/f/dpinv/dm). Used by the
+	// non-eo dd domainwall operator, whose 5dir/5dirdag kernels read const_b/
+	// const_c directly. b/c are mass-independent, so multiple coexisting dd
+	// operators (e.g. fineF and Pauli-Villars in a multigrid setup) all push the
+	// same values -> const_b/const_c stay consistent. This deliberately does NOT
+	// touch const_e/f/dpinv (which are mass-dependent and carry the QTW/FF
+	// hi/mid/lo words for the eo preconditioner) so it cannot clobber an eo
+	// operator's coefficients living in the same process.
+	void setDomainwallConstantBC(
+			double* b, double* c, int Ns){
+			CHECK(cudaMemcpyToSymbol(const_b_double, b, Ns * sizeof(double)));
+			CHECK(cudaMemcpyToSymbol(const_c_double, c, Ns * sizeof(double)));
+		};
+
+	void setDomainwallConstantBC(
+			float* b, float* c, int Ns){
+			CHECK(cudaMemcpyToSymbol(const_b_float, b, Ns * sizeof(float)));
+			CHECK(cudaMemcpyToSymbol(const_c_float, c, Ns * sizeof(float)));
+		};
+
 	// Push float-float pairs derived from the double coefficients. const_*_float
 	// gets the high words (= (float)d) and const_*_ff_lo gets the low words
 	// ((float)(d - (float)d)). Together they encode each coefficient with

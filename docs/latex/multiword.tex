@@ -16,6 +16,8 @@
 \usepackage{tcolorbox}
 \usepackage{listings}
 \usepackage{float}
+\usepackage{graphicx}
+\graphicspath{{../}{./}}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, positioning, calc, patterns, decorations.pathreplacing, shapes.geometric, matrix, backgrounds}
 \tcbuselibrary{theorems, skins, breakable}
@@ -1229,11 +1231,18 @@ Section~\ref{sec:cgne} presents the QDW/QTW CGNE algorithm with the
 critical normalization step.
 Section~\ref{sec:precision_assignment} analyses which quantities benefit
 from precision promotion.
-Section~\ref{sec:layout} describes GPU memory layouts for extended spinors.
+Section~\ref{sec:layout} records the GPU memory layout actually deployed for
+the extended spinors.
 Section~\ref{sec:lqcd_comparison} analyses the condition-number regime and
-when each method is needed.
-Section~\ref{sec:future} proposes a systematic $2\times3$ benchmark comparing
-Wilson and DWF under FP64, QDW, and QTW.
+shows why precision buys \emph{attainable accuracy} rather than fewer
+iterations in the eo-preconditioned DWF setting.
+Section~\ref{sec:results} reports the measured QDW/QTW results from the
+Bridge++ CUDA implementation---the floors reached at each precision, the
+double-base triple-double ladder, and the reach-versus-rate distinction
+verified on a real thermalized configuration.
+Section~\ref{sec:future} revisits the originally proposed systematic
+$2\times3$ Wilson-versus-DWF benchmark in light of those results, separating
+the questions now settled from those that remain open.
 
 % ----------------------------------------------------------
 \subsection{CGNE Solver with QDW/QTW Precision}
@@ -1370,45 +1379,12 @@ The existing Bridge++ layout uses the index function~\eqref{eq:bridge_index}:
   \Bigl(\mathtt{ri} + 2\bigl(c + \Nc(d + \Nd(s + \Ns\,(\mathtt{site}/\NWP)))\bigr)\Bigr).
 \end{equation}
 
-\subsubsection{Three Options for DW Extension}
+\subsubsection{Implemented Layout}
 
-\textbf{Option A: Extend \texttt{ri} from 2 to 4}
-
-Assign $\mathtt{ri} \in \{0,1,2,3\}$ as $\{r_{hi}, i_{hi}, r_{lo}, i_{lo}\}$.
-Only the prefactor changes from 2 to 4.
-\textit{Pros:} minimal change. \textit{Cons:} $hi$ and $lo$ are not adjacent.
-
-\textbf{Option B: Separate hi/lo Arrays (SoA)}
-
-Keep the existing layout for $hi$; allocate a second buffer for $lo$ with
-the same index function.
-\begin{lstlisting}[language=C++]
-struct DWSpinorField {
-    double *hi;  // existing buffer (size = total elements)
-    double *lo;  // companion buffer (same size)
-    // Same index() for both
-};
-\end{lstlisting}
-\textit{Pros:} easy FP64 fallback; existing kernels untouched.
-\textit{Cons:} two pointer arguments; doubled memory.
-
-\textbf{Option C: \texttt{double4} Layout (Recommended for QDW)}
-
-A DW complex spinor = 4 doubles = one CUDA \texttt{double4} (32 bytes):
-\begin{equation}
-  \texttt{double4}\;\{x,y,z,w\} = \{r_{hi},\; i_{hi},\; r_{lo},\; i_{lo}\}.
-  \label{eq:double4_layout}
-\end{equation}
-Ordering $\{r_{hi}, i_{hi}, r_{lo}, i_{lo}\}$ (hi-words first) is preferred:
-\begin{itemize}
-  \item SpMV accesses $r_{hi}$ and $i_{hi}$ together (same \texttt{double4}).
-  \item FP64 fallback: ignore \texttt{.z}, \texttt{.w}.
-  \item Normalization symmetry: TwoSum on $(\texttt{.x},\texttt{.z})$
-        and $(\texttt{.y},\texttt{.w})$.
-\end{itemize}
-With $\NWP = 32$: 32 threads $\times$ 32 bytes = 1024 bytes per transaction,
-fully coalesced.
-New index function (with \texttt{ri} absorbed into \texttt{double4}):
+The implementation is now settled, so we record the deployed layout rather than
+enumerating alternatives. For \textbf{QDW}, a DW complex spinor (4 doubles) is
+stored as one CUDA \texttt{double4} $\{r_{hi}, i_{hi}, r_{lo}, i_{lo}\}$;
+absorbing the real/imaginary index \texttt{ri} into the \texttt{double4} gives
 \begin{equation}
   \mathrm{index}_{\texttt{d4}}(c,\, d,\, s,\, \mathtt{site})
   = (\mathtt{site}\;\%\;\NWP)
@@ -1416,135 +1392,18 @@ New index function (with \texttt{ri} absorbed into \texttt{double4}):
   \bigl(c + \Nc(d + \Nd(s + \Ns\,(\mathtt{site}/\NWP)))\bigr).
   \label{eq:d4_index}
 \end{equation}
-
-\subsubsection{QTW Layout: SoA $\times$ 3 (Recommended for QTW)}
-
-A QTW complex spinor = 6 doubles (hi, mid, lo). The three separate-buffer
-approach is recommended:
-\begin{lstlisting}[language=C++]
-struct QTWSpinorField {
-    double2 *hi_buf;   // {r_hi, i_hi} x N
-    double2 *mid_buf;  // {r_mid, i_mid} x N
-    double2 *lo_buf;   // {r_lo, i_lo} x N
-    // Same index for all three: index(c,d,s,site)
-};
-\end{lstlisting}
-Each buffer: 32 threads $\times$ 16 bytes = 512 bytes per warp, fully coalesced.
-An alternative 48-byte struct is rejected: 48 bytes = 1.5 $\times$ 32-byte
-transactions causes alignment issues.
-
-\subsubsection{Layout Comparison}
-
-\begin{table}[H]
-\centering
-\caption{Memory layout strategies for DW and QTW spinor fields.}
-\begin{tabular}{lcccc}
-\toprule
- & \textbf{Option A} & \textbf{Option B (SoA)} & \textbf{Option C (double4)} & \textbf{QTW (SoA$\times$3)} \\
-\midrule
-Target precision        & DW   & DW   & DW/QDW & QTW \\
-Coalesced $hi$ access   & Yes  & Yes  & Yes    & Yes \\
-Coalesced $lo/mid$ access & Yes & Yes  & Yes    & Yes \\
-FP64 fallback ease      & Mod  & Easy & Easy   & Moderate \\
-Words per complex spinor & 4   & 4    & 4      & 6 \\
-Memory overhead         & $2\times$ & $2\times$ & $2\times$ & $3\times$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsubsection{CUDA Kernel: QDW Hopping with \texttt{double4}}
-\label{sec:double4}
-
-\begin{lstlisting}[language=C++, caption={QDW hopping kernel using \texttt{double4} (Bridge++ style, NWP=32)}]
-// Layout: double4 = {r_hi, i_hi, r_lo, i_lo}
-
-__device__ __forceinline__
-void two_sum(double a, double b, double &s, double &e) {
-    s = a + b;
-    double v = s - a;
-    e = (a - (s - v)) + (b - v);
-}
-
-__device__ __forceinline__
-void two_prod(double a, double b, double &p, double &e) {
-    p = a * b;
-    e = __fma_rn(a, b, -p);   // CUDA native FMA
-}
-
-__global__ void qdw_hopping_kernel(
-    double4* __restrict__ out,
-    const double4* __restrict__ in,
-    const double2* __restrict__ gauge,  // SU(3) link in FP64 (not DW)
-    int NWP, int Nc, int Nd, int Ns)
-{
-    int lane       = threadIdx.x % NWP;
-    int site_block = blockIdx.x;
-
-    for (int d = 0; d < Nd; d++) {
-    for (int c = 0; c < Nc; c++) {
-        int idx = lane + NWP*(c + Nc*(d + Nd*(0 + Ns*site_block)));
-        double4 psi = in[idx];
-        double r_hi = psi.x, i_hi = psi.y;
-        double r_lo = psi.z, i_lo = psi.w;
-
-        double2 U = gauge[/*neighbor index*/0];
-        double u_r = U.x, u_i = U.y;
-
-        // QDW complex multiply: out = U * psi
-        double p_rr, e_rr;  two_prod(u_r, r_hi, p_rr, e_rr);
-        double p_ii, e_ii;  two_prod(u_i, i_hi, p_ii, e_ii);
-        double p_ri, e_ri;  two_prod(u_r, i_hi, p_ri, e_ri);
-        double p_ir, e_ir;  two_prod(u_i, r_hi, p_ir, e_ir);
-
-        double out_r_hi, out_r_e;
-        two_sum(p_rr, -p_ii, out_r_hi, out_r_e);
-        double out_r_lo = out_r_e + (e_rr - e_ii) + (u_r*r_lo - u_i*i_lo);
-
-        double out_i_hi, out_i_e;
-        two_sum(p_ri, p_ir, out_i_hi, out_i_e);
-        double out_i_lo = out_i_e + (e_ri + e_ir) + (u_r*i_lo + u_i*r_lo);
-
-        out[idx] = make_double4(out_r_hi, out_i_hi, out_r_lo, out_i_lo);
-    }}
-}
-
-// Normalization kernel: called ONCE per CGNE iteration
-__global__ void normalize_spinor_dw(double4* spinor, int N) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= N) return;
-    double4 s = spinor[i];
-    double sr, er, si, ei;
-    two_sum(s.x, s.z, sr, er);   // real:  (r_hi, r_lo) -> normalized
-    two_sum(s.y, s.w, si, ei);   // imag:  (i_hi, i_lo) -> normalized
-    spinor[i] = make_double4(sr, si, er, ei);
-}
-\end{lstlisting}
-
-\subsubsection{CUDA Kernel: QTW Normalization with SoA$\times$3}
-
-\begin{lstlisting}[language=C++, caption={QTW normalization kernel using SoA$\times$3}]
-__global__ void normalize_qtw(
-    double2* hi_buf, double2* mid_buf, double2* lo_buf, int N)
-{
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= N) return;
-    double2 hi = hi_buf[i], mid = mid_buf[i], lo = lo_buf[i];
-
-    // Renormalize real: (hi.x, mid.x, lo.x)
-    double s1r, e1r; two_sum(mid.x, lo.x, s1r, e1r);
-    double zhr, tr;  two_sum(hi.x, s1r, zhr, tr);
-    double zmr, zlr; two_sum(tr, e1r, zmr, zlr);
-
-    // Renormalize imag: (hi.y, mid.y, lo.y)
-    double s1i, e1i; two_sum(mid.y, lo.y, s1i, e1i);
-    double zhi, ti;  two_sum(hi.y, s1i, zhi, ti);
-    double zmi, zli; two_sum(ti, e1i, zmi, zli);
-
-    hi_buf[i]  = make_double2(zhr, zhi);
-    mid_buf[i] = make_double2(zmr, zmi);
-    lo_buf[i]  = make_double2(zlr, zli);
-}
-\end{lstlisting}
+For \textbf{QTW}, a 6-double complex spinor is stored as SoA$\times3$: three
+\texttt{double2} buffers (hi/mid/lo), all sharing the same index. Both layouts
+keep every word coalesced---$32 \times 32\,\text{B} = 1024\,\text{B}$ per warp
+for the QDW \texttt{double4}, and $32 \times 16\,\text{B} = 512\,\text{B}$ per
+buffer for each QTW \texttt{double2}. A single packed 48-byte QTW struct is
+rejected because $48\,\text{B} = 1.5 \times 32$-byte transactions break
+alignment. The gauge links remain FP64 (or the FP64-base word) per the
+precision assignment of Section~\ref{sec:precision_assignment}; only the spinor
+words are extended. The production kernels in
+\texttt{src/lib\_alt\_Accel/BridgeCUDA/} additionally template over the base
+type (\texttt{float}/\texttt{double}) and apply the deferred-normalization and
+sloppy-accumulate optimizations discussed in Section~\ref{sec:drift}.
 
 % ----------------------------------------------------------
 \subsection{Condition Number Analysis}
@@ -1566,6 +1425,38 @@ The Lattice QCD setting differs in two important ways:
         The accumulation sum is short compared to general SpMV,
         which changes the relative importance of Sources A and B.
 \end{enumerate}
+
+There is, however, a third and more consequential difference, which our
+measurements (Section~\ref{sec:results}) made explicit.
+Mukunoki \& Ozaki~\cite{Mukunoki2025} ran \emph{unpreconditioned} CG on
+genuinely ill-conditioned SuiteSparse SPD matrices ($\kappa$ up to
+$\sim\!10^{10}$, thousands of iterations).
+In that regime finite-precision CG \emph{loses orthogonality}---the onset
+scales as $\uu \times (\text{iterations}) \times \kappa$---so FP32 converges
+\emph{more slowly} than FP64, and raising precision cuts the iteration count.
+Our setting is the opposite: \emph{even-odd preconditioned} DWF with a modest
+effective condition number, where the descent rate is essentially
+precision-independent and precision instead lowers the attainable residual
+\emph{floor}.
+This mechanism is isolated cleanly by a toy unpreconditioned-CG sweep over
+$\kappa$ (Figure~\ref{fig:toy_cg_kappa}): at $\kappa = 10$ FP32 and FP64
+converge at an identical rate (both reach $10^{-10}$ by iteration~18), whereas
+for $\kappa \gtrsim 10^{3}$ FP32 stalls and never converges.
+Precision therefore affects the convergence \emph{rate} only at large
+$\kappa$; in the small-$\kappa$ preconditioned regime it affects only the
+final accuracy.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=1.0\textwidth]{toy_cg_kappa_sweep.png}
+\caption{Toy unpreconditioned CG over a range of condition numbers $\kappa$,
+         comparing FP32 and FP64. At $\kappa = 10$ the two precisions track
+         each other exactly; for $\kappa \gtrsim 10^{3}$ FP32 loses
+         orthogonality and stalls. This is the Mukunoki--Ozaki regime, in
+         which precision buys \emph{fewer iterations}---and the regime our
+         eo-preconditioned DWF tests do \emph{not} sit in.}
+\label{fig:toy_cg_kappa}
+\end{figure}
 
 \subsubsection{Effective Precision Thresholds}
 
@@ -1598,16 +1489,178 @@ The regime $\kappa(D) \gtrsim 10^{13}$ is where QDW stagnates and QTW becomes
 the only viable option.
 Whether this regime is encountered depends on the gauge configuration and $\kappa$.
 
-\begin{tcolorbox}[warnbox={Implementation Order}]
+\paragraph{Grounding the thresholds in measured $\kappa$.}
+The table above uses generic placeholder values
+($\kappa(D)=10^{5}\!-\!10^{13}$); the threshold theory is correct
+\emph{in principle}, but the relevant question is where realistic
+eo-preconditioned DWF actually sits. Direct double-Lanczos measurements on
+this exact setup ($16^4$, $\beta=6.0$)~\cite{Chen2026} place the smallest
+masses at $\kappa(D_{\mathrm{DW}}^\dagger D_{\mathrm{DW}}) \approx
+1.7\times10^{5}$ at $m=0.001$ for the convergence-optimal $\alpha=0.6$, rising
+to $\sim\!1.6\times10^{6}$ at $\alpha=0.2$ and $\sim\!3\!-\!6\times10^{5}$ at
+$\alpha=1$. Two consequences follow. First, the modified-operator parameter
+$\alpha$ is effectively a \emph{condition-number knob}: $\alpha\approx0.6$
+\emph{minimizes} $\kappa$ (for solver speed), while $\alpha=1$ or $\alpha=0.2$
+\emph{raise} it---the lever needed to enter the multiword/Ozaki regime
+deliberately. Second, $16^4$ already shows finite-volume \emph{saturation} of
+the mass dependence, so reaching the stagnation thresholds in the table
+requires larger volumes ($32^4$ and beyond) in addition to small mass.
+
+Crucially, the multiword tests reported in Section~\ref{sec:results} were run
+at $m=0.025\!-\!0.10$, where the eo-preconditioned
+$\kappa(D_{\mathrm{DW}}^\dagger D_{\mathrm{DW}}) \sim 10^{3}$---roughly two
+orders of magnitude \emph{below} the FP64/QDW split thresholds above. This is
+exactly why the predicted iteration-count reduction was \emph{not} observed:
+the solver never entered the stagnation regime. What the precision hierarchy
+delivered instead was \emph{attainable-accuracy reach}---a lower residual
+floor at fixed iteration count---documented next.
+
+\begin{tcolorbox}[warnbox={Status and Implementation Order}]
 \begin{enumerate}
-  \item \textbf{Implement QDW first} (\texttt{double4} layout, 2$\times$ memory).
-        Smallest code change; may already be sufficient.
-  \item \textbf{Implement QTW only if} QDW stagnates at physically relevant
-        $\kappa$ values, or total-time benchmarks show QTW to be faster.
-  \item The threshold $\kappa^{**}$ where QDW stagnates is \textbf{empirical}
-        and cannot be predicted from theory alone.
+  \item \textbf{QDW and QTW are now implemented} in Bridge++ CUDA for the
+        eo-preconditioned DWF operator (\texttt{double4} layout for QDW,
+        SoA$\times3$ for QTW; Section~\ref{sec:layout}), in both FP32-base and
+        FP64-base variants.
+  \item In the tested regime ($\kappa \sim 10^{3}$) the benefit is
+        \emph{reach}, not iteration savings (Section~\ref{sec:results}): all
+        precisions descend at the same rate and differ only in the final
+        floor.
+  \item The threshold $\kappa^{**}$ at which QDW stagnates and QTW cuts the
+        iteration count remains \textbf{empirical} and is reached only by
+        pushing into the large-$\kappa$ regime (small mass $+$ large volume,
+        or weaker preconditioning / larger $\alpha$); this is the principal
+        open question.
 \end{enumerate}
 \end{tcolorbox}
+
+% ----------------------------------------------------------
+\subsection{Empirical Results: QDW/QTW in the Bridge++ DWF Solver}
+\label{sec:results}
+
+The QDW and QTW algorithms of this chapter have been implemented end-to-end in
+the Bridge++ CUDA backend for the even-odd preconditioned 5D Domain-Wall
+operator and its CGNE solve, in both an FP32-base variant (float words, no FP64
+hardware used anywhere) and an FP64-base variant (double words). All numbers
+below are on an RTX~3080 (FP64 throughput $1\!:\!64$). Following
+Section~\ref{sec:precision_assignment}, we report the \emph{true} residual
+$\|b-Ax\|$ recomputed from the iterate in the field's own multiword precision;
+the recursive CG residual is shown only where it is needed to make the
+reach-versus-rate distinction.
+
+\subsubsection{FP32-base: beyond FP64 without FP64 hardware}
+
+On the standard $32\times8\times8\times12$ test problem the three FP32-base
+modes separate exactly as the error-order analysis predicts:
+\begin{itemize}
+  \item \textbf{DW} reaches a true-residual floor $\approx 5\times10^{-29}$ and
+        a converged observable accurate to $\approx 5.7\times10^{-15}$---i.e.\
+        \emph{FP64-class accuracy at $\approx$\,FP64 wall time}, using only
+        FP32 arithmetic.
+  \item \textbf{TW} reaches a true-residual floor $\approx 3.1\times10^{-32}$
+        and an observable error of $\mathbf{5.6\times10^{-17}}$, \emph{below}
+        native FP64's $3.9\times10^{-16}$---genuine beyond-double accuracy with
+        no FP64 hardware---at a cost of $\approx 1.66\times$ the FP64 wall time.
+\end{itemize}
+The per-iteration overhead of the same-base GPU kernels (DW $\approx 3.6\times$,
+TW $\approx 4.6\times$ relative to FP32) is larger than the CPU figures of
+Mukunoki \& Ozaki (Table in Section~\ref{sec:mukunoki}: $1.3\times$/$2.4\times$),
+reflecting the register/ILP pressure of multiword arithmetic on the GPU. The
+FP32-base value proposition is therefore \emph{precision reach}, not speed.
+
+\subsubsection{FP64-base: a triple-double precision ladder}
+
+With an FP64 base and a host triple-double ($\sim$159-bit) pipeline for the
+preconditioner constants, the three modes produce three cleanly separated
+true-residual floors:
+\begin{equation}
+  \text{FP } 1.59\times10^{-30}, \qquad
+  \text{DW } 1.03\times10^{-62}, \qquad
+  \text{TW } 8.57\times10^{-76},
+\end{equation}
+i.e.\ roughly $46$--$60$ orders of magnitude past native FP64 and $\approx 13$
+orders past double-double, with zero \texttt{NaN} or breakdown
+(Figure~\ref{fig:double_base}). The separation is real triple-word behaviour:
+naively stubbing the constants to double-double caps TW at the DW floor, so the
+extra limb is doing genuine work. A six-mode ladder over three quark masses
+(Figure~\ref{fig:ladder}) confirms the full FP/DW/TW $\times$ \{FP32-base,
+FP64-base\} hierarchy. At smaller mass the curves become iteration-cap limited
+rather than floor limited (higher $\kappa$, slower CG), and the FP32 base hits a
+\texttt{NaN} wall near iteration~600---a concrete small-mass argument in favour
+of the FP64 base on a server-class GPU.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{double_base_residual_compare.png}
+\caption{FP64-base multiword: true-residual descent for FP, DW, and TW. The
+         triple-double constant pipeline yields three cleanly separated floors
+         ($1.59\times10^{-30}$ / $1.03\times10^{-62}$ / $8.57\times10^{-76}$),
+         tens of orders below native FP64, with no breakdown.}
+\label{fig:double_base}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{multiword_precision_ladder.png}
+\caption{Six-mode precision ladder (FP/DW/TW $\times$ FP32-base/FP64-base) on
+         $16^4$. Each precision sets a distinct residual floor while the descent
+         rate is shared---precision sets the floor, the spectrum sets the rate.}
+\label{fig:ladder}
+\end{figure}
+
+\subsubsection{Reach, not rate: recursive versus true residual}
+
+The defining observation is that precision does \emph{not} change the
+convergence rate in this regime. The recursively-updated CG residual overlaps
+across all six precisions (cross-precision spread below $0.18$ dex throughout
+the descent); only the \emph{true} residual $\|b-Ax\|$ floor ladders with the
+rounding unit $\uu$ (Figure~\ref{fig:recursive_vs_true}). This is not an
+artifact of the standard tiled test gauge: regenerating a genuine thermalized
+$16^4$ quenched configuration ($\beta=6.0$, plaquette $\approx 0.596$, via
+Bridge++'s own HMC) and repeating the sweep, all six precisions still reach
+$10^{-12}$ at the \emph{same} iteration ($\approx 140$, marginally faster than
+the tiled gauge), with essentially unchanged floors
+(Figure~\ref{fig:ladder_real}). The ``precision sets the floor, spectrum sets
+the rate'' finding is thus physical, while the underlying mechanism---loss of
+orthogonality---only converts into an iteration-count effect at large $\kappa$
+(Figure~\ref{fig:toy_cg_kappa}).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{verify1_recursive_vs_true.png}
+\caption{Recursive (CG-internal) versus true residual $\|b-Ax\|$ on the real
+         $16^4$ configuration. The recursive curves of all precisions overlap;
+         only the true-residual floor separates by $\uu$, directly exhibiting
+         the reach-versus-rate distinction.}
+\label{fig:recursive_vs_true}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tabular}{c}
+\includegraphics[width=0.62\textwidth]{sweep16_real_q450/ladder_real_mq0.10.png} \\[4pt]
+\includegraphics[width=0.62\textwidth]{sweep16_real_q450/ladder_real_mq0.05.png}
+\end{tabular}
+\caption{Six-mode ladders on the real thermalized $16^4$ configuration at
+         $m=0.10$ (top) and $m=0.05$ (bottom). The descent overlap and the
+         per-precision floors persist on a genuine gauge field
+         (cf.\ $m=0.025$, not shown).}
+\label{fig:ladder_real}
+\end{figure}
+
+\subsubsection{Caveats}
+
+These results carry deliberate caveats. The standard test gauge is a periodic
+$4^4\times8$ self-copy, hence Bloch-decomposable with an artificially benign
+$\kappa$; no physical volume scaling should be inferred from it (the
+real-configuration check above isolates which findings survive). All
+measurements are on small lattices, so size scaling is untested, and the SU(3)
+reconstruction overhead measured here ($-43\%$ on float-TW, where the
+triple-word arithmetic sits on the critical path) may change sign at production
+volume. Finally, on the $1\!:\!64$-FP64 RTX~3080 the absolute timings of the
+FP64-base path are not meaningful---its correctness and precision are
+demonstrable, but the surviving \emph{performance} argument is double-base QTW
+on an FP64-fast accelerator (A100/H100, $1\!:\!2$), where it recovers the
+modest-overhead beyond-FP64 regime of Mukunoki \& Ozaki.
 
 % ----------------------------------------------------------
 \subsection{Future Research: Systematic Wilson vs DWF Benchmark}
@@ -1615,9 +1668,15 @@ Whether this regime is encountered depends on the gauge configuration and $\kapp
 
 \subsubsection{The $2 \times 3$ Benchmark Matrix}
 
-The central open question is whether, and under what conditions, QDW or QTW
-provide a meaningful speedup for each fermion formulation.
-We propose a systematic $2 \times 3$ benchmark:
+Section~\ref{sec:results} settled one half of the original question---QDW and
+QTW reach far below FP64 in the eo-preconditioned DWF solver---but left the
+\emph{speedup} question open: at the modest condition numbers tested, precision
+did not reduce the iteration count. The remaining open question is therefore
+whether, and under what conditions (notably large $\kappa$), QDW or QTW provide
+a meaningful \emph{time-to-solution} speedup for each fermion formulation. The
+DWF$+$CGNE column has been implemented and measured for accuracy; the
+Wilson$+$BiCGStab column and the large-$\kappa$ speedup regime remain future
+work. We restate the systematic $2 \times 3$ benchmark accordingly:
 
 \begin{table}[H]
 \centering
@@ -1634,56 +1693,69 @@ We propose a systematic $2 \times 3$ benchmark:
 \end{tabular}
 \end{table}
 
-\subsubsection{Predicted Behaviour and Hypotheses}
+\subsubsection{Hypotheses Revisited in Light of the Measurements}
+
+The original predictions assumed precision would primarily cut the iteration
+count $K$. The measurements (Section~\ref{sec:results}) show this holds only at
+large $\kappa$; in the tested regime precision instead lowers the residual
+floor. The table below separates the confirmed accuracy effect from the
+still-open speedup effect.
 
 \begin{table}[H]
 \centering
-\caption{Predicted behaviour per cell.
-         ``$\downarrow K$'' = iteration count reduction relative to FP64.}
+\caption{Status per cell. ``$\downarrow K$'' = iteration-count reduction
+         relative to FP64 (the speedup effect, regime-dependent);
+         ``floor'' = lower attainable residual (the reach effect, confirmed).}
 \begin{tabular}{lll}
 \toprule
  & \textbf{Wilson + BiCGStab} & \textbf{DWF + CGNE} \\
 \midrule
-FP64 & Converges for moderate $\kappa$; & Stagnates earlier ($\kappa^2$); \\
-     & stagnates near $m_{\mathrm{crit}}$ & often the current bottleneck \\[4pt]
-QDW  & Moderate $\downarrow K$; & Larger $\downarrow K$; \\
-     & overhead $\approx 1.3\times$ likely absorbed & QDW may already be sufficient \\[4pt]
-QTW  & $\downarrow K$ over QDW small; & $\downarrow K$ over QDW likely significant; \\
-     & total time may increase & QTW may win on total time \\
+FP64 & Baseline (future work)            & Baseline; floor $\sim\kappa\,\uu$ \\[4pt]
+QDW  & $\downarrow K$ expected at large  & \textbf{Reach confirmed} ($\sim\!10^{-62}$, FP64-base); \\
+     & $\kappa$ (future work)            & no $\downarrow K$ at tested $\kappa\sim10^3$ \\[4pt]
+QTW  & Future work                       & \textbf{Reach confirmed} ($\sim\!10^{-76}$, FP64-base); \\
+     &                                   & $\downarrow K$ crossover still open \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Testable hypotheses:
+Revised hypotheses, with current status:
 \begin{enumerate}
-  \item \textbf{H1 (DWF benefits more):} The squared condition number means
-        QDW/QTW provide larger iteration-count reduction for DWF+CGNE than
-        for Wilson+BiCGStab.
+  \item \textbf{H1 (reach hierarchy)---\emph{confirmed}.} QDW and QTW provide a
+        clean attainable-accuracy ladder for DWF$+$CGNE (FP $<$ DW $<$ TW
+        floors), verified on both the tiled test gauge and a real thermalized
+        $16^4$ configuration. The original ``larger $\downarrow K$ for DWF''
+        framing is \emph{regime-dependent}: at the tested
+        $\kappa(D^\dagger D)\sim10^3$ the iteration count is precision-
+        independent (Section~\ref{sec:results}).
 
-  \item \textbf{H2 (QTW crossover for DWF):} There exists $\kappa^{**}$ near
-        $\kappa_{\mathrm{crit}}$ where QTW achieves shorter total wall time
-        than QDW for DWF+CGNE, as the iteration reduction outweighs the
-        $\approx 1.85\times$ per-iteration overhead difference.
+  \item \textbf{H2 (QTW iteration crossover for DWF)---\emph{open}.} Whether a
+        $\kappa^{**}$ exists at which QTW cuts $K$ enough to beat QDW on total
+        wall time was \emph{not} reached here, because eo-preconditioning kept
+        $\kappa$ far below the stagnation threshold. Testing it requires the
+        large-$\kappa$ regime (small mass $+$ large volume, weaker
+        preconditioning, or larger $\alpha$~\cite{Chen2026}).
 
-  \item \textbf{H3 (Wilson may not need QTW):} For Wilson+BiCGStab at typical
-        parameters, QDW suffices and QTW provides no total-time benefit.
+  \item \textbf{H3 (Wilson may not need QTW)---\emph{untested}.} The
+        Wilson$+$BiCGStab column is not yet implemented; this remains a
+        prediction.
 \end{enumerate}
 
 \subsubsection{Implementation Plan}
 
 \begin{table}[H]
 \centering
-\caption{Implementation checklist.}
-\begin{tabular}{clll}
+\caption{Implementation checklist (status: \checkmark{} done, --- future work).}
+\begin{tabular}{cllc}
 \toprule
-\textbf{Step} & \textbf{Task} & \textbf{Layout} & \textbf{Notes} \\
+\textbf{Step} & \textbf{Task} & \textbf{Layout} & \textbf{Status} \\
 \midrule
-1 & FP64 BiCGStab (Wilson)   & existing \texttt{double2} AoSoA & baseline \\
-2 & FP64 CGNE (DWF)          & same                             & baseline \\
-3 & QDW BiCGStab              & \texttt{double4}, Eq.~\eqref{eq:d4_index} & Section~\ref{sec:double4} \\
-4 & QDW CGNE                  & same                             & \\
-5 & QTW BiCGStab              & SoA $\times 3$ (hi/mid/lo)       & Section~\ref{sec:layout} \\
-6 & QTW CGNE                  & same                             & \\
+1 & FP64 BiCGStab (Wilson)   & existing \texttt{double2} AoSoA            & --- \\
+2 & FP64 CGNE (DWF)          & same                                       & \checkmark \\
+3 & QDW BiCGStab              & \texttt{double4}, Eq.~\eqref{eq:d4_index} & --- \\
+4 & QDW CGNE (DWF)            & \texttt{double4}, Section~\ref{sec:layout} & \checkmark \\
+5 & QTW BiCGStab              & SoA $\times 3$ (hi/mid/lo)                 & --- \\
+6 & QTW CGNE (DWF)            & SoA $\times 3$, Section~\ref{sec:layout}   & \checkmark \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1697,14 +1769,18 @@ The crossing points $\kappa^*$ (FP64 stagnates) and $\kappa^{**}$
 (QDW stagnates / QTW becomes faster) are the primary observables.
 
 \begin{tcolorbox}[keybox={Why This Benchmark Matters}]
-This is the first systematic evaluation of quasi multi-word arithmetic
-in GPU-accelerated Lattice QCD solvers, covering both Wilson (BiCGStab)
-and DWF (CGNE) formulations.
+The DWF$+$CGNE half of this programme is, to our knowledge, the first
+demonstration of genuine quasi multi-word arithmetic (FP32-base and FP64-base,
+QDW and QTW) in a GPU-accelerated Lattice QCD solver, reaching tens of orders
+of magnitude below native FP64 (Section~\ref{sec:results}).
 It occupies a distinct region of the precision-performance design space
 from both~\cite{Kanamori2026} (FP16, lower precision) and~\cite{Chen2026}
-(Neff's operator, algebraic $\kappa$ reduction).
+(Neff's operator, algebraic $\kappa$ reduction)---and the latter's $\alpha$
+parameter is precisely the condition-number knob needed to drive the
+outstanding large-$\kappa$ speedup tests.
 The Bridge++ codebase~\cite{Chen2025} provides a unified framework making
-a controlled $2\times3$ comparison feasible.
+the full controlled $2\times3$ comparison---once the Wilson column is added---
+feasible.
 \end{tcolorbox}
 
 

@@ -21,6 +21,11 @@ void initDomainwallConstantMemory(
     float* e, float* f, float* dpinv,
     float* dm, float* b, float* c, int Ns);
 
+// b/c-only upload (mass-independent Moebius coefficients) for the non-eo dd
+// operator; does not disturb const_e/f/dpinv (see constant_memory.cu).
+void setDomainwallConstantBC(double* b, double* c, int Ns);
+void setDomainwallConstantBC(float*  b, float*  c, int Ns);
+
 // Push float-float (hi/lo) pairs into const_*_float (hi) and const_*_ff_lo (lo).
 // Used by extended_precision=true on a float base so kernels read coefficients at
 // ~48-bit precision and do FP32-only dw_add/dw_mul. Recomputes the coefficients in
@@ -42,11 +47,13 @@ void initDomainwallConstantMemoryTW(
 
 void mult_domainwall_5din_5dir_dirac(
         double *vp, double *yp, double *wp,
-        double mq, double M0, int Ns, double *b, double *c, int *Nsize);
+        double mq, double M0, int Ns, double *b, double *c, int *Nsize,
+        double alpha = 1.0);
 
 void mult_domainwall_5din_5dirdag_dirac(
         double *vp, double *yp, double *wp,
-        double mq, double M0, int Ns, double *b, double *c, int *Nsize);
+        double mq, double M0, int Ns, double *b, double *c, int *Nsize,
+        double alpha = 1.0);
 
 void mult_domainwall_5din_mult_gm5_dirac(
         double *vp, double *wp, int Ns, int *Nsize);
@@ -415,11 +422,13 @@ void mult_domainwall_5din_ee_LUdaginv_dirac_qtw(
 
 void mult_domainwall_5din_5dir_dirac(
         float *vp, float *yp, float *wp,
-        float mq, float M0, int Ns, float *b, float *c, int *Nsize);
+        float mq, float M0, int Ns, float *b, float *c, int *Nsize,
+        float alpha = 1.0);
 
 void mult_domainwall_5din_5dirdag_dirac(
         float *vp, float *yp, float *wp,
-        float mq, float M0, int Ns, float *b, float *c, int *Nsize);
+        float mq, float M0, int Ns, float *b, float *c, int *Nsize,
+        float alpha = 1.0);
 
 void mult_domainwall_5din_mult_gm5_dirac(
         float *vp, float *wp, int Ns, int *Nsize);

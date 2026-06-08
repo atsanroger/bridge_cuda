@@ -2,7 +2,7 @@
       @file    mult_Domainwall_5din_cuda-inc.h
       @brief
       @author  Wei-Lun Chen (wlchen)
-      @date    $LastChangedDate: 2024-06-12 16:42:53 #$
+      @date    $LastChangedDate: 2026-06-09 16:42:53 #$
       @version $LastChangedRevision: 2606 $
 */
 
@@ -12,235 +12,279 @@
 #include "../inline/constant_memory_inline.h"
 
 //====================================================================
-__global__ 
+__global__
 void mult_domainwall_5din_5dir_dirac_kernel(
-    real_t *vp, real_t *yp, real_t *wp,
-    real_t mq, real_t M0, int Ns, int Nst_pad) {
+    real_t * __restrict__ vp, real_t * __restrict__ yp,
+    real_t * __restrict__ wp,
+    real_t mq, real_t M0, int Ns, real_t alpha, int Nst_pad) {
+
+  // Forward 5d block of the (non-eo) Moebius domain-wall operator.
+  // Produces vp = D_5 w (diagonal + 5d-Wilson hop) and the precond auxiliary
+  // yp = -0.5 (b*self + c*hop) used by the 4d hopping.  Color/Re-Im (ivc) is
+  // parallelized over threads (one (site,ivc) per thread, NWP-coalesced) and
+  // b/c are read from __constant__ memory; matches the eo/dd kernel layout.
+  //
+  // Neff alpha (bulk-vs-boundary 5D scaling): the 5d hop gets 0.5*alpha in the
+  // bulk (mass-boundary terms keep -0.5*mq), and the self block becomes
+  // alpha*w in the bulk but a chiral (gamma5) mix 0.5(1+alpha) +/- 0.5(-+1+alpha)
+  // at the s=0 / s=Ns-1 corners.  alpha = 1 reduces to the standard operator.
 
   const int Nin5     = NVCD * Ns;
   const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
-  const int GridSize = gridDim.x *blockDim.x;
+  const int GridSize = blockDim.x * gridDim.x;
 
   const real_t *b_con = const_b;
   const real_t *c_con = const_c;
 
-  // Each thread handles one full site (all NVCD*Ns components are processed
-  // in the inner loops below), so the grid-stride range is the site count.
-  // Note: idx is used directly as the site index in IDX2, hence the bound is
-  // Nst_pad, not Nst_pad*NVC (the latter would index NVC-fold out of bounds).
-  for (int idx = ist; idx < Nst_pad; idx += GridSize){
+  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize) {
 
-      for (int is = 0; is < Ns; ++is){
+    int idx2_wp = idx / NWP;
+    int idx_in  = idx % NWP;
+    int ivc     = idx2_wp % NVC;
+    int idx_out = idx2_wp / NVC;
+    int site    = idx_in + NWP * idx_out;
 
-          real_t vt[NVCD], wt[NVCD];
+    for (int is = 0; is < Ns; ++is) {
 
-          int is_up = (is + 1) % Ns;
-          real_t Fup = 0.5;
-          if (is == Ns - 1)
-              Fup = -0.5 * mq;
+      real_t B_is = b_con[is] * (4.0 - M0) + 1.0;
+      real_t C_is = c_con[is] * (4.0 - M0) - 1.0;
 
-          for (int ivcd = 0; ivcd < NVCD; ++ivcd)
-          {
-              wt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is_up), idx)];
-          }
-          for (int ivc = 0; ivc < NVC; ++ivc)
-          {
-              vt[ID1 + ivc] = Fup * (wt[ID1 + ivc] - wt[ID3 + ivc]);
-              vt[ID2 + ivc] = Fup * (wt[ID2 + ivc] - wt[ID4 + ivc]);
-              vt[ID3 + ivc] = Fup * (wt[ID3 + ivc] - wt[ID1 + ivc]);
-              vt[ID4 + ivc] = Fup * (wt[ID4 + ivc] - wt[ID2 + ivc]);
-          }
+      real_t vt1, vt2, vt3, vt4;
+      real_t wt1, wt2, wt3, wt4;
 
-          int is_dn = (is - 1 + Ns) % Ns;
-          real_t Fdn = 0.5;
-          if (is == 0)
-              Fdn = -0.5 * mq;
+      int is_up = (is + 1) % Ns;
+      real_t Fup = 0.5 * alpha;
+      if (is == Ns - 1) Fup = -0.5 * mq;
+      wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is_up), site)];
+      wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is_up), site)];
+      wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is_up), site)];
+      wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is_up), site)];
+      vt1 = Fup * (wt1 - wt3);
+      vt2 = Fup * (wt2 - wt4);
+      vt3 = Fup * (wt3 - wt1);
+      vt4 = Fup * (wt4 - wt2);
 
-          for (int ivcd = 0; ivcd < NVCD; ++ivcd)
-          {
-              wt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is_dn), idx)];
-          }
-          for (int ivc = 0; ivc < NVC; ++ivc)
-          {
-              vt[ID1 + ivc] += Fdn * (wt[ID1 + ivc] + wt[ID3 + ivc]);
-              vt[ID2 + ivc] += Fdn * (wt[ID2 + ivc] + wt[ID4 + ivc]);
-              vt[ID3 + ivc] += Fdn * (wt[ID3 + ivc] + wt[ID1 + ivc]);
-              vt[ID4 + ivc] += Fdn * (wt[ID4 + ivc] + wt[ID2 + ivc]);
-          }
+      int is_dn = (is - 1 + Ns) % Ns;
+      real_t Fdn = 0.5 * alpha;
+      if (is == 0) Fdn = -0.5 * mq;
+      wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is_dn), site)];
+      wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is_dn), site)];
+      wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is_dn), site)];
+      wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is_dn), site)];
+      vt1 += Fdn * (wt1 + wt3);
+      vt2 += Fdn * (wt2 + wt4);
+      vt3 += Fdn * (wt3 + wt1);
+      vt4 += Fdn * (wt4 + wt2);
 
-          real_t B_is = b_con[is] * (4.0 - M0) + 1.0;
-          real_t C_is = c_con[is] * (4.0 - M0) - 1.0;
+      wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+      wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+      wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+      wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
 
-          for (int ivcd = 0; ivcd < NVCD; ++ivcd)
-          {
-              wt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is), idx)];
-          }
-
-          for (int ivcd = 0; ivcd < NVCD; ++ivcd)
-          {
-              vp[IDX2(Nin5, (ivcd + NVCD * is), idx)] = B_is * wt[ivcd] + C_is * vt[ivcd];
-              yp[IDX2(Nin5, (ivcd + NVCD * is), idx)] = -0.5 * (b_con[is] * wt[ivcd] + c_con[is] * vt[ivcd]);
-          }
+      real_t st1, st2, st3, st4;
+      if (is == 0) {
+        real_t f1 = 0.5 * (1.0 + alpha);
+        real_t f2 = 0.5 * (-1.0 + alpha);
+        st1 = f1 * wt1 + f2 * wt3;
+        st2 = f1 * wt2 + f2 * wt4;
+        st3 = f1 * wt3 + f2 * wt1;
+        st4 = f1 * wt4 + f2 * wt2;
+      } else if (is == Ns - 1) {
+        real_t f1 = 0.5 * (1.0 + alpha);
+        real_t f2 = 0.5 * (1.0 - alpha);
+        st1 = f1 * wt1 + f2 * wt3;
+        st2 = f1 * wt2 + f2 * wt4;
+        st3 = f1 * wt3 + f2 * wt1;
+        st4 = f1 * wt4 + f2 * wt2;
+      } else {
+        st1 = alpha * wt1;
+        st2 = alpha * wt2;
+        st3 = alpha * wt3;
+        st4 = alpha * wt4;
       }
+
+      real_t b_is = b_con[is];
+      real_t c_is = c_con[is];
+      vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = B_is * st1 + C_is * vt1;
+      vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = B_is * st2 + C_is * vt2;
+      vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = B_is * st3 + C_is * vt3;
+      vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = B_is * st4 + C_is * vt4;
+      yp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = -0.5 * (b_is * st1 + c_is * vt1);
+      yp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = -0.5 * (b_is * st2 + c_is * vt2);
+      yp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = -0.5 * (b_is * st3 + c_is * vt3);
+      yp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = -0.5 * (b_is * st4 + c_is * vt4);
+    }
   }
 }
 
 
 void mult_domainwall_5din_5dir_dirac(
     real_t *vp, real_t *yp, real_t *wp,
-    real_t mq, real_t M0, int Ns, real_t *b, real_t *c, int *Nsize) {
+    real_t mq, real_t M0, int Ns, real_t *b, real_t *c, int *Nsize,
+    real_t alpha) {
+  // b/c are read from __constant__ memory (const_b/const_c) inside the kernel;
+  // the b/c pointer args are kept only for backward signature compatibility.
+  (void)b; (void)c;
 
-  int Nx = Nsize[0];
-  int Ny = Nsize[1];
-  int Nz = Nsize[2];
-  int Nt = Nsize[3];
-  int Nst = Nx * Ny * Nz * Nt;
+  int Nst = Nsize[0] * Nsize[1] * Nsize[2] * Nsize[3];
+  int Nst_pad = ceil_nwp(Nst);
 
   real_t* vp_dev = (real_t*)dev_ptr(vp);
   real_t* yp_dev = (real_t*)dev_ptr(yp);
   real_t* wp_dev = (real_t*)dev_ptr(wp);
 
   int blockSize = VECTOR_LENGTH;
-  int gridSize  = (Nst + blockSize - 1)/ blockSize;
+  int gridSize  = (Nst_pad * NVC + blockSize - 1) / blockSize;
   mult_domainwall_5din_5dir_dirac_kernel<<<gridSize, blockSize>>>(
-      vp_dev, yp_dev, wp_dev, mq, M0, Ns, Nst);
+      vp_dev, yp_dev, wp_dev, mq, M0, Ns, alpha, Nst_pad);
 
   CHECK(cudaDeviceSynchronize());
 }
 
 //====================================================================
-__global__ 
+__global__
 void mult_domainwall_5din_5dirdag_dirac_kernel(
-    real_t *vp, real_t *yp, real_t *wp,
-    real_t mq, real_t M0, int Ns, real_t *b_dev, real_t *c_dev, int Nst) 
-{
-    const int Nin5 = NVCD * Ns;
-    const int site = blockIdx.x * blockDim.x + threadIdx.x;
+    real_t * __restrict__ vp, real_t * __restrict__ yp,
+    real_t * __restrict__ wp,
+    real_t mq, real_t M0, int Ns, real_t alpha, int Nst_pad) {
 
-    extern __shared__ real_t shared_mem[];
-    real_t* b = shared_mem;
-    real_t* c = &shared_mem[Ns]; 
+  // Adjoint (dagger) of the forward 5d block.  Takes both wp and the precond
+  // auxiliary yp as inputs.  Color/Re-Im parallel, const-memory b/c, same Neff
+  // alpha congruence as the forward kernel (self block chirally mixed at the
+  // s corners, 5d hop scaled by alpha in the bulk).  alpha = 1 -> standard.
 
-    int tid = threadIdx.x;
-    if(tid < Ns) {
-        b[tid] = b_dev[tid];
-        c[tid] = c_dev[tid];
+  const int Nin5     = NVCD * Ns;
+  const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
+  const int GridSize = blockDim.x * gridDim.x;
+
+  const real_t *b_con = const_b;
+  const real_t *c_con = const_c;
+
+  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize) {
+
+    int idx2_wp = idx / NWP;
+    int idx_in  = idx % NWP;
+    int ivc     = idx2_wp % NVC;
+    int idx_out = idx2_wp / NVC;
+    int site    = idx_in + NWP * idx_out;
+
+    for (int is = 0; is < Ns; ++is) {
+
+      real_t B1 = b_con[is] * (4.0 - M0) + 1.0;
+      real_t a1 = -0.5 * b_con[is];
+
+      real_t wt1, wt2, wt3, wt4;
+      real_t yt1, yt2, yt3, yt4;
+
+      // self block: S = B1*w + a1*gamma5(y), then alpha congruence.
+      wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+      wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+      wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+      wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+      yt1 = yp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+      yt2 = yp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+      yt3 = yp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+      yt4 = yp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+      real_t s1 = B1 * wt1 + a1 * yt3;
+      real_t s2 = B1 * wt2 + a1 * yt4;
+      real_t s3 = B1 * wt3 + a1 * yt1;
+      real_t s4 = B1 * wt4 + a1 * yt2;
+
+      real_t vt1, vt2, vt3, vt4;
+      if (is == 0) {
+        real_t f1 = 0.5 * (1.0 + alpha);
+        real_t f2 = 0.5 * (-1.0 + alpha);
+        vt1 = f1 * s1 + f2 * s3;
+        vt2 = f1 * s2 + f2 * s4;
+        vt3 = f1 * s3 + f2 * s1;
+        vt4 = f1 * s4 + f2 * s2;
+      } else if (is == Ns - 1) {
+        real_t f1 = 0.5 * (1.0 + alpha);
+        real_t f2 = 0.5 * (1.0 - alpha);
+        vt1 = f1 * s1 + f2 * s3;
+        vt2 = f1 * s2 + f2 * s4;
+        vt3 = f1 * s3 + f2 * s1;
+        vt4 = f1 * s4 + f2 * s2;
+      } else {
+        vt1 = alpha * s1;
+        vt2 = alpha * s2;
+        vt3 = alpha * s3;
+        vt4 = alpha * s4;
+      }
+
+      int is_up = (is + 1) % Ns;
+      real_t C1  = c_con[is_up] * (4.0 - M0) - 1.0;
+      real_t aup = -0.5 * c_con[is_up];
+      wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is_up), site)];
+      wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is_up), site)];
+      wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is_up), site)];
+      wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is_up), site)];
+      yt1 = yp[IDX2(Nin5, (ID1 + ivc + NVCD * is_up), site)];
+      yt2 = yp[IDX2(Nin5, (ID2 + ivc + NVCD * is_up), site)];
+      yt3 = yp[IDX2(Nin5, (ID3 + ivc + NVCD * is_up), site)];
+      yt4 = yp[IDX2(Nin5, (ID4 + ivc + NVCD * is_up), site)];
+      real_t xu1 = C1 * wt1 + aup * yt3;
+      real_t xu2 = C1 * wt2 + aup * yt4;
+      real_t xu3 = C1 * wt3 + aup * yt1;
+      real_t xu4 = C1 * wt4 + aup * yt2;
+      real_t Fup = 0.5 * alpha;
+      if (is == Ns - 1) Fup = -0.5 * mq;
+      vt1 += Fup * (xu1 + xu3);
+      vt2 += Fup * (xu2 + xu4);
+      vt3 += Fup * (xu3 + xu1);
+      vt4 += Fup * (xu4 + xu2);
+
+      int is_dn = (is - 1 + Ns) % Ns;
+      real_t C2  = c_con[is_dn] * (4.0 - M0) - 1.0;
+      real_t adn = -0.5 * c_con[is_dn];
+      wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is_dn), site)];
+      wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is_dn), site)];
+      wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is_dn), site)];
+      wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is_dn), site)];
+      yt1 = yp[IDX2(Nin5, (ID1 + ivc + NVCD * is_dn), site)];
+      yt2 = yp[IDX2(Nin5, (ID2 + ivc + NVCD * is_dn), site)];
+      yt3 = yp[IDX2(Nin5, (ID3 + ivc + NVCD * is_dn), site)];
+      yt4 = yp[IDX2(Nin5, (ID4 + ivc + NVCD * is_dn), site)];
+      real_t xd1 = C2 * wt1 + adn * yt3;
+      real_t xd2 = C2 * wt2 + adn * yt4;
+      real_t xd3 = C2 * wt3 + adn * yt1;
+      real_t xd4 = C2 * wt4 + adn * yt2;
+      real_t Fdn = 0.5 * alpha;
+      if (is == 0) Fdn = -0.5 * mq;
+      vt1 += Fdn * (xd1 - xd3);
+      vt2 += Fdn * (xd2 - xd4);
+      vt3 += Fdn * (xd3 - xd1);
+      vt4 += Fdn * (xd4 - xd2);
+
+      vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = vt1;
+      vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt2;
+      vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt3;
+      vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt4;
     }
-
-
-    if (site < Nst) {
-        for (int is = 0; is < Ns; ++is) {
-            real_t vt[NVCD], xt[NVCD], wt[NVCD], yt[NVCD];
-
-            real_t B1 = b[is] * (4.0 - M0) + 1.0;
-            real_t a1 = -0.5 * b[is];
-
-            for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-                wt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-                yt[ivcd] = yp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-            }
-
-            for (int ivc = 0; ivc < NVC; ++ivc) {
-                vt[ID1 + ivc] = B1 * wt[ID1 + ivc] + a1 * yt[ID3 + ivc];
-                vt[ID2 + ivc] = B1 * wt[ID2 + ivc] + a1 * yt[ID4 + ivc];
-                vt[ID3 + ivc] = B1 * wt[ID3 + ivc] + a1 * yt[ID1 + ivc];
-                vt[ID4 + ivc] = B1 * wt[ID4 + ivc] + a1 * yt[ID2 + ivc];
-            }
-
-            int is_up = (is + 1) % Ns;
-            real_t C1 = c[is_up] * (4.0 - M0) - 1.0;
-            real_t aup = -0.5 * c[is_up];
-
-            for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-                wt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is_up), site)];
-                yt[ivcd] = yp[IDX2(Nin5, (ivcd + NVCD * is_up), site)];
-            }
-
-            for (int ivc = 0; ivc < NVC; ++ivc) {
-                xt[ID1 + ivc] = C1 * wt[ID1 + ivc] + aup * yt[ID3 + ivc];
-                xt[ID2 + ivc] = C1 * wt[ID2 + ivc] + aup * yt[ID4 + ivc];
-                xt[ID3 + ivc] = C1 * wt[ID3 + ivc] + aup * yt[ID1 + ivc];
-                xt[ID4 + ivc] = C1 * wt[ID4 + ivc] + aup * yt[ID2 + ivc];
-            }
-
-            real_t Fup = 0.5;
-            if (is == Ns-1) Fup = -0.5 * mq;
-
-            for (int ivc = 0; ivc < NVC; ++ivc) {
-                vt[ID1 + ivc] += Fup * (xt[ID1 + ivc] + xt[ID3 + ivc]);
-                vt[ID2 + ivc] += Fup * (xt[ID2 + ivc] + xt[ID4 + ivc]);
-                vt[ID3 + ivc] += Fup * (xt[ID3 + ivc] + xt[ID1 + ivc]);
-                vt[ID4 + ivc] += Fup * (xt[ID4 + ivc] + xt[ID2 + ivc]);
-            }
-
-            int is_dn = (is - 1 + Ns) % Ns;
-
-            real_t C2  = c[is_dn] * (4.0 - M0) - 1.0;
-            real_t adn = -0.5 * c[is_dn];
-
-            for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-                wt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is_dn), site)];
-                yt[ivcd] = yp[IDX2(Nin5, (ivcd + NVCD * is_dn), site)];
-            }
-
-            for (int ivc = 0; ivc < NVC; ++ivc) {
-                xt[ID1 + ivc] = C2 * wt[ID1 + ivc] + adn * yt[ID3 + ivc];
-                xt[ID2 + ivc] = C2 * wt[ID2 + ivc] + adn * yt[ID4 + ivc];
-                xt[ID3 + ivc] = C2 * wt[ID3 + ivc] + adn * yt[ID1 + ivc];
-                xt[ID4 + ivc] = C2 * wt[ID4 + ivc] + adn * yt[ID2 + ivc];
-            }
-
-            real_t Fdn = 0.5;
-            if (is == 0) Fdn = -0.5 * mq;
-
-            for (int ivc = 0; ivc < NVC; ++ivc) {
-                vt[ID1 + ivc] += Fdn * (xt[ID1 + ivc] - xt[ID3 + ivc]);
-                vt[ID2 + ivc] += Fdn * (xt[ID2 + ivc] - xt[ID4 + ivc]);
-                vt[ID3 + ivc] += Fdn * (xt[ID3 + ivc] - xt[ID1 + ivc]);
-                vt[ID4 + ivc] += Fdn * (xt[ID4 + ivc] - xt[ID2 + ivc]);
-            }
-
-            for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-                vp[IDX2(Nin5, (ivcd + NVCD * is), site)] = vt[ivcd];
-            }
-        }
-    }
+  }
 }
 
 void mult_domainwall_5din_5dirdag_dirac(
     real_t *vp, real_t *yp, real_t *wp,
-    real_t mq, real_t M0, int Ns, real_t *b, real_t *c, int *Nsize) {
+    real_t mq, real_t M0, int Ns, real_t *b, real_t *c, int *Nsize,
+    real_t alpha) {
+  // b/c from __constant__ memory; pointer args kept for ABI compatibility.
+  (void)b; (void)c;
 
-    int Nx = Nsize[0];
-    int Ny = Nsize[1];
-    int Nz = Nsize[2];
-    int Nt = Nsize[3];
-    int Nst  = Nx * Ny * Nz * Nt;
+  int Nst = Nsize[0] * Nsize[1] * Nsize[2] * Nsize[3];
+  int Nst_pad = ceil_nwp(Nst);
 
-    real_t* vp_dev = (real_t*)dev_ptr(vp);
-    real_t* yp_dev = (real_t*)dev_ptr(yp);
-    real_t* wp_dev = (real_t*)dev_ptr(wp);
+  real_t* vp_dev = (real_t*)dev_ptr(vp);
+  real_t* yp_dev = (real_t*)dev_ptr(yp);
+  real_t* wp_dev = (real_t*)dev_ptr(wp);
 
-    real_t* b_dev;
-    real_t* c_dev; 
+  int blockSize = VECTOR_LENGTH;
+  int gridSize = (Nst_pad * NVC + blockSize - 1) / blockSize;
 
-    size_t nsize = Ns * sizeof(real_t);
+  mult_domainwall_5din_5dirdag_dirac_kernel<<<gridSize, blockSize>>>(
+      vp_dev, yp_dev, wp_dev, mq, M0, Ns, alpha, Nst_pad);
 
-    CHECK(cudaMalloc((void **)&b_dev , nsize));
-    CHECK(cudaMalloc((void **)&c_dev , nsize));
-
-    CHECK(cudaMemcpy(b_dev, b, nsize, cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(c_dev, c, nsize, cudaMemcpyHostToDevice));
-
-    int blockSize = VECTOR_LENGTH;
-    int gridSize = (Nst + blockSize - 1)/ blockSize;
-
-    mult_domainwall_5din_5dirdag_dirac_kernel<<<gridSize, blockSize, 2 * nsize>>>(
-        vp_dev, yp_dev, wp_dev, mq, M0, Ns, b_dev, c_dev, Nst);
-
-    CHECK(cudaDeviceSynchronize());
-    CHECK(cudaFree(b_dev));
-    CHECK(cudaFree(c_dev));
+  CHECK(cudaDeviceSynchronize());
 }
 
 //====================================================================
@@ -601,11 +645,11 @@ void mult_domainwall_5din_hopb_5D_dirac_kernel(
      int do_comm_x, int do_comm_y, int do_comm_z, int do_comm_t,
      int flag, int Nst_pad) 
 {
-    int Nin5 = NVCD * Ns;
-    int Nxy  = Nx   * Ny;
-    int Nxyz = Nxy  * Nz;
-    int Nst  = Nx   * Ny * Nz * Nt;
-    int idx  = blockIdx.x * blockDim.x + threadIdx.x;
+    const int Nin5 = NVCD * Ns;
+    const int Nxy  = Nx   * Ny;
+    const int Nxyz = Nxy * Nz;
+    const int Nst  = Nx * Ny * Nz * Nt;
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     extern __shared__ real_t sharedMemory[];
     real_t * u_up = up;
     real_t * u_dn = up;
@@ -719,8 +763,8 @@ __global__ void mult_domainwall_5din_L_inv_dirac_kernel(
     int Nx, int Ny, int Nz, int Nt, 
     int Nin5, real_t *e, real_t *dpinv, real_t *dm) {
 
-    int site = blockIdx.x * blockDim.x + threadIdx.x;
-    int Nst = Nx * Ny * Nz * Nt;
+    const int site = blockIdx.x * blockDim.x + threadIdx.x;
+    const int Nst = Nx * Ny * Nz * Nt;
 
     if (site < Nst) {
         real_t vt[NVCD], yt[NVCD], xt[NVCD];

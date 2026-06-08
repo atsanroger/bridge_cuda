@@ -18,6 +18,7 @@
 #include "spectrum_Staggered_alt-tmpl.h"
 #include "spectrum_LinearAlgebra_alt-tmpl.h"
 #include "eigenvalue_alt-tmpl.h"
+#include "spectrum_Domainwall_PVprec_alt-tmpl.h"
 #include "spectrum_AdjointWilson_alt-tmpl.h"
 
 namespace Test_alt_Accel{
@@ -32,6 +33,10 @@ namespace Test_alt_Accel{
   int test_Eigenvalue_Wilson_Lanczos();
   int test_Eigenvalue_Clover_Lanczos();
   int test_Eigenvalue_Wilson_Arnoldi();
+  int test_Eigenvalue_Domainwall_PVprec_Arnoldi();
+  int test_Solve_Domainwall_PVprec_BiCGStab();
+  int test_Solve_Domainwall_PVprec_Propagator();
+  int test_Solve_Domainwall_PVprec_2pt();
   int test_Eigenvalue_Staggered_Lanczos();
   int test_Eigenvalue_Staggered_Arnoldi();
   int test_Spectrum_AdjointWilson_Lanczos();
@@ -45,7 +50,11 @@ int Test_alt_Accel::test_all()
   // result += test_Spectrum_Wilson();
   // result += test_Spectrum_Clover();
   // result += test_Spectrum_Staggered();
-   result += test_Spectrum_Domainwall_5din();
+  // result += test_Eigenvalue_Domainwall_PVprec_Arnoldi();
+  // result += test_Solve_Domainwall_PVprec_BiCGStab();
+  // result += test_Solve_Domainwall_PVprec_Propagator();
+   result += test_Spectrum_Domainwall_5din();           // CGNE 2pt + m_res (reference; non-eo vs eo alpha cross-check)
+  // result += test_Solve_Domainwall_PVprec_2pt();        // A-based GMRES 2pt + m_res: confirm vs preset 4.58e-01 / mres 1.87e-3
   // result += test_Spectrum_Domainwall();
   // result += test_Spectrum_OptimalDomainwall();
   // result += test_Eigenvalue_Wilson_Lanczos();
@@ -258,6 +267,66 @@ int Test_alt_Accel::test_Eigenvalue_Wilson_Arnoldi()
 
   int result = 0;
   result += test_wilson.eigenvalue_Arnoldi(test_file);
+
+  return result;
+}
+
+//====================================================================
+int Test_alt_Accel::test_Eigenvalue_Domainwall_PVprec_Arnoldi()
+{
+  // FP (single precision) spectrum of the Pauli-Villars + site-diagonal
+  // preconditioned Moebius DW operator  (D_PV C_PV^{-1})^dagger C^{-1} D
+  // [Kanamori, Chen, Matsufuru, PoS(LATTICE2024)414].
+  Eigenvalue_alt<AField<double, IMPL> > test_pvprec;
+  string test_file = "test_alt_Eigenvalue_Arnoldi_Domainwall_PVprec.yaml";
+
+  int result = 0;
+  result += test_pvprec.eigenvalue_Arnoldi(test_file);
+
+  return result;
+}
+
+//====================================================================
+int Test_alt_Accel::test_Solve_Domainwall_PVprec_BiCGStab()
+{
+  // Solve A x = b on the positive MG target operator
+  // A = (D_PV C_PV^{-1})^dagger C^{-1} D  [Kanamori, Chen, Matsufuru].
+  // (GMRES(m); BiCGStab breaks down on the non-normal A.)
+  Spectrum_Domainwall_PVprec_alt<AField<double, IMPL> > test_solve;
+  string test_file = "test_alt_Eigenvalue_Arnoldi_Domainwall_PVprec.yaml";
+
+  int result = 0;
+  result += test_solve.solve_A(test_file);
+
+  return result;
+}
+
+//====================================================================
+int Test_alt_Accel::test_Solve_Domainwall_PVprec_Propagator()
+{
+  // Solve the physical propagator D psi = eta via the preconditioned operator
+  // A = (D_PV C_PV^{-1})^dag C^{-1} D, and certify ||D psi - eta||/||eta||.
+  // psi == D^{-1} eta == CGNE solution -> identical 2pt functions.
+  Spectrum_Domainwall_PVprec_alt<AField<double, IMPL> > test_solve;
+  string test_file = "test_alt_Eigenvalue_Arnoldi_Domainwall_PVprec.yaml";
+
+  int result = 0;
+  result += test_solve.solve_propagator(test_file);
+
+  return result;
+}
+
+//====================================================================
+int Test_alt_Accel::test_Solve_Domainwall_PVprec_2pt()
+{
+  // Full hadron 2pt function with every quark propagator solved through the
+  // preconditioned operator A (psi = D^{-1} eta exactly), i.e. the SAME 2pt a
+  // direct CGNE measurement gives.
+  Spectrum_Domainwall_PVprec_alt<AField<double, IMPL> > test_solve;
+  string test_file = "test_alt_Eigenvalue_Arnoldi_Domainwall_PVprec.yaml";
+
+  int result = 0;
+  result += test_solve.solve_2pt(test_file);
 
   return result;
 }

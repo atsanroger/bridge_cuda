@@ -16,6 +16,8 @@ set(BRIDGECUDA_SOURCES
     constant_memory.cu
     bridgeACC_Domainwall_5din_double.cu
     bridgeACC_Domainwall_5din_float.cu
+    bridgeACC_Domainwall_coarse_double.cu
+    bridgeACC_Domainwall_coarse_float.cu
 )
 
 add_library(bridgecuda STATIC ${BRIDGECUDA_SOURCES})

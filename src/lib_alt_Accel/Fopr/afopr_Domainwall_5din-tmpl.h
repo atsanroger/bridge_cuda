@@ -44,6 +44,8 @@ void AFopr_Domainwall_5din<AFIELD>::init(const Parameters& params)
 
   m_repr = "Dirac";  // now only the Dirac repr is available.
 
+  m_alpha = real_t(1.0);  // Neff alpha; overridden in set_parameters if given.
+
   std::string repr;
   if (!params.fetch_string("gamma_matrix_type", repr)) {
     if (repr != "Dirac") {
@@ -134,6 +136,17 @@ void AFopr_Domainwall_5din<AFIELD>::tidyup()
 #endif
 
   }
+
+#ifdef USE_ACCEL_CUDA
+  // release the per-operator device copies of the LU coefficients.
+  if (m_coeff_on_device) {
+    BridgeACC::afield_tidyup(m_e.data(),     m_Ns - 1);
+    BridgeACC::afield_tidyup(m_f.data(),     m_Ns - 1);
+    BridgeACC::afield_tidyup(m_dpinv.data(), m_Ns);
+    BridgeACC::afield_tidyup(m_dm.data(),    m_Ns);
+    m_coeff_on_device = false;
+  }
+#endif
 
 }
 
@@ -231,6 +244,16 @@ void AFopr_Domainwall_5din<AFIELD>::set_parameters(const Parameters& params)
     c = 0.0;
   }
 
+  // Neff alpha (bulk-vs-boundary 5D scaling). Default 1.0 reproduces the
+  // standard Moebius operator. Must be set before set_precond_parameters().
+  double alpha = 1.0;
+  if (params.fetch_double("parameter_alpha", alpha)) {
+    vout.general(m_vl, "  parameter alpha is not provided: set to 1.0.\n");
+    alpha = 1.0;
+  }
+  if (ThreadManager::get_thread_id() == 0) m_alpha = real_t(alpha);
+#pragma omp barrier
+
   set_parameters(real_t(mq), real_t(M0), Ns, bc,
                  real_t(b), real_t(c));
 
@@ -306,6 +329,7 @@ void AFopr_Domainwall_5din<AFIELD>::set_parameters(
   vout.general(m_vl, "%s: input parameters\n", class_name.c_str());
   vout.general(m_vl, "  mq   = %8.4f\n", m_mq);
   vout.general(m_vl, "  M0   = %8.4f\n", m_M0);
+  vout.general(m_vl, "  alpha= %8.4f\n", m_alpha);
   vout.general(m_vl, "  Ns   = %4d\n", m_Ns);
   for (int mu = 0; mu < m_Ndim; ++mu) {
     vout.general(m_vl, "  boundary[%d] = %2d\n", mu, m_boundary[mu]);
@@ -376,13 +400,17 @@ void AFopr_Domainwall_5din<AFIELD>::set_precond_parameters()
       m_f.resize(m_Ns - 1);
     }
 
+    // Neff alpha congruence on the 5D bulk diagonal blocks.
+    // m_dp/m_dm scale by alpha; the alpha cancels in m_e/m_f (the LU factors)
+    // because they are built from m_dm/m_dp ratios, with m_f[0] divided by
+    // alpha. alpha = 1 reproduces the standard Moebius coefficients.
     for (int is = 0; is < m_Ns; ++is) {
-      m_dp[is] = 1.0 + m_b[is] * (4.0 - m_M0);
-      m_dm[is] = 1.0 - m_c[is] * (4.0 - m_M0);
+      m_dp[is] = m_alpha * (1.0 + m_b[is] * (4.0 - m_M0));
+      m_dm[is] = m_alpha * (1.0 - m_c[is] * (4.0 - m_M0));
     }
 
     m_e[0] = m_mq * m_dm[m_Ns - 1] / m_dp[0];
-    m_f[0] = m_mq * m_dm[0];
+    m_f[0] = m_mq * m_dm[0] / m_alpha;
     for (int is = 1; is < m_Ns - 1; ++is) {
       m_e[is] = m_e[is - 1] * m_dm[is - 1] / m_dp[is];
       m_f[is] = m_f[is - 1] * m_dm[is] / m_dp[is - 1];
@@ -394,6 +422,32 @@ void AFopr_Domainwall_5din<AFIELD>::set_precond_parameters()
       m_dpinv[is] = 1.0 / m_dp[is];
     }
     m_dpinv[m_Ns - 1] = 1.0 / (m_dp[m_Ns - 1] + m_g);
+
+#ifdef USE_ACCEL_CUDA
+    // The 5dir/5dirdag CUDA kernels read the Moebius b/c from __constant__
+    // memory. Upload them here so this operator is correct even when no eo
+    // operator (which is the only other uploader) exists in the process.
+    // b/c only -> does not disturb the mass-dependent const_e/f/dpinv.
+    BridgeACC::setDomainwallConstantBC(m_b.data(), m_c.data(), m_Ns);
+
+    // Mass-dependent LU coefficients (e/f/dpinv/dm) are PER-OPERATOR (e.g. the
+    // PVprec wrapper holds D at mq and D_PV at M_PV with different values), so
+    // they cannot live in shared __constant__ memory without clobbering each
+    // other. Instead each operator keeps its own device copy: map once, then
+    // re-upload whenever the coefficients are (re)built. The L/U-inverse
+    // kernels read these via dev_ptr(), so no per-call cudaMalloc is needed.
+    if (!m_coeff_on_device) {
+      BridgeACC::afield_init(m_e.data(),     m_Ns - 1);
+      BridgeACC::afield_init(m_f.data(),     m_Ns - 1);
+      BridgeACC::afield_init(m_dpinv.data(), m_Ns);
+      BridgeACC::afield_init(m_dm.data(),    m_Ns);
+      m_coeff_on_device = true;
+    }
+    BridgeACC::copy_to_device(m_e.data(),     m_Ns - 1);
+    BridgeACC::copy_to_device(m_f.data(),     m_Ns - 1);
+    BridgeACC::copy_to_device(m_dpinv.data(), m_Ns);
+    BridgeACC::copy_to_device(m_dm.data(),    m_Ns);
+#endif
   }
 
 #pragma omp barrier
@@ -814,7 +868,7 @@ void AFopr_Domainwall_5din<AFIELD>::D(AFIELD& v, const AFIELD& w)
 
     BridgeACC::mult_domainwall_5din_5dir_dirac(
                                    vp, yp, wp, m_mq, m_M0, m_Ns,
-                                   &m_b[0], &m_c[0], m_Nsize);
+                                   &m_b[0], &m_c[0], m_Nsize, m_alpha);
 
     if (do_comm_any > 0) {
 
@@ -954,7 +1008,7 @@ void AFopr_Domainwall_5din<AFIELD>::Ddag(AFIELD& v, const AFIELD& w)
 
     BridgeACC::mult_domainwall_5din_5dirdag_dirac(
                                    vp, yp, wp, m_mq, m_M0, m_Ns,
-                                   &m_b[0], &m_c[0], m_Nsize);
+                                   &m_b[0], &m_c[0], m_Nsize, m_alpha);
 
   }
 #pragma omp barrier

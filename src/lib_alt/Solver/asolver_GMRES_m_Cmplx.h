@@ -79,6 +79,7 @@ class ASolver_GMRES_m_Cmplx : public ASolver<AFIELD>
 
   std::vector<AFIELD> m_v;
   AFIELD m_s, m_r, m_x, m_v_tmp;
+  AFIELD m_xbest;       //!< best finite iterate (nan-safety net, see solve())
 
 
   //! calling constructor without fermion operator is forbidden.
@@ -124,10 +125,12 @@ public:
   void set_parameters(const int Niter, const int Nrestart, const real_t Stop_cond, const InitialGuess init_guess_mode, const int N_M);
 
 
+ public:
   void set_init_mode(const InitialGuess init_guess)
   {
     m_initial_mode = init_guess;
   }
+ private:
 
 
   //  int fetch_initial_guess(const Parameters &, const std::string, InitialGuess &);

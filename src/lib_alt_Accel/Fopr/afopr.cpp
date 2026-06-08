@@ -26,6 +26,7 @@
 #include "lib_alt_Accel/Fopr/afopr_Domainwall_5din.h"
 #include "lib_alt_Accel/Fopr/afopr_Domainwall_5din_dd.h"
 #include "lib_alt_Accel/Fopr/afopr_Domainwall_5din_eo.h"
+#include "lib_alt_Accel/Fopr/afopr_Domainwall_PVprec.h"
 #include "lib_alt_Accel/Fopr/afopr_Staggered_CLE.h"
 #include "lib_alt_Accel/Fopr/afopr_Wilson_CLE.h"
 #include "lib/Fopr/afopr_Domainwall.h"
@@ -47,6 +48,7 @@ bool AFopr<AField<double,ACCEL> >::init_factory()
   result &= AFopr_Domainwall_5din<AFIELD>::register_factory();
   result &= AFopr_Domainwall_5din_dd<AFIELD>::register_factory();
   result &= AFopr_Domainwall_5din_eo<AFIELD>::register_factory();
+  result &= AFopr_Domainwall_PVprec<AFIELD>::register_factory();
   result &= AFopr_Domainwall<AFIELD>::register_factory();
   result &= AFopr_Domainwall_eo<AFIELD>::register_factory();
 #ifdef USE_ACCEL_OPENACC
@@ -75,6 +77,7 @@ bool AFopr<AField<float,ACCEL> >::init_factory()
   result &= AFopr_Domainwall_5din<AFIELD>::register_factory();
   result &= AFopr_Domainwall_5din_dd<AFIELD>::register_factory();
   result &= AFopr_Domainwall_5din_eo<AFIELD>::register_factory();
+  result &= AFopr_Domainwall_PVprec<AFIELD>::register_factory();
   result &= AFopr_Domainwall<AFIELD>::register_factory();
   result &= AFopr_Domainwall_eo<AFIELD>::register_factory();
 #ifdef USE_ACCEL_OPENACC

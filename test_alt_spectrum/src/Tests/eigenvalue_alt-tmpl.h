@@ -18,6 +18,10 @@
 #include "lib/Eigen/aeigensolver_IRLanczos.h"
 #include "lib/Eigen/aeigensolver_IRArnoldi.h"
 
+#include "lib_alt/Solver/asolver_BiCGStab_Cmplx.h"
+#include "lib_alt/Solver/asolver_CGNR.h"
+#include "lib_alt/Solver/asolver_GMRES_m_Cmplx.h"
+
 // class name
 
 template<typename AFIELD>
@@ -106,7 +110,7 @@ int Eigenvalue_alt<AFIELD>::measure(std::string file_params,
   int Nk = params_eigen.get_int("number_of_wanted_eigenvectors");
   int Np = params_eigen.get_int("number_of_working_eigenvectors");
   int Nm = Nk + Np;
-  std::vector<dcomplex> TDa(Nm);
+  std::vector<typename AEIGENSOLVER::complex_t> TDa(Nm);
   std::vector<AFIELD>  vk(Nm);
 
   int NFin  = fopr->field_nin();
@@ -243,4 +247,5 @@ int Eigenvalue_alt<AFIELD>::eigenvalue_Lanczos(std::string file_params)
 {
   return measure(file_params, "test");
 }
+
 //============================================================END=====

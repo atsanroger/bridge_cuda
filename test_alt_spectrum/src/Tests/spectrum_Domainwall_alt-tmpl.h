@@ -186,7 +186,7 @@ int Spectrum_Domainwall_alt<IMPL>::hadron_2ptFunction(
   double plaq=calc_plaquette(U.get());
   vout.general(m_vl, "plaquette (before smearing): %23.15f\n", plaq);
   vout.general(m_vl, "applying smearing\n");
-  Timer timer_smearing("smearig");
+  Timer timer_smearing("smearing");
   timer_smearing.reset();
   timer_smearing.start();
 
@@ -349,10 +349,15 @@ int Spectrum_Domainwall_alt<IMPL>::hadron_2ptFunction(
   int Ns = params_fopr.get_int("extent_of_5th_dimension");
   params_fopr.fetch_int("extent_of_5th_dimension", Ns);
 
-  std::vector<Field_F> sq(Nc * Nd);
+  // boundary-projected propagator sq (physical surface field) and the
+  // MIDPOINT-projected sq_mid (5th-dim midpoint field) for the residual mass.
+  std::vector<Field_F> sq(Nc * Nd), sq_mid(Nc * Nd);
   for (int i = 0; i < Nc * Nd; ++i) {
     sq[i].set(0.0);
+    sq_mid[i].set(0.0);
   }
+  const int s_mid_lo = Ns / 2 - 1;   // lower-half top slice
+  const int s_mid_hi = Ns / 2;       // upper-half bottom slice
 
   Field_F b, bt;
   Field_F vt1, vt2;
@@ -430,6 +435,22 @@ int Spectrum_Domainwall_alt<IMPL>::hadron_2ptFunction(
           scal(sq[idx], 0.5);
         }
 
+        // midpoint-projected propagator (for the residual mass): SAME
+        // reconstruction at the s = Ns/2-1 / Ns/2 cut.
+  #pragma omp parallel
+        {
+          copy(vt1, 0, x5, s_mid_hi);
+          copy(vt2, 0, x5, s_mid_lo);
+          copy(sq_mid[idx], vt1);
+  #pragma omp barrier
+          axpy(sq_mid[idx], 1.0, vt2);   // (x5[Ns/2]+x5[Ns/2-1])
+          axpy(vt1, -1.0, vt2);          // (x5[Ns/2]-x5[Ns/2-1])
+  #pragma omp barrier
+          foprw->mult_gm5(vt2, vt1);     // gm5 (x5[Ns/2]-x5[Ns/2-1])
+          axpy(sq_mid[idx], -1.0, vt2);  // (1-gm5)x5[Ns/2] + (1+gm5)x5[Ns/2-1]
+          scal(sq_mid[idx], 0.5);
+        }
+
       }
     }
 
@@ -446,6 +467,34 @@ int Spectrum_Domainwall_alt<IMPL>::hadron_2ptFunction(
   double result = corr.meson_all(sq, sq);
 
   vout.general(m_vl, "RESULT_HIPREC: %.17e\n", result);
+
+  // ---- residual mass --------------------------------------------------------
+  // m_res(t) = <J5q(t) P(0)> / <P(t) P(0)> = C_PP(sq_mid,sq_mid)/C_PP(sq,sq),
+  // both pseudoscalar (g5 x g5) correlators from the same boundary point source.
+  // Plateau (large-t) value is the residual mass. CGNE/reference path -> serves
+  // as the trusted cross-check for the A-based solve_2pt m_res on the same setup.
+  {
+    GammaMatrix gm5 = gmset->get_GM(gmset->GAMMA5);
+    const int Lt = CommonParameters::Lt();
+    std::vector<dcomplex> c_PP(Lt), c_J5q(Lt);   // meson_correlator needs them pre-sized
+    corr.meson_correlator(c_PP,  gm5, gm5, sq,     sq);
+    corr.meson_correlator(c_J5q, gm5, gm5, sq_mid, sq_mid);
+    vout.general(m_vl, "\n");
+    vout.general(m_vl, "Residual mass (J5q/PP ratio):\n");
+    vout.general(m_vl, "    t      C_PP(t)         C_J5q(t)        m_res(t)\n");
+    double mres_sum = 0.0; int mres_n = 0;
+    for (int t = 0; t < Lt; ++t) {
+      double cpp  = real(c_PP[t]);
+      double cj5q = real(c_J5q[t]);
+      double r    = (cpp != 0.0) ? cj5q / cpp : 0.0;
+      vout.general(m_vl, " %4d  %15.7e  %15.7e  %15.7e\n", t, cpp, cj5q, r);
+      if (t >= Lt / 4 && t < 3 * Lt / 4) { mres_sum += r; ++mres_n; }
+    }
+    double m_res = (mres_n > 0) ? mres_sum / mres_n : 0.0;
+    vout.general(m_vl, "RESULT_HIPREC_mres (plateau avg over t in [%d,%d)): %.10e\n",
+                 Lt / 4, 3 * Lt / 4, m_res);
+  }
+  // ---------------------------------------------------------------------------
 
   timer->report();
   //RandomNumberManager::finalize();

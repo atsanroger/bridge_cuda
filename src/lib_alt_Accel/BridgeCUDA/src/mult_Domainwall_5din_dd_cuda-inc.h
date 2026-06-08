@@ -13,9 +13,8 @@
 //====================================================================
 __global__ void mult_domainwall_5din_dd_5dir_dirac_dev(
                    real_t * vp, real_t * yp, real_t * wp,
-                   real_t mq, real_t M0, 
-                   int Ns, 
-                   real_t *b_dev, real_t *c_dev,
+                   real_t mq, real_t M0,
+                   int Ns,
                    int Nx, int Ny, int Nz, int Nt,
                    int Bx, int By, int Bz, int Bt,
                    int ieo)
@@ -33,19 +32,22 @@ __global__ void mult_domainwall_5din_dd_5dir_dirac_dev(
   //int NBt  = Nt/Bt;
   //int Nblock = NBx * NBy * NBz * NBt;
 
-  int site2  = blockIdx.x * blockDim.x + threadIdx.x;
+  // Parallelize over (site, color-complex): one thread per (site2, ivc), ivc in
+  // [0,NVC). The s5 loop stays inside the thread. The Wilson-5d term is color
+  // diagonal, so each ivc is independent (it only couples the 4 Dirac spins at
+  // the same ivc) -> NVC x more parallelism than per-site. (cf. eo 5dir kernel.)
+  int gid = blockIdx.x * blockDim.x + threadIdx.x;
 
-  extern __shared__ real_t shared_mem[];
-  real_t* b = shared_mem;
-  real_t* c = &shared_mem[Ns]; 
+  // Moebius coefficients from __constant__ memory (uploaded by the operator's
+  // set_precond_parameters via setDomainwallConstantBC). Avoids the per-call
+  // cudaMalloc/memcpy + shared-memory staging the old code used.
+  const real_t* b = const_b;
+  const real_t* c = const_c;
 
-  int tid = threadIdx.x;
-  if(tid < Ns) {
-    b[tid] = b_dev[tid];
-    c[tid] = c_dev[tid];
-  }
+  if (gid < Nst * NVC) {
 
-  if (site2 < Nst) {
+    int ivc   = gid % NVC;
+    int site2 = gid / NVC;
 
     int bsite = site2 % Bsize;
     int block = site2 / Bsize;
@@ -59,9 +61,6 @@ __global__ void mult_domainwall_5din_dd_5dir_dirac_dev(
     int jeo = (ibx + iby + ibz + ibt) % 2;
     if(jeo != ieo_skip){
 
-      int Nxy  = Nx  * Ny;
-      int Nxyz = Nxy * Nz;
-
       int kx   = bsite % Bx;
       int ix   = kx + Bx * ibx;
       int kyzt = bsite / Bx;
@@ -72,59 +71,57 @@ __global__ void mult_domainwall_5din_dd_5dir_dirac_dev(
       int iz   = kz + Bz * ibz;
       int kt   = kzt / Bz;
       int it   = kt + Bt * ibt;
-      int iyzt = iy + Ny * (iz + Nz * it);
-      int izt  = iz + Nz * it;
-      int ixy  = ix + Nx * iy;
-      int ixyz = ix + Nx * (iy + Ny * iz);
       int site = ix + Nx * (iy + Ny * (iz + Nz * it));
 
       for (int is = 0; is < Ns; ++is) {
 
-        real_t vt[NVCD], wt[NVCD];
-
         int is_up = (is+1) % Ns;
-        real_t Fup   = 0.5;
+        real_t Fup = 0.5;
         if (is == Ns-1) Fup = -0.5 * mq;
 
-        for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-          wt[ivcd]  = wp[IDX2(Nin5, (ivcd + NVCD*is_up), site)];
-        }
-        for (int ivc = 0; ivc < NVC; ++ivc) {
-          vt[ID1 + ivc]  = Fup * (wt[ID1 + ivc] - wt[ID3 + ivc]);
-          vt[ID2 + ivc]  = Fup * (wt[ID2 + ivc] - wt[ID4 + ivc]);
-          vt[ID3 + ivc]  = Fup * (wt[ID3 + ivc] - wt[ID1 + ivc]);
-          vt[ID4 + ivc]  = Fup * (wt[ID4 + ivc] - wt[ID2 + ivc]);
-        }
+        real_t wu1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD*is_up), site)];
+        real_t wu2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD*is_up), site)];
+        real_t wu3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD*is_up), site)];
+        real_t wu4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD*is_up), site)];
+
+        real_t vt1 = Fup * (wu1 - wu3);
+        real_t vt2 = Fup * (wu2 - wu4);
+        real_t vt3 = Fup * (wu3 - wu1);
+        real_t vt4 = Fup * (wu4 - wu2);
 
         int is_dn = (is-1 + Ns) % Ns;
-        real_t Fdn   = 0.5;
+        real_t Fdn = 0.5;
         if (is == 0) Fdn = -0.5 * mq;
 
-        for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-          wt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD*is_dn), site)];
-        }
-        for (int ivc = 0; ivc < NVC; ++ivc) {
-          vt[ID1 + ivc] += Fdn * (wt[ID1 + ivc] + wt[ID3 + ivc]);
-          vt[ID2 + ivc] += Fdn * (wt[ID2 + ivc] + wt[ID4 + ivc]);
-          vt[ID3 + ivc] += Fdn * (wt[ID3 + ivc] + wt[ID1 + ivc]);
-          vt[ID4 + ivc] += Fdn * (wt[ID4 + ivc] + wt[ID2 + ivc]);
-        }
+        real_t wd1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD*is_dn), site)];
+        real_t wd2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD*is_dn), site)];
+        real_t wd3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD*is_dn), site)];
+        real_t wd4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD*is_dn), site)];
+
+        vt1 += Fdn * (wd1 + wd3);
+        vt2 += Fdn * (wd2 + wd4);
+        vt3 += Fdn * (wd3 + wd1);
+        vt4 += Fdn * (wd4 + wd2);
 
         real_t B_is = b[is] * (4.0 - M0) + 1.0;
         real_t C_is = c[is] * (4.0 - M0) - 1.0;
 
-        for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-          wt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD*is), site)];
-        }
+        real_t w1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)];
+        real_t w2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)];
+        real_t w3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)];
+        real_t w4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)];
 
-        for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-          vp[IDX2(Nin5, (ivcd + NVCD * is), site)]
-                = B_is * wt[ivcd] + C_is * vt[ivcd];
-          yp[IDX2(Nin5, (ivcd + NVCD * is), site)]
-                = -0.5 * (b[is] * wt[ivcd] + c[is] * vt[ivcd]);
-        }
+        vp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)] = B_is * w1 + C_is * vt1;
+        vp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)] = B_is * w2 + C_is * vt2;
+        vp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)] = B_is * w3 + C_is * vt3;
+        vp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)] = B_is * w4 + C_is * vt4;
+
+        yp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)] = -0.5 * (b[is]*w1 + c[is]*vt1);
+        yp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)] = -0.5 * (b[is]*w2 + c[is]*vt2);
+        yp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)] = -0.5 * (b[is]*w3 + c[is]*vt3);
+        yp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)] = -0.5 * (b[is]*w4 + c[is]*vt4);
       }
-    }  
+    }
   }
 }
 
@@ -151,42 +148,29 @@ void mult_domainwall_5din_dd_5dir_dirac(
   real_t* yp_dev = (real_t*)dev_ptr(yp);
   real_t* wp_dev = (real_t*)dev_ptr(wp);
 
-  real_t* b_dev;
-  real_t* c_dev; 
+  // b, c live in __constant__ memory (uploaded at set_config); kept as params
+  // only for call-site ABI compatibility.
+  (void)b; (void)c;
 
-  size_t nsize = Ns * sizeof(real_t);
-
-  CHECK(cudaMalloc((void **)&b_dev , nsize));
-  CHECK(cudaMalloc((void **)&c_dev , nsize));
-
-  CHECK(cudaMemcpy(b_dev, b, nsize, cudaMemcpyHostToDevice));
-  CHECK(cudaMemcpy(c_dev, c, nsize, cudaMemcpyHostToDevice));
-
-  // Define block and grid sizes for CUDA kernel
+  // Define block and grid sizes for CUDA kernel: one thread per (site, color)
   int blockSize = VECTOR_LENGTH;
-  int gridSize  = (Nst + blockSize - 1)/ blockSize;
-  int shared_mem_size = 2 * nsize;
+  int gridSize  = (Nst * NVC + blockSize - 1)/ blockSize;
 
-  mult_domainwall_5din_dd_5dir_dirac_dev<<<gridSize, blockSize,
-                                           shared_mem_size>>>(
+  mult_domainwall_5din_dd_5dir_dirac_dev<<<gridSize, blockSize>>>(
                    vp_dev, yp_dev, wp_dev,
-                   mq, M0, Ns, 
-                   b_dev, c_dev,
+                   mq, M0, Ns,
                    Nx, Ny, Nz, Nt,
                    Bx, By, Bz, Bt,
                    ieo);
-              
+
   //Synchronize to ensure completion of kernel execution
   CHECK(cudaDeviceSynchronize());
-  CHECK(cudaFree(b_dev));
-  CHECK(cudaFree(c_dev));
 }
 
 //====================================================================
 __global__ void mult_domainwall_5din_dd_5dirdag_dirac_dev(
        real_t *vp, real_t *yp, real_t *wp,
-       real_t mq, real_t M0, int Ns, 
-       real_t *b_dev, real_t *c_dev,
+       real_t mq, real_t M0, int Ns,
        int Nx, int Ny, int Nz, int Nt,
        int Bx, int By, int Bz, int Bt,
        int ieo)
@@ -202,19 +186,17 @@ __global__ void mult_domainwall_5din_dd_5dirdag_dirac_dev(
   int NBt  = Nt/Bt;
   int Nblock = NBx * NBy * NBz * NBt;
 
-  extern __shared__ real_t shared_mem[];
-  real_t* b = shared_mem;
-  real_t* c = &shared_mem[Ns]; 
+  // Moebius coefficients from __constant__ memory (see dd_5dir_dirac_dev).
+  const real_t* b = const_b;
+  const real_t* c = const_c;
 
-  int tid = threadIdx.x;
-  if(tid < Ns) {
-    b[tid] = b_dev[tid];
-    c[tid] = c_dev[tid];
-  }
+  // One thread per (site, color); see dd_5dir_dirac_dev.
+  int gid = blockIdx.x * blockDim.x + threadIdx.x;
 
-  int site2  = blockIdx.x * blockDim.x + threadIdx.x;
+  if( gid < Nst * NVC ){
 
-  if( site2 < Nst ){
+    int ivc   = gid % NVC;
+    int site2 = gid / NVC;
 
     int bsite = site2 % Bsize;
     int block = site2/Bsize;
@@ -227,9 +209,6 @@ __global__ void mult_domainwall_5din_dd_5dirdag_dirac_dev(
     int jeo = (ibx + iby + ibz + ibt) % 2;
     if(jeo != ieo_skip){
 
-      int Nxy  = Nx  * Ny;
-      int Nxyz = Nxy * Nz;
-
       int kx   = bsite % Bx;
       int ix   = kx + Bx * ibx;
       int kyzt = bsite / Bx;
@@ -240,84 +219,85 @@ __global__ void mult_domainwall_5din_dd_5dirdag_dirac_dev(
       int iz   = kz + Bz * ibz;
       int kt   = kzt / Bz;
       int it   = kt + Bt * ibt;
-      int iyzt = iy + Ny * (iz + Nz * it);
-      int izt  = iz + Nz * it;
-      int ixy  = ix + Nx * iy;
-      int ixyz = ix + Nx * (iy + Ny * iz);
       int site = ix + Nx * (iy + Ny * (iz + Nz * it));
 
+      // color-parallel: one thread per (site, ivc); s5 loop inside. The 5d-dag
+      // term is color diagonal so each ivc is independent (cf. dd_5dir_dirac_dev).
       for (int is = 0; is < Ns; ++is) {
-        real_t vt[NVCD], xt[NVCD], wt[NVCD], yt[NVCD];
+
         real_t B1 = b[is] * (4.0 - M0) + 1.0;
         real_t a1 = -0.5 * b[is];
 
-        for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-          wt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-          yt[ivcd] = yp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-        }
+        real_t wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)];
+        real_t wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)];
+        real_t wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)];
+        real_t wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)];
+        real_t yt1 = yp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)];
+        real_t yt2 = yp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)];
+        real_t yt3 = yp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)];
+        real_t yt4 = yp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)];
 
-        for (int ivc = 0; ivc < NVC; ++ivc) {
-          vt[ID1 + ivc] = B1 * wt[ID1 + ivc] + a1 * yt[ID3 + ivc];
-          vt[ID2 + ivc] = B1 * wt[ID2 + ivc] + a1 * yt[ID4 + ivc];
-          vt[ID3 + ivc] = B1 * wt[ID3 + ivc] + a1 * yt[ID1 + ivc];
-          vt[ID4 + ivc] = B1 * wt[ID4 + ivc] + a1 * yt[ID2 + ivc];
-        }
+        real_t vt1 = B1 * wt1 + a1 * yt3;
+        real_t vt2 = B1 * wt2 + a1 * yt4;
+        real_t vt3 = B1 * wt3 + a1 * yt1;
+        real_t vt4 = B1 * wt4 + a1 * yt2;
 
         int is_up = (is+1) % Ns;
         real_t C1 = c[is_up] * (4.0 - M0) - 1.0;
         real_t aup = -0.5 * c[is_up];
 
-        for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-          wt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is_up), site)];
-          yt[ivcd] = yp[IDX2(Nin5, (ivcd + NVCD * is_up), site)];
-        }
+        real_t wu1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD*is_up), site)];
+        real_t wu2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD*is_up), site)];
+        real_t wu3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD*is_up), site)];
+        real_t wu4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD*is_up), site)];
+        real_t yu1 = yp[IDX2(Nin5, (ID1 + ivc + NVCD*is_up), site)];
+        real_t yu2 = yp[IDX2(Nin5, (ID2 + ivc + NVCD*is_up), site)];
+        real_t yu3 = yp[IDX2(Nin5, (ID3 + ivc + NVCD*is_up), site)];
+        real_t yu4 = yp[IDX2(Nin5, (ID4 + ivc + NVCD*is_up), site)];
 
-        for (int ivc = 0; ivc < NVC; ++ivc) {
-          xt[ID1 + ivc] = C1 * wt[ID1 + ivc] + aup * yt[ID3 + ivc];
-          xt[ID2 + ivc] = C1 * wt[ID2 + ivc] + aup * yt[ID4 + ivc];
-          xt[ID3 + ivc] = C1 * wt[ID3 + ivc] + aup * yt[ID1 + ivc];
-          xt[ID4 + ivc] = C1 * wt[ID4 + ivc] + aup * yt[ID2 + ivc];
-        }
+        real_t xu1 = C1 * wu1 + aup * yu3;
+        real_t xu2 = C1 * wu2 + aup * yu4;
+        real_t xu3 = C1 * wu3 + aup * yu1;
+        real_t xu4 = C1 * wu4 + aup * yu2;
 
         real_t Fup = 0.5;
         if (is == Ns-1) Fup = -0.5 * mq;
 
-        for (int ivc = 0; ivc < NVC; ++ivc) {
-          vt[ID1 + ivc] += Fup * (xt[ID1 + ivc] + xt[ID3 + ivc]);
-          vt[ID2 + ivc] += Fup * (xt[ID2 + ivc] + xt[ID4 + ivc]);
-          vt[ID3 + ivc] += Fup * (xt[ID3 + ivc] + xt[ID1 + ivc]);
-          vt[ID4 + ivc] += Fup * (xt[ID4 + ivc] + xt[ID2 + ivc]);
-        }
+        vt1 += Fup * (xu1 + xu3);
+        vt2 += Fup * (xu2 + xu4);
+        vt3 += Fup * (xu3 + xu1);
+        vt4 += Fup * (xu4 + xu2);
 
         int is_dn = (is-1 + Ns) % Ns;
         real_t C2 = c[is_dn] * (4.0 - M0) - 1.0;
         real_t adn = -0.5 * c[is_dn];
 
-        for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-          wt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is_dn), site)];
-          yt[ivcd] = yp[IDX2(Nin5, (ivcd + NVCD * is_dn), site)];
-        }
+        real_t wd1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD*is_dn), site)];
+        real_t wd2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD*is_dn), site)];
+        real_t wd3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD*is_dn), site)];
+        real_t wd4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD*is_dn), site)];
+        real_t yd1 = yp[IDX2(Nin5, (ID1 + ivc + NVCD*is_dn), site)];
+        real_t yd2 = yp[IDX2(Nin5, (ID2 + ivc + NVCD*is_dn), site)];
+        real_t yd3 = yp[IDX2(Nin5, (ID3 + ivc + NVCD*is_dn), site)];
+        real_t yd4 = yp[IDX2(Nin5, (ID4 + ivc + NVCD*is_dn), site)];
 
-        for (int ivc = 0; ivc < NVC; ++ivc) {
-          xt[ID1 + ivc] = C2 * wt[ID1 + ivc] + adn * yt[ID3 + ivc];
-          xt[ID2 + ivc] = C2 * wt[ID2 + ivc] + adn * yt[ID4 + ivc];
-          xt[ID3 + ivc] = C2 * wt[ID3 + ivc] + adn * yt[ID1 + ivc];
-          xt[ID4 + ivc] = C2 * wt[ID4 + ivc] + adn * yt[ID2 + ivc];
-        }
+        real_t xd1 = C2 * wd1 + adn * yd3;
+        real_t xd2 = C2 * wd2 + adn * yd4;
+        real_t xd3 = C2 * wd3 + adn * yd1;
+        real_t xd4 = C2 * wd4 + adn * yd2;
 
-        real_t Fdn   = 0.5;
+        real_t Fdn = 0.5;
         if (is == 0) Fdn = -0.5 * mq;
 
-        for (int ivc = 0; ivc < NVC; ++ivc) {
-          vt[ID1 + ivc] += Fdn * (xt[ID1 + ivc] - xt[ID3 + ivc]);
-          vt[ID2 + ivc] += Fdn * (xt[ID2 + ivc] - xt[ID4 + ivc]);
-          vt[ID3 + ivc] += Fdn * (xt[ID3 + ivc] - xt[ID1 + ivc]);
-          vt[ID4 + ivc] += Fdn * (xt[ID4 + ivc] - xt[ID2 + ivc]);
-        }
+        vt1 += Fdn * (xd1 - xd3);
+        vt2 += Fdn * (xd2 - xd4);
+        vt3 += Fdn * (xd3 - xd1);
+        vt4 += Fdn * (xd4 - xd2);
 
-        for (int ivcd = 0; ivcd < NVCD; ++ivcd) {
-          vp[IDX2(Nin5, (ivcd + NVCD * is), site)] = vt[ivcd];
-        }
+        vp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)] = vt1;
+        vp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)] = vt2;
+        vp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)] = vt3;
+        vp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)] = vt4;
       }
     }
   }
@@ -343,35 +323,22 @@ void mult_domainwall_5din_dd_5dirdag_dirac(
   real_t* yp_dev = (real_t*)dev_ptr(yp);
   real_t* wp_dev = (real_t*)dev_ptr(wp);
 
-  real_t* b_dev;
-  real_t* c_dev; 
+  // b, c read from __constant__ memory in the kernel (see dd_5dir_dirac).
+  (void)b; (void)c;
 
-  size_t nsize = Ns * sizeof(real_t);
-
-  CHECK(cudaMalloc((void **)&b_dev , nsize));
-  CHECK(cudaMalloc((void **)&c_dev , nsize));
-
-  CHECK(cudaMemcpy(b_dev, b, nsize, cudaMemcpyHostToDevice));
-  CHECK(cudaMemcpy(c_dev, c, nsize, cudaMemcpyHostToDevice));
-
-  // Define block and grid sizes for CUDA kernel
+  // Define block and grid sizes for CUDA kernel: one thread per (site, color)
   int blockSize = VECTOR_LENGTH;
-  int gridSize  = (Nst + blockSize - 1)/ blockSize;
-  int shared_mem_size = 2 * nsize;
+  int gridSize  = (Nst * NVC + blockSize - 1)/ blockSize;
 
-  mult_domainwall_5din_dd_5dirdag_dirac_dev<<<gridSize, blockSize,
-                                              shared_mem_size>>>(
+  mult_domainwall_5din_dd_5dirdag_dirac_dev<<<gridSize, blockSize>>>(
                    vp_dev, yp_dev, wp_dev,
-                   mq, M0, Ns, 
-                   b_dev, c_dev,
+                   mq, M0, Ns,
                    Nx, Ny, Nz, Nt,
                    Bx, By, Bz, Bt,
                    ieo);
-              
+
   //Synchronize to ensure completion of kernel execution
   CHECK(cudaDeviceSynchronize());
-  CHECK(cudaFree(b_dev));
-  CHECK(cudaFree(c_dev));
   }
 
 //====================================================================
@@ -397,14 +364,18 @@ __global__ void mult_domainwall_5din_dd_hopb_dirac_dev(
   //int NBt  = Nt/Bt;
   //int Nblock = NBx * NBy * NBz * NBt;
 
-  int site2  = blockIdx.x * blockDim.x + threadIdx.x;
+  // Parallelize over (site, s-slice): one thread per (site2, is), like the 5D
+  // hopb reference kernel. Leaving the s5 loop serial makes this kernel very
+  // slow, so s5 must be parallelized here (unlike the 5d-diag kernels above).
+  int gid = blockIdx.x * blockDim.x + threadIdx.x;
 
-  extern __shared__ real_t sharedMemory[];
+  if(gid < Nst * Ns){
 
-  if(site2 < Nst){
+    int is    = gid % Ns;
+    int site2 = gid / Ns;
 
     int bsite = site2 % Bsize;
-    int block = site2/Bsize;
+    int block = site2 /Bsize;
 
     int ibx = block % NBx;
     int iby = (block/NBx) % NBy;
@@ -436,8 +407,11 @@ __global__ void mult_domainwall_5din_dd_hopb_dirac_dev(
 
     int idir;
 
-    for(int is = 0; is < Ns; ++is){
+    // thread-local gauge link buffer (replaces the racy shared sharedMemory[0],
+    // which every thread overwrote). load_u rewrites it for each direction.
+    real_t ut[NDF];
 
+    {
       real_t vL[NVCD];
 
       if(flag == 0){
@@ -458,7 +432,6 @@ __global__ void mult_domainwall_5din_dd_hopb_dirac_dev(
         real_t bc2 = 1.0;
         if(ix == Nx-1) bc2 = bc_x;
 
-        real_t* ut = &sharedMemory[0];
         load_u(ut, up, site + Nst * idir);
 
         real_t wt[NVCD];
@@ -474,13 +447,12 @@ __global__ void mult_domainwall_5din_dd_hopb_dirac_dev(
         real_t bc2 = 1.0;
         if(ix == 0) bc2 = bc_x;
 
-        real_t* ut = &sharedMemory[0];
         load_u(ut, up, nei + Nst * idir);
 
         real_t wt[NVCD];
         for(int ivcd = 0; ivcd < NVCD; ++ivcd){
           wt[ivcd] = bc2 * wp[IDX2(Nin5, (ivcd + NVCD*is), nei)];
-	    
+        }
         mult_wilson_xmb(vL, ut, wt);
       }
 
@@ -492,7 +464,6 @@ __global__ void mult_domainwall_5din_dd_hopb_dirac_dev(
         real_t bc2 = 1.0;
         if(iy == Ny-1) bc2 = bc_y;
 
-        real_t* ut = &sharedMemory[0];
         load_u(ut, up, site + Nst * idir);
 
         real_t wt[NVCD];
@@ -508,7 +479,6 @@ __global__ void mult_domainwall_5din_dd_hopb_dirac_dev(
         real_t bc2 = 1.0;
         if(iy == 0) bc2 = bc_y;
 
-        real_t* ut = &sharedMemory[0];
         load_u(ut, up, nei + Nst * idir);
 
         real_t wt[NVCD];
@@ -526,7 +496,6 @@ __global__ void mult_domainwall_5din_dd_hopb_dirac_dev(
         real_t bc2 = 1.0;
         if(iz == Nz-1) bc2 = bc_z;
 
-        real_t* ut = &sharedMemory[0];
         load_u(ut, up, site + Nst * idir);
 
         real_t wt[NVCD];
@@ -542,7 +511,6 @@ __global__ void mult_domainwall_5din_dd_hopb_dirac_dev(
         real_t bc2 = 1.0;
         if(iz == 0) bc2 = bc_z;
 
-        real_t* ut = &sharedMemory[0];
         load_u(ut, up, nei + Nst * idir);
 
         real_t wt[NVCD];
@@ -560,7 +528,6 @@ __global__ void mult_domainwall_5din_dd_hopb_dirac_dev(
         real_t bc2 = 1.0;
         if(it == Nt-1) bc2 = bc_t;
 
-        real_t* ut = &sharedMemory[0];
         load_u(ut, up, site + Nst * idir);
 
         real_t wt[NVCD];
@@ -576,7 +543,6 @@ __global__ void mult_domainwall_5din_dd_hopb_dirac_dev(
         real_t bc2 = 1.0;
         if(it == 0) bc2 = bc_t;
 
-        real_t* ut = &sharedMemory[0];
         load_u(ut, up, nei + Nst * idir);
 
         real_t wt[NVCD];
@@ -590,10 +556,9 @@ __global__ void mult_domainwall_5din_dd_hopb_dirac_dev(
         vp[IDX2(Nin5, (ivcd + NVCD*is), site)] = vL[ivcd];
       }
 
-    } // is loop
-   } // site loop
-  }
- }
+    } // per-thread (site,is) scope
+  } // if(gid < Nst*Ns)
+}
 
 void mult_domainwall_5din_dd_hopb_dirac(
                             real_t *vp, real_t *up,
@@ -621,17 +586,17 @@ void mult_domainwall_5din_dd_hopb_dirac(
     real_t* up_dev = (real_t*)dev_ptr(up);
     real_t* wp_dev = (real_t*)dev_ptr(wp);
 
+    // one thread per (site, s-slice); gauge link is now a thread-local array,
+    // so no dynamic shared memory is needed.
     int blockSize  = VECTOR_LENGTH;
-    int gridSize   = (Nst + blockSize - 1)/ blockSize;
-    int sharedsize = NDF * blockSize * sizeof(real_t);
+    int gridSize   = (Nst * Ns + blockSize - 1)/ blockSize;
 
     // Launch the CUDA kernel
-    mult_domainwall_5din_dd_hopb_dirac_dev<<<gridSize, blockSize,
-                                             sharedsize>>>(
-           vp_dev, up_dev, wp_dev, 
-           Ns, 
+    mult_domainwall_5din_dd_hopb_dirac_dev<<<gridSize, blockSize>>>(
+           vp_dev, up_dev, wp_dev,
+           Ns,
            Bx, By, Bz, Bt,
-           Nx, Ny, Nz, Nt, 
+           Nx, Ny, Nz, Nt,
            bc_x, bc_y, bc_z, bc_t,
            ieo, flag);
 

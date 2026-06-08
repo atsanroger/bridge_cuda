@@ -59,6 +59,7 @@ typedef AField<double, ACCEL>  AField_d;
 #include "asolver_SAP_MINRES_dw2.h"
 #include "asolver_SAP_dw.h"
 #include "asolver_SAP_dw2.h"
+#include "asolver_PVexact_dw.h"
 
 // multigrid
 using MultiGrid_t = MultiGrid_Domainwall<AField_f, AField_f>;
@@ -72,12 +73,19 @@ using FoprCoarse_t = AFopr_Domainwall_coarse<AField_f>;
 using OuterSolver_t  = ASolver_FGMRES<AField_d>;
 //using OuterSolver_t  = ASolver_Richardson<AField_d>;
 
-using CoarseSolver_t = ASolver_BiCGStab_Cmplx<AField_f>;
-//using Smoother_t = ASolver_SAP_dw<AField_f>;
+//using CoarseSolver_t = ASolver_BiCGStab_Cmplx<AField_f>;
+using CoarseSolver_t = ASolver_GMRES_m_Cmplx<AField_f>;  // V2: GMRES coarse (BiCGStab breaks down -> nan)
+// SAP smoother (DD-alphaAMG for DWF): block SAP solve + PV solver.
+// CGNR-on-bare-D smoother diverges at small mq/M0=1.0 (near-critical D^dag D),
+// which is exactly the DWF pathology the PV-preconditioned MG is meant to avoid.
+// Sweep binaries prebuilt in sweep_bins/: v1=SAP+BiCGStab, v2=SAP+GMRES,
+// v3=GMRES smoother+GMRES coarse, v4=CGNR smoother+GMRES coarse.
+// Source left in the recommended state: SAP smoother + GMRES coarse (=v2).
+#define USE_SAP_FOR_SMOOTHER
+using Smoother_t = ASolver_SAP_dw<AField_f>;
 //using Smoother_t = ASolver_SAP_dw2<AField_f>;
-//#define USE_SAP_FOR_SMOOTHER
-////using Smoother_t = ASolver_GMRES_m_Cmplx<AField_f>;
-using Smoother_t = ASolver_CGNR<AField_f>;
+//using Smoother_t = ASolver_GMRES_m_Cmplx<AField_f>;
+//using Smoother_t = ASolver_CGNR<AField_f>;
 
 
 #include "asolver_MG_dw-tmpl.h"

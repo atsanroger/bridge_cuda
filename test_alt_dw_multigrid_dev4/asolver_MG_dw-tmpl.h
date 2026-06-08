@@ -326,17 +326,16 @@ void ASolver_MG_dw<AFIELD>::init_coarse_grid()
   int fine_nex  = afopr_fineF->field_nex();
   m_vec_fineF.reset(fine_nin, fine_nvol, fine_nex);
 
-  // solver for the PV operator
+  // solver for the PV operator: EXACT site-diagonal C_PV^{-1} (the paper's
+  // C_PV regime, positive real spectrum), replacing the SAP loose inverse of
+  // D_PV (the B_PV regime, which develops negative real parts). C_PV^{-1} is
+  // applied directly via the PV operator's "Prec" mode -- no iteration. See
+  // asolver_PVexact_dw.h and Kanamori-Chen-Matsufuru PoS(LATTICE2024)414.
+  // afopr_PV keeps mode "D": run_setup's m_afopr_PV->mult uses D_PV, and the
+  // exact-PV solver invokes "Prec" explicitly so it does not touch the mode.
   afopr_PV->set_mode("D");
-  ASolver_SAP_MINRES_dw<AFIELD_f> *solver_in_sap_PV
-     = new ASolver_SAP_MINRES_dw<AFIELD_f>(afopr_PV, m_multigrid->get_block_index());
-  Parameters params_solver_in_sap_PV;
-  params_solver_in_sap_PV.set_int("maximum_number_of_iteration", 6);
-  params_solver_in_sap_PV.set_int("maximum_number_of_restart", 1);
-  params_solver_in_sap_PV.set_double("convergence_criterion_squared", 1.0e-30);
-  solver_in_sap_PV->set_parameters(params_solver_in_sap_PV);
-  m_asolver_PV.reset(solver_in_sap_PV);
-  vout.general("%s: solver for PV is ready (the parameters are hardcoded).\n", class_name.c_str());
+  m_asolver_PV.reset(new ASolver_PVexact_dw<AFIELD_f>(afopr_PV));
+  vout.general("%s: PV solver = exact C_PV^{-1} (Prec mode).\n", class_name.c_str());
 
   // initialize coase grid operator
   FoprCoarse_t *afopr_coarse = new FoprCoarse_t();

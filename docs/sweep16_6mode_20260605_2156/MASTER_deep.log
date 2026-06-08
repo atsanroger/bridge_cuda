@@ -1,0 +1,10 @@
+[23:29:36] START deep small-mass double DW/TW re-run (cap=2400) -> /home/wlchenhome/Bridge/with_alpha/docs/sweep16_6mode_20260605_2156
+[23:29:36] === mass 0.05 (deep) ===
+[23:35:34]   done mq=0.05 double/DW (cap 2400): 358s, 176 pts, floor=3.228127133497710e-62
+[23:52:13]   done mq=0.05 double/TW (cap 2400): 999s, 176 pts, floor=2.864189815241132e-90
+[23:52:15] PLOT mq=0.05 (deep) -> ladder_mq0.05.png
+[23:52:15] === mass 0.025 (deep) ===
+[23:58:38]   done mq=0.025 double/DW (cap 2400): 383s, 197 pts, floor=3.328453470315573e-62
+[00:16:12]   done mq=0.025 double/TW (cap 2400): 1054s, 193 pts, floor=1.861164038482586e-90
+[00:16:13] PLOT mq=0.025 (deep) -> ladder_mq0.025.png
+[00:16:13] DONE deep re-run.

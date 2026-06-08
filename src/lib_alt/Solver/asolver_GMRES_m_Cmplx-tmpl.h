@@ -63,6 +63,7 @@ void ASolver_GMRES_m_Cmplx<AFIELD>::init(void)
   m_r.reset(nin, nvol, nex);
   m_x.reset(nin, nvol, nex);
   m_v_tmp.reset(nin, nvol, nex);
+  m_xbest.reset(nin, nvol, nex);
 
 }
 
@@ -282,6 +283,14 @@ void ASolver_GMRES_m_Cmplx<AFIELD>::solve(AFIELD& xq, const AFIELD& b,
 
   vout.detailed(m_vl, "    iter: %8d  %22.15e\n", Nconv2, rr / bnorm2);
 
+  // nan-safety net: remember the best finite iterate. On the strongly non-normal
+  // A, a restart cycle near the residual floor can still break down to nan for
+  // some RHS even with the relative happy-breakdown guard. Rather than returning
+  // that nan (which poisons e.g. a 12-source 2pt measurement), we keep the last
+  // FINITE, best-residual x and fall back to it if nan appears.
+  real_t rr_best = rr;
+  copy(m_xbest, m_x);
+  bool   hit_nan = false;
 
   for (int i_restart = 0; i_restart < m_Nrestart; i_restart++) {
     for (int iter = 0; iter < m_Niter; iter++) {
@@ -290,7 +299,25 @@ void ASolver_GMRES_m_Cmplx<AFIELD>::solve(AFIELD& xq, const AFIELD& b,
       solve_step(b, rr, coeff);
       Nconv2 += Nconv_unit * m_N_M;
 
+      // is rr finite? (rr != rr detects nan; the bound catches +inf)
+      bool rr_finite = (rr == rr) && (rr < real_t(1.0e+300));
+      if (rr_finite) {
+        if (rr < rr_best) { rr_best = rr; copy(m_xbest, m_x); }
+      } else {
+        // breakdown to nan: abandon this (poisoned) iterate, keep the best one.
+        vout.detailed(m_vl, "%s: non-finite residual at iter %d; "
+                      "falling back to best finite iterate (rr_best/|b|^2=%.3e).\n",
+                      class_name.c_str(), Nconv2, (double)(rr_best / bnorm2));
+        hit_nan = true;
+        break;
+      }
+
       vout.detailed(m_vl, "    iter: %8d  %22.15e\n", Nconv2, rr / bnorm2);
+    }
+
+    if (hit_nan) {
+      copy(m_x, m_xbest);   // restore the best finite solution
+      break;                // at the floor; further restarts won't help
     }
 
     //- calculate true residual
@@ -316,6 +343,13 @@ void ASolver_GMRES_m_Cmplx<AFIELD>::solve(AFIELD& xq, const AFIELD& b,
     }
   }
 
+
+  if (hit_nan) {
+    // true residual of the restored best iterate (the loop broke before this).
+    m_fopr->mult(m_s, m_x);
+    axpy(m_s, -1.0, b);
+    diff2 = m_s.norm2();
+  }
 
   if (!is_converged) {
     vout.crucial(m_vl, "Error at %s: not converged.\n", class_name.c_str());
@@ -394,6 +428,10 @@ void ASolver_GMRES_m_Cmplx<AFIELD>::solve_step(const AFIELD& b, real_t& rr,
   for (int j = 0; j < m_N_M; ++j) {
     m_fopr->mult(m_v_tmp, m_v[j]);  // v_tmp = m_fopr->mult(v[j]);
 
+    // ||A v[j]|| before orthogonalization: reference scale for the RELATIVE
+    // breakdown test below.
+    double Av_norm = sqrt(m_v_tmp.norm2());
+
     for (int i = 0; i < j + 1; ++i) {
       int ij = index_ij(i, j);
       h[ij] = dotc(m_v[i], m_v_tmp);  // h[ij] = (v[i], A v[j]);
@@ -408,12 +446,49 @@ void ASolver_GMRES_m_Cmplx<AFIELD>::solve_step(const AFIELD& b, real_t& rr,
       axpy(m_v[j + 1], -a, m_v[i]);  // v[j+1] -= h[ij] * v[i];
     }
 
+    // Re-orthogonalization (classical Gram-Schmidt TWICE, unconditional). A
+    // single CGS pass loses orthogonality on the highly non-normal target
+    // operator A, which makes the subdiagonal norm spuriously tiny near the
+    // residual floor; the 1/||v|| normalization then amplifies noise until it
+    // overflows to nan (restart-to-restart non-deterministically). The second
+    // pass restores orthogonality so ||v|| stays accurate and the solve is
+    // reproducible. NOTE: a DGKS-selective variant (reorthogonalize only when
+    // ||v_after|| < (1/sqrt2)||A v[j]||) was tried to halve the dot/axpy traffic
+    // but DIVERGED on this operator (true residual blew up to ~1e3): for an A
+    // this non-normal the orthogonality loss accumulates even when each single
+    // step looks benign, so the second pass must run every step. The cost here
+    // is anyway dominated by the 4-domain-wall-op A-mult, not the dot/axpy.
+    for (int i = 0; i < j + 1; ++i) {
+      int ij = index_ij(i, j);
+      dcomplex c = dotc(m_v[i], m_v[j + 1]);   // residual projection
+      h[ij] += c;                              // fold the correction into H
+      complex_t a = complex_t(real(c), imag(c));
+      axpy(m_v[j + 1], -a, m_v[i]);
+    }
+
     double v_norm2 = m_v[j + 1].norm2();
+    double v_norm  = sqrt(v_norm2);
 
     int j1j = index_ij(j + 1, j);
-    h[j1j] = dcomplex(sqrt(v_norm2), 0.0);
+    h[j1j] = dcomplex(v_norm, 0.0);
 
-    scal(m_v[j + 1], real_t(1.0 / sqrt(v_norm2)));  // v[j+1] /= sqrt(v_norm2);
+    // Happy-breakdown guard, RELATIVE test. When the new Arnoldi vector is tiny
+    // compared with ||A v[j]||, span{v[0..j]} is (numerically) invariant and the
+    // exact solution already lies in it. An ABSOLUTE threshold is not enough:
+    // near the residual floor ||A v[j]|| itself is ~O(floor), so v_norm can be
+    // e.g. 1e-14 (> any fixed 1e-15 floor) yet still be pure round-off — then
+    // 1/v_norm ~1e14 amplifies noise and, compounded over the m_N_M-deep cycle,
+    // overflows to nan (non-deterministically, depending on GPU reduction order).
+    // On breakdown we zero v[j+1] AND break the Arnoldi loop: the remaining
+    // h-columns stay zero, min_J's guards give y[i]=0 there, so x is updated from
+    // the good subspace only -- the residual-minimizing solution. (Matches
+    // restarted-GMRES theory; prevents the noise-amplification cascade.)
+    const double breakdown_tol = 1.0e-12;   // relative
+    if (v_norm <= breakdown_tol * Av_norm || v_norm <= 1.0e-300) {
+      scal(m_v[j + 1], real_t(0.0));
+      break;
+    }
+    scal(m_v[j + 1], real_t(1.0 / v_norm));  // v[j+1] /= ||v[j+1]||
   }
 
 
@@ -476,8 +551,16 @@ void ASolver_GMRES_m_Cmplx<AFIELD>::min_J(coeff_t& coeff)
 
     double denomi = sqrt(h_1_r2 + h_2_r2);
 
-    dcomplex cs = h[ii] / denomi;
-    dcomplex sn = h[i1i] / denomi;
+    // Guard the Givens rotation against a zero column (happy breakdown): use the
+    // identity rotation so cs/sn stay finite instead of 0/0 = nan.
+    dcomplex cs, sn;
+    if (denomi > 1.0e-15) {
+      cs = h[ii]  / denomi;
+      sn = h[i1i] / denomi;
+    } else {
+      cs = dcomplex(1.0, 0.0);
+      sn = dcomplex(0.0, 0.0);
+    }
 
     for (int j = i; j < m_N_M; ++j) {
       int ij  = index_ij(i, j);
@@ -505,7 +588,10 @@ void ASolver_GMRES_m_Cmplx<AFIELD>::min_J(coeff_t& coeff)
     }
 
     int ii = index_ij(i, i);
-    y[i] = g[i] / h[ii];
+    // Guard back-substitution against a zero diagonal (happy breakdown): the
+    // corresponding Krylov direction carries no residual, so y[i] = 0.
+    double hii2 = real(h[ii]) * real(h[ii]) + imag(h[ii]) * imag(h[ii]);
+    y[i] = (hii2 > 1.0e-30) ? (g[i] / h[ii]) : dcomplex(0.0, 0.0);
   }
 }
 

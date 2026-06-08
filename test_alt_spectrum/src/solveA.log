@@ -1,0 +1,152 @@
+Bridge++ 2.0.0
+
+input filename : main.yaml
+
+file = main.yaml
+
+Lattice parameters:
+  Lx = 16,  Ly = 16,  Lz = 16,  Lt = 16,
+  Nx = 16,  Ny = 16,  Nz = 16,  Nt = 16,
+  NPEx = 1,  NPEy  = 1,  NPEz  = 1,  NPEt  = 1,
+  Lvol = 65536,  Nvol = 65536,  NPE = 1,
+  Ndim = 4
+  Nc   = 3
+  Nd   = 4
+
+ThreadManager: initialization
+Warning at ThreadManager: Nthread(env) != Nthread(input)
+  Number of threads(env)   = 2
+  Number of threads(input) = 1
+  reset Nthread = Nthread(input).
+  Number of threads = 1
+Main: input parameters
+  lattice_size     = [16, 16, 16, 16]
+  grid_size        = [1, 1, 1, 1]
+  number of thread = 1
+  number of color  = 3
+  logfile          = stdout
+  ildg_logfile     = stdout
+  vlevel           = General
+
+Alt_Accel code is being setup.
+DeviceManager_CUDA: being initialized.
+  process_id = 0
+  number of devices = 1
+  device_id = 0  is used on process = 0
+------------------------------------------------
+Alt_Accel: Factory entries
+------------------------------------------------
+AFopr<double, ACCEL> >(void):
+AFopr<double, ACCEL>(Parameters&):
+	Clover
+	CloverTerm
+	Clover_dd
+	Domainwall
+	Domainwall_5din
+	Domainwall_5din_dd
+	Domainwall_5din_eo
+	Domainwall_PVprec
+	Domainwall_eo
+	Wilson
+	Wilson_dd
+AFopr<double, ACCEL>(Fopr*):
+	Domainwall
+AFopr<double, ACCEL>(Fopr*, Director*):
+AFopr<float, ACCEL> >(void):
+AFopr<float, ACCEL>(Parameters&):
+	Clover
+	CloverTerm
+	Clover_dd
+	Domainwall
+	Domainwall_5din
+	Domainwall_5din_dd
+	Domainwall_5din_eo
+	Domainwall_PVprec
+	Domainwall_eo
+	Wilson
+	Wilson_dd
+AFopr<float, ACCEL>(Fopr*):
+	Domainwall
+AFopr<float, ACCEL>(Fopr*, Director*):
+AEigensolver<AField<float, ACCEL> >, Afopr>(Fopr*):
+	IRArnoldi
+	IRLanczos
+------------------------------------------------
+Timer: timestamp: 2026/06/07 01:35:28 +0900
+
+---------------------------------------------------
+test: solve A x = b (BiCGStab) on the MG target operator
+parameter file: test_alt_Eigenvalue_Arnoldi_Domainwall_PVprec.yaml
+file = test_alt_Eigenvalue_Arnoldi_Domainwall_PVprec.yaml
+fermion_type = Domainwall_PVprec
+AFopr_Domainwall_5din<AField<double,ACCEL> >: construction
+  do_comm[0] = 0
+  do_comm[1] = 0
+  do_comm[2] = 0
+  do_comm[3] = 0
+  AFopr_Domainwall_5din<AField<double,ACCEL> >: input parameters
+    mq   =   0.0100
+    M0   =   1.0000
+    Ns   =    8
+    boundary[0] =  1
+    boundary[1] =  1
+    boundary[2] =  1
+    boundary[3] = -1
+    coefficients:
+      b[ 0] =     1.5000000000  c[ 0] =     0.5000000000
+      b[ 1] =     1.5000000000  c[ 1] =     0.5000000000
+      b[ 2] =     1.5000000000  c[ 2] =     0.5000000000
+      b[ 3] =     1.5000000000  c[ 3] =     0.5000000000
+      b[ 4] =     1.5000000000  c[ 4] =     0.5000000000
+      b[ 5] =     1.5000000000  c[ 5] =     0.5000000000
+      b[ 6] =     1.5000000000  c[ 6] =     0.5000000000
+      b[ 7] =     1.5000000000  c[ 7] =     0.5000000000
+AFopr_Domainwall_5din<AField<double,ACCEL> >: construction finished.
+AFopr_Domainwall_5din<AField<double,ACCEL> >: construction
+  do_comm[0] = 0
+  do_comm[1] = 0
+  do_comm[2] = 0
+  do_comm[3] = 0
+  AFopr_Domainwall_5din<AField<double,ACCEL> >: input parameters
+    mq   =   1.0000
+    M0   =   1.0000
+    Ns   =    8
+    boundary[0] =  1
+    boundary[1] =  1
+    boundary[2] =  1
+    boundary[3] = -1
+    coefficients:
+      b[ 0] =     1.5000000000  c[ 0] =     0.5000000000
+      b[ 1] =     1.5000000000  c[ 1] =     0.5000000000
+      b[ 2] =     1.5000000000  c[ 2] =     0.5000000000
+      b[ 3] =     1.5000000000  c[ 3] =     0.5000000000
+      b[ 4] =     1.5000000000  c[ 4] =     0.5000000000
+      b[ 5] =     1.5000000000  c[ 5] =     0.5000000000
+      b[ 6] =     1.5000000000  c[ 6] =     0.5000000000
+      b[ 7] =     1.5000000000  c[ 7] =     0.5000000000
+AFopr_Domainwall_5din<AField<double,ACCEL> >: construction finished.
+AFopr_Domainwall_PVprec<AField<double,ACCEL> >: constructed, Pauli-Villars mass M_PV = 1.000000
+
+Configuration setup:
+  gconf_status = Continue
+  gconf_read   = Text
+  readfile     = ./conf_quench_16x16x16x16.txt
+  plaq = 1.000000
+Parameters: fetch_double: key 'Omega_tolerance' not found.
+Parameters: fetch_string: key 'initial_guess_mode' not found.
+ASolver_BiCGStab_Cmplx<Afield<double,ACCEL> >:
+  Precision: double
+  Niter     = 2000
+  Stop_cond =   1.00000000e-24
+  init_guess_mode: 0
+  Omega_tolerance = 7.00e-01
+
+Solve A x = b (BiCGStab):
+  |b|^2            = 1.000000e+00
+  nconv (iters)    = 4001
+  recursive diff   = nan
+  true ||Ax-b||^2  = nan
+Elapsed time: solve: total        50.07 sec, count    1, average        50.07 sec
+Test result for Accel = 0
+Elapsed time: Main: total        51.91 sec, count    1, average        51.91 sec
+Timer: timestamp: 2026/06/07 01:36:20 +0900

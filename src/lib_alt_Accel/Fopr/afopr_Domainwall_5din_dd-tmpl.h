@@ -424,6 +424,14 @@ void AFopr_Domainwall_5din_dd<AFIELD>::set_precond_parameters()
       m_dpinv[is] = 1.0 / m_dp[is];
     }
     m_dpinv[m_Ns - 1] = 1.0 / (m_dp[m_Ns - 1] + m_g);
+
+#ifdef USE_ACCEL_CUDA
+    // The dd SAP kernels (mult_domainwall_5din_dd_5dir/5dirdag_dirac) read the
+    // Moebius b/c from __constant__ memory. Upload them here (b/c only; mass-
+    // independent, so it will not clobber any eo operator's mass-dependent
+    // const_e/f/dpinv living in the same process).
+    BridgeACC::setDomainwallConstantBC(m_b.data(), m_c.data(), m_Ns);
+#endif
   }
 
 #pragma omp barrier
@@ -748,7 +756,7 @@ void AFopr_Domainwall_5din_dd<AFIELD>::mult_D_sap(AFIELD& v,
 
     BridgeACC::mult_domainwall_5din_dd_5dir_dirac(
                                 vp, yp, wp,
-                                m_mq, m_M0, m_Ns, &m_b[0], &m_c[0], 
+                                m_mq, m_M0, m_Ns, &m_b[0], &m_c[0],
                                 m_Nsize, &m_block_size[0], jeo);
 
     BridgeACC::mult_domainwall_5din_dd_hopb_dirac(

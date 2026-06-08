@@ -1,0 +1,28 @@
+[06-06_10:43:16] START real-config 16^4 ladder -> /home/wlchenhome/Bridge/with_alpha/docs/sweep16_real_q450  (conf=./conf_real16.txt, plaq~0.596)  masses=[0.10 0.05 0.025]
+[06-06_10:43:16] === mass 0.10 (real config) ===
+[06-06_10:44:37] START real-config 16^4 ladder -> /home/wlchenhome/Bridge/with_alpha/docs/sweep16_real_q450  (conf=./conf_real16.txt, plaq~0.596)  masses=[0.10 0.05 0.025]
+[06-06_10:44:37] === mass 0.10 (real config) ===
+[06-06_10:45:00]   done mq0.10_float_FP: 23s, 55 pts, floor=3.041736513272747e-13
+[06-06_10:45:43]   done mq0.10_float_DW: 43s, 55 pts, floor=7.540650807675190e-28
+[06-06_10:46:36]   done mq0.10_float_TW: 53s, 55 pts, floor=5.103016019729164e-37
+[06-06_10:47:14]   done mq0.10_double_FP: 38s, 120 pts, floor=2.406942355512293e-30
+[06-06_10:52:18]   done mq0.10_double_DW: 304s, 119 pts, floor=1.804151886665583e-62
+[06-06_11:06:27]   done mq0.10_double_TW: 849s, 119 pts, floor=6.522999607227510e-90
+[06-06_11:06:28] PLOT mq=0.10 -> ladder_real_mq0.10.png
+[06-06_11:06:28] === mass 0.05 (real config) ===
+[06-06_11:06:51]   done mq0.05_float_FP: 23s, 55 pts, floor=3.711765324352495e-13
+[06-06_11:07:29]   done mq0.05_float_DW: 38s, 55 pts, floor=7.972740894418244e-28
+[06-06_11:08:22]   done mq0.05_float_TW: 53s, 55 pts, floor=2.296870352325938e-31
+[06-06_11:09:00]   done mq0.05_double_FP: 38s, 120 pts, floor=3.414471750554845e-30
+[06-06_11:14:29]   done mq0.05_double_DW: 329s, 137 pts, floor=1.940419944132367e-62
+[06-06_11:29:47]   done mq0.05_double_TW: 918s, 137 pts, floor=1.686131716968437e-90
+[06-06_11:29:48] PLOT mq=0.05 -> ladder_real_mq0.05.png
+[06-06_11:29:48] === mass 0.025 (real config) ===
+[06-06_11:30:11]   done mq0.025_float_FP: 23s, 55 pts, floor=3.717925490046015e-13
+[06-06_11:30:54]   done mq0.025_float_DW: 43s, 55 pts, floor=1.005340149498501e-27
+[06-06_11:31:47]   done mq0.025_float_TW: 53s, 55 pts, floor=1.252978966197982e-28
+[06-06_11:32:30]   done mq0.025_double_FP: 43s, 120 pts, floor=3.373738812369011e-30
+[06-06_11:38:09]   done mq0.025_double_DW: 339s, 143 pts, floor=2.885298322382673e-62
+[06-06_11:53:58]   done mq0.025_double_TW: 949s, 143 pts, floor=1.103496783329214e-90
+[06-06_11:53:59] PLOT mq=0.025 -> ladder_real_mq0.025.png
+[06-06_11:53:59] ALL 18 runs complete. yamls restored. artifacts in /home/wlchenhome/Bridge/with_alpha/docs/sweep16_real_q450

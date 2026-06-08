@@ -639,22 +639,14 @@ int Test_Coarse::test()
   vout.general("hoge: calling afopr_coarse->generate_coarse_op, done\n");
   */
 
-  // with AFopr_Precond_dd
+  // Kanamori method: coarsen the hop1 D with the PV preconditioner
+  // (3-arg generate_coarse_op = fine dd operator, PV solver, test vectors).
   vout.crucial("afopr_coarse->generate_coarse_op start\n");
-
-  Parameters params_fopr_prec;
-  params_fopr_prec.set_string("verbose_level", "Detailed");
-
-  AFopr_Precond_dd<AFIELD_f>* afopr_precond =
-         new AFopr_Precond_dd<AFIELD_f>(afopr_fineF_dd, &solver_in_sap_PV,
-                                        params_fopr_prec);
-  afopr_precond->set_mode("D");
 
 #pragma omp parallel
   {
-   afopr_coarse->generate_coarse_op(afopr_precond, atestvec);
+   afopr_coarse->generate_coarse_op(afopr_fineF_dd, &solver_in_sap_PV, atestvec);
   }
-  delete afopr_precond;
   vout.crucial("afopr_coarse->generate_coarse_op finished\n");
 
   // setup of coarse operator finished

@@ -1,5 +1,5 @@
 /*!
-      @file    mult_Domainwall_coarse_openacc2-inc.h
+      @file    mult_Domainwall_coarse.h
       @brief
       @author  Hideo Matsufuru (matufuru)
       @date    $LastChangedDate: 2013-01-22 13:51:53 #$
