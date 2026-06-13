@@ -222,7 +222,7 @@ void BlockFGMRES_dw<AFIELD>::blockQR(std::vector<AFIELD>& R, int s,
   for (int j = 0; j < s; ++j) { m_QRtmp[j].set(real_t(0.0)); vp[j] = m_QRtmp[j].ptr(0); }
   mrhs_live::block_update(vp, rp, m_negLi_dev, s, m_Nin, m_Nex, m_Nsize);
 
-  mrhs_live::block_copy(rp, vp, s, (long)m_Nin*m_Nvol*m_Nex);  // R <- orthonormal block (batched)
+  mrhs_live::block_copy(rp, vp, s, (long)m_Nin*R[0].nvol_pad()*m_Nex);  // R <- orthonormal (batched)
 }
 
 //====================================================================
@@ -234,7 +234,11 @@ double BlockFGMRES_dw<AFIELD>::solve(std::vector<AFIELD>& X,
 {
   const int s = (int)B.size();
   const int m = m_m;
-  const long nflt = (long)m_Nin * m_Nvol * m_Nex;   // floats per field (batched BLAS-1)
+  // floats per field = PADDED physical buffer (Nin * nvol_pad * Nex).  Padding is
+  // zero-initialised and preserved by copy/axpy/scal (and the IDX2 operators only
+  // touch logical sites), so flat batched BLAS-1 over the padded buffer is bit-
+  // exact -- including norm2, whose padding terms are zero.
+  const long nflt = (long)m_Nin * const_cast<AFIELD&>(B[0]).nvol_pad() * m_Nex;
   total_vcycles = 0;
 
   real_t* Bp[256]; real_t* Rp[256]; real_t* AXp[256];   // stack host-base ptr arrays
