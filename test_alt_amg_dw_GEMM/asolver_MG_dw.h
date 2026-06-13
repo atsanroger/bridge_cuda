@@ -293,6 +293,12 @@ class ASolver_MG_dw : public ASolver<AFIELD>
   //! cached block-GMRES smoother (persistent Krylov buffers across V-cycles).
   std::unique_ptr<BlockFGMRES_dw<AFIELD_f> > m_block_smoother;
 
+  //! outer inner-solver for solve_block_propagator (batched block-FGMRES on A_F,
+  //! prec = batched V-cycle).  Persistent (built once, reused across propagator
+  //! chunks) so its block-Krylov basis is NOT re-malloc'd every chunk and its
+  //! field pointers stay stable (map_upload cache hits), mirroring m_block_*.
+  std::unique_ptr<BlockFGMRES_dw<AFIELD_f> > m_bsolver;
+
   //! #15: cached batched coarse solve used inside apply_vcycle_block.  The block
   //! coarse GMRES (block_A = coarse_mrhs = D) + the per-column coarse fields are
   //! built once (s/coarse-geometry change) and reused across V-cycles, mirroring

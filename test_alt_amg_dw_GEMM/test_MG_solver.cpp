@@ -694,11 +694,20 @@ namespace {
 
       // ---- BATCHED SOLVE: psi_all = D^{-1} eta_all through the fully batched AMG
       // (block-FGMRES + batched A + batched V-cycle), physical-residual refinement.
-      // MEMORY: the fine 5d fields are ~16-32 MB each; the operators+setup already
-      // hold ~5.5 GB, so the full 12-column refinement scratch + block-Krylov basis
-      // does NOT fit in a 10 GB card.  Process the Nprop columns in MRHS sub-batches
-      // of PROP_CHUNK -- still fully batched per chunk, peak = entry + one chunk. ----
-      const int PROP_CHUNK = 4;
+      // MEMORY/THROUGHPUT KNOB (TestType.prop_chunk): the columns are solved in
+      // MRHS sub-batches of prop_chunk.  Larger = better throughput (one block-
+      // FGMRES + batched V-cycle for more columns, setup amortised, higher GPU
+      // occupancy) but more memory: the fine 5d fields are ~16-32 MB each and the
+      // refinement scratch + block-Krylov basis scale with the chunk, so the full
+      // 12-column batch (~3.9 GB scratch + basis on top of ~5.5 GB operators/setup)
+      // OOMs a 10 GB card.  prop_chunk=4 fits the 3080; set it to Nc*Nd (=12, full
+      // batch) on an A100/H100 for peak throughput.  Clamped to [1, Nprop].
+      int prop_chunk = 4;
+      if (params_all.is_set("TestType"))
+        params_all.lookup("TestType").fetch_int("prop_chunk", prop_chunk);
+      if (prop_chunk < 1)      prop_chunk = 1;
+      if (prop_chunk > Nprop)  prop_chunk = Nprop;
+      const int PROP_CHUNK = prop_chunk;
       vout.general(vl, "\n");
       vout.general(vl, "Hadron 2pt: %d quark propagators through A (batched AMG, chunk=%d):\n",
                    Nprop, PROP_CHUNK);

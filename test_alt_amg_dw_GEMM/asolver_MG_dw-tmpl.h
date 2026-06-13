@@ -1645,17 +1645,23 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
                    CommonParameters::Nz(), CommonParameters::Nt() };
 
   // batched FLOAT block-FGMRES inner solver: batched A + batched V-cycle.
-  BlockFGMRES_dw<AF> bsolver(Nin, Nvol, Nex, Nsize);
-  AFopr<AF> *Aop = m_afopr_A_F;
-  APrecond_MG_dw<AFIELD, AF> *prec = m_prec_mg.get();
-  ASolver_MG_dw<AFIELD> *self = this;
-  bsolver.set_ops(
-    [Aop](AF& y, const AF& x)  { Aop->mult(y, x); },
-    [prec](AF& y, const AF& x) { prec->apply_vcycle_single(y, x); });
-  bsolver.set_block_A(
-    [self](std::vector<AF>& y, const std::vector<AF>& x) { self->apply_A_block(y, x); });
-  bsolver.set_block_prec(
-    [self](std::vector<AF>& z, const std::vector<AF>& v) { self->apply_vcycle_block(z, v); });
+  // PERSISTENT (built once, reused across propagator chunks): the block-Krylov
+  // basis is then allocated once instead of re-malloc'd per chunk, and its field
+  // pointers stay stable so map_upload's cache hits (no per-call re-upload).
+  if (!m_bsolver) {
+    AFopr<AF> *Aop = m_afopr_A_F;
+    APrecond_MG_dw<AFIELD, AF> *prec = m_prec_mg.get();
+    ASolver_MG_dw<AFIELD> *self = this;
+    m_bsolver.reset(new BlockFGMRES_dw<AF>(Nin, Nvol, Nex, Nsize));
+    m_bsolver->set_ops(
+      [Aop](AF& y, const AF& x)  { Aop->mult(y, x); },
+      [prec](AF& y, const AF& x) { prec->apply_vcycle_single(y, x); });
+    m_bsolver->set_block_A(
+      [self](std::vector<AF>& y, const std::vector<AF>& x) { self->apply_A_block(y, x); });
+    m_bsolver->set_block_prec(
+      [self](std::vector<AF>& z, const std::vector<AF>& v) { self->apply_vcycle_block(z, v); });
+  }
+  BlockFGMRES_dw<AF>& bsolver = *m_bsolver;
   // CHEAP LOOSE inner solve: the outer physical-residual refinement recovers
   // accuracy, so each inner solve only needs to knock the residual down ~1e-3.
   // MEMORY: the block-FGMRES Krylov basis is (restart_len+1+restart_len)*s fine
