@@ -253,16 +253,20 @@ double BlockFGMRES_dw<AFIELD>::solve(std::vector<AFIELD>& X,
   // Krylov / work storage: persistent across calls, (re)allocated only on shape
   // change.  V[0..m] blocks of s, Z[0..m-1] blocks of s, R/AX/Wstep blocks of s.
   if (s != m_alloc_s || m != m_alloc_m || m_Nin != m_alloc_nin) {
+    // set(0) zeros the FULL padded buffer (m_nsize_pad), incl. the NWP padding
+    // lanes.  The batched BLAS-1 sums over the padded buffer, so the padding MUST
+    // be zero for norm2 to be correct on padded (coarse) fields -- operators write
+    // only logical sites, and copy/axpy/scal preserve the zero padding thereafter.
     m_V.assign(m + 1, std::vector<AFIELD>());
     m_Z.assign(m,     std::vector<AFIELD>());
-    for (int k = 0; k <= m; ++k) { m_V[k].resize(s); for (int c = 0; c < s; ++c) m_V[k][c].reset(m_Nin, m_Nvol, m_Nex); }
-    for (int k = 0; k <  m; ++k) { m_Z[k].resize(s); for (int c = 0; c < s; ++c) m_Z[k][c].reset(m_Nin, m_Nvol, m_Nex); }
+    for (int k = 0; k <= m; ++k) { m_V[k].resize(s); for (int c = 0; c < s; ++c) { m_V[k][c].reset(m_Nin, m_Nvol, m_Nex); m_V[k][c].set(real_t(0.0)); } }
+    for (int k = 0; k <  m; ++k) { m_Z[k].resize(s); for (int c = 0; c < s; ++c) { m_Z[k][c].reset(m_Nin, m_Nvol, m_Nex); m_Z[k][c].set(real_t(0.0)); } }
     m_R.resize(s); m_AX.resize(s); m_Wstep.resize(s); m_QRtmp.resize(s);
-    for (int c = 0; c < s; ++c) { m_R[c].reset(m_Nin, m_Nvol, m_Nex);
-                                  m_AX[c].reset(m_Nin, m_Nvol, m_Nex);
-                                  m_Wstep[c].reset(m_Nin, m_Nvol, m_Nex);
-                                  m_QRtmp[c].reset(m_Nin, m_Nvol, m_Nex); }
-    m_wtmp.reset(m_Nin, m_Nvol, m_Nex);
+    for (int c = 0; c < s; ++c) { m_R[c].reset(m_Nin, m_Nvol, m_Nex);     m_R[c].set(real_t(0.0));
+                                  m_AX[c].reset(m_Nin, m_Nvol, m_Nex);    m_AX[c].set(real_t(0.0));
+                                  m_Wstep[c].reset(m_Nin, m_Nvol, m_Nex); m_Wstep[c].set(real_t(0.0));
+                                  m_QRtmp[c].reset(m_Nin, m_Nvol, m_Nex); m_QRtmp[c].set(real_t(0.0)); }
+    m_wtmp.reset(m_Nin, m_Nvol, m_Nex); m_wtmp.set(real_t(0.0));
     // device dense-LA buffers (grow-only) -- everything stays on the GPU.
     long gss = 2L * s * s;
     if (gss > m_G_cap)      { if (m_G_dev)     mrhs_live::dev_free(m_G_dev);     m_G_dev     = mrhs_live::dev_alloc(gss); m_G_cap = gss; }

@@ -1077,18 +1077,20 @@ void block_chol_inv_dev(real_t* Lout, real_t* negLi, const real_t* G, int s)
       }
     }
     __syncthreads();
-    // one thread per i>=j reduces the j partial terms it owns and finalises L[j][i].
-    if (jj == 0 && ii >= j) {
-      float sr, si;
-      if (ii == j) { sr = G[2*(j*s+j)]; si = 0.f; } else { sr = G[2*(j*s+ii)]; si = G[2*(j*s+ii)+1]; }
+    // diagonal FIRST (single thread): L[j][j] = sqrt(G[j][j] - sum_k |L[k][j]|^2).
+    if (jj == 0 && ii == j) {
+      float sr = G[2*(j*s+j)];
+      for (int k = 0; k < j; ++k) sr -= pr[k*s+j];
+      if (sr < 1.0e-30f) sr = 1.0e-30f;
+      Lr[j*s+j] = sqrtf(sr); Li[j*s+j] = 0.f;
+    }
+    __syncthreads();                              // L[j][j] visible before /Ljj below
+    // off-diagonals i>j (one thread each) -- now safe to read L[j][j].
+    if (jj == 0 && ii > j) {
+      float sr = G[2*(j*s+ii)], si = G[2*(j*s+ii)+1];
       for (int k = 0; k < j; ++k) { sr -= pr[k*s+ii]; si -= pi[k*s+ii]; }
-      if (ii == j) {
-        if (sr < 1.0e-30f) sr = 1.0e-30f;
-        Lr[j*s+j] = sqrtf(sr); Li[j*s+j] = 0.f;
-      } else {
-        float Ljj = Lr[j*s+j];
-        Lr[j*s+ii] = sr/Ljj; Li[j*s+ii] = si/Ljj;
-      }
+      float Ljj = Lr[j*s+j];
+      Lr[j*s+ii] = sr/Ljj; Li[j*s+ii] = si/Ljj;
     }
     __syncthreads();
   }

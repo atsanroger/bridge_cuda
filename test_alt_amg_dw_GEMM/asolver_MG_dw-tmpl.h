@@ -1281,16 +1281,25 @@ void ASolver_MG_dw<AFIELD>::apply_vcycle_block(std::vector<AFIELD_f>& v,
   if (m_vc_coarse_s != s) {                     // (re)build coarse fields + solver
     m_vc_cw.resize(s); m_vc_cb.resize(s); m_vc_cX.resize(s);
     for (int c = 0; c < s; ++c) {
-      m_vc_cw[c].reset(cNin, cNvol, cNex);
-      m_vc_cb[c].reset(cNin, cNvol, cNex);
-      m_vc_cX[c].reset(cNin, cNvol, cNex);
+      // set(0) zeros the FULL padded buffer: coarse vol is NOT a multiple of NWP
+      // (e.g. 81 -> 96 padded), so the batched BLAS-1 (which sums the padded
+      // buffer) needs zero padding for norm2 to be correct.  coarse_prec/repack
+      // write only logical sites, preserving the zero padding.
+      m_vc_cw[c].reset(cNin, cNvol, cNex); m_vc_cw[c].set(real_f(0.0));
+      m_vc_cb[c].reset(cNin, cNvol, cNex); m_vc_cb[c].set(real_f(0.0));
+      m_vc_cX[c].reset(cNin, cNvol, cNex); m_vc_cX[c].set(real_f(0.0));
     }
     using FoprCoarse_t = AFopr_Domainwall_coarse<AF>;
     FoprCoarse_t *ccop = static_cast<FoprCoarse_t *>(m_afopr_coarse.get());
     const int Ncol = ccop->get_ncol();
     const int* bc2 = ccop->get_bc2_arr();
     float *u_dev   = mrhs_live::field_dev_ptr(ccop->get_U_ptr());
-    int cNs[4] = { Nsize[0], Nsize[1], Nsize[2], Nsize[3] };
+    // COARSE lattice dims (NOT the fine Nsize): the coarse block-FGMRES/coarse
+    // Dirac operate on cNvol coarse sites, so block_inner/coarse_mrhs must use
+    // product(cNs)=cNvol.  Using the fine Nsize here read 20736 sites from an
+    // 81-site field -> OOB -> nondeterministic NaN.
+    int cNs[4] = { m_coarse_lattice[0], m_coarse_lattice[1],
+                   m_coarse_lattice[2], m_coarse_lattice[3] };
     int cbc[4] = { bc2[0], bc2[1], bc2[2], bc2[3] };
     AFopr<AF> *cop = m_afopr_coarse.get();
     m_block_coarse.reset(new BlockFGMRES_dw<AF>(cNin, cNvol, cNex, cNs));
@@ -1315,7 +1324,8 @@ void ASolver_MG_dw<AFIELD>::apply_vcycle_block(std::vector<AFIELD_f>& v,
   using FoprCoarse_t = AFopr_Domainwall_coarse<AF>;
   FoprCoarse_t *ccop = static_cast<FoprCoarse_t *>(m_afopr_coarse.get());
   const int Ncol = ccop->get_ncol();
-  int cNs[4] = { Nsize[0], Nsize[1], Nsize[2], Nsize[3] };
+  int cNs[4] = { m_coarse_lattice[0], m_coarse_lattice[1],
+                 m_coarse_lattice[2], m_coarse_lattice[3] };   // coarse lattice, not fine
   float *ct_dev = mrhs_live::field_dev_ptr(ccop->get_Clov_inv_ptr());
 
   real_f* cwp[256]; real_f* cbp[256];           // stack, no per-V-cycle heap
@@ -1646,12 +1656,14 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
     [self](std::vector<AF>& y, const std::vector<AF>& x) { self->apply_A_block(y, x); });
   bsolver.set_block_prec(
     [self](std::vector<AF>& z, const std::vector<AF>& v) { self->apply_vcycle_block(z, v); });
-  // CHEAP LOOSE inner solve: the outer double physical-residual refinement
-  // recovers accuracy, so each inner solve only needs to knock the residual down
-  // by ~1e-3 per refine (not converge to 1e-12).  A tight inner here would run
-  // 60+ V-cycles x s columns x max_refine -- far too slow on the 3080 (FP64-poor,
-  // launch-overhead-bound).  restart_len=12, 1 restart, stop 1e-6 ~= 12 V-cycles.
-  bsolver.set_parameters(/*restart_len=*/12, /*max_restart=*/1, /*stop_cond_sq=*/1.0e-6);
+  // CHEAP LOOSE inner solve: the outer physical-residual refinement recovers
+  // accuracy, so each inner solve only needs to knock the residual down ~1e-3.
+  // MEMORY: the block-FGMRES Krylov basis is (restart_len+1+restart_len)*s fine
+  // 5d vectors (~16 MB each at s=12) -- at restart_len=12 that is ~300 vectors
+  // ~4.8 GB, which OOMs a 10 GB card alongside the operators/smoother/scratch.
+  // restart_len=4 + max_restart=3 keeps the SAME ~12 V-cycles but only a 4-block
+  // basis (~1.7 GB): restarts reuse the basis instead of growing it.
+  bsolver.set_parameters(/*restart_len=*/4, /*max_restart=*/3, /*stop_cond_sq=*/1.0e-6);
 
   // The physical-residual refinement maps between the A_F system and the
   // physical D system via the PVprec operator's "leftprec" (b' = P_L r) and
@@ -1719,7 +1731,8 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
       axpy(rphys[c], real_d(-1.0), Dx[c]);                   // r_phys = eta - D psi
       res2[c] = rphys[c].norm2() / eta2[c];
       ++nref[c];
-      if (res2[c] > worst2) worst2 = res2[c];
+      // NaN-safe: nan>worst2 is false, so guard against a NaN slipping through.
+      if (!(res2[c] <= worst2)) worst2 = res2[c];
     }
     if (worst2 < refine_target2) break;
   }
