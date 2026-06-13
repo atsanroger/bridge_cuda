@@ -18,6 +18,13 @@
       that want the batched AMG kernels just link bridgecuda_mrhs.
 */
 
+// SU(3) 3rd-row reconstruction for the batched fine hop: read 2 columns (12
+// reals) per link and rebuild the 3rd via EXT_IMG (conj cross-product), cutting
+// gauge DRAM bandwidth ~1/3 on the memory-bound Wilson stencil. Exact for the
+// unitary fine gauge; the production single-RHS DW TUs already define this, so
+// enabling it here also makes the mrhs hop match that oracle more closely.
+#define SU3_3RD_ROW_RECONST
+
 #include "inline/define_params.h"
 #include "inline/define_index.h"
 
