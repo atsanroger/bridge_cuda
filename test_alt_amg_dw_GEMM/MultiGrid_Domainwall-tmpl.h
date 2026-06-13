@@ -510,19 +510,23 @@ void MultiGrid_Domainwall<AFIELD1, AFIELD2>::set_coarse_array(
   int ith, nth, is_coarse, ns_coarse;
   set_threadtask(ith, nth, is_coarse, ns_coarse, coarse_nvol);
 
+  // bulk D2H once, then read the host buffer (cmp_host) -- replaces the per-
+  // element cmp() (a single-element cudaMemcpy each, ~2M over the solve).
+  coarse_vector.update_host();
+
 #pragma omp barrier
 
   for (int ivec = 0; ivec < num_vectors; ++ivec) {
     for (int block = is_coarse; block < ns_coarse; ++block) {
       int    index_re1 = index_c.idx_SPr(ivec, 0, block, 0);
       int    index_im1 = index_c.idx_SPi(ivec, 0, block, 0);
-      real_t re1       = coarse_vector.cmp(index_re1);
-      real_t im1       = coarse_vector.cmp(index_im1);
+      real_t re1       = coarse_vector.cmp_host(index_re1);
+      real_t im1       = coarse_vector.cmp_host(index_im1);
 
       int    index_re2 = index_c.idx_SPr(ivec, 1, block, 0);
       int    index_im2 = index_c.idx_SPi(ivec, 1, block, 0);
-      real_t re2       = coarse_vector.cmp(index_re2);
-      real_t im2       = coarse_vector.cmp(index_im2);
+      real_t re2       = coarse_vector.cmp_host(index_re2);
+      real_t im2       = coarse_vector.cmp_host(index_im2);
 
       // impl-2
       //  |f> += cm (1-gm5)/2 |i> + cp (1+gm5)/2 |i>
@@ -579,18 +583,21 @@ void MultiGrid_Domainwall<AFIELD1, AFIELD2>::set_coarse_vector(
       real_t im1       = imag(array1[block + coarse_nvol * (2 * ivec)]);
       int    index_re1 = index_c.idx_SPr(ivec, 0, block, 0);
       int    index_im1 = index_c.idx_SPi(ivec, 0, block, 0);
-      coarse_vector.set(index_re1, re1);
-      coarse_vector.set(index_im1, im1);
+      coarse_vector.set_host(index_re1, re1);
+      coarse_vector.set_host(index_im1, im1);
 
       real_t re2       = real(array1[block + coarse_nvol * (2 * ivec + 1)]);
       real_t im2       = imag(array1[block + coarse_nvol * (2 * ivec + 1)]);
       int    index_re2 = index_c.idx_SPr(ivec, 1, block, 0);
       int    index_im2 = index_c.idx_SPi(ivec, 1, block, 0);
-      coarse_vector.set(index_re2, re2);
-      coarse_vector.set(index_im2, im2);
+      coarse_vector.set_host(index_re2, re2);
+      coarse_vector.set_host(index_im2, im2);
     }
   }
 #pragma omp barrier
+  // write the host buffer to device ONCE (replaces per-element set()'s single-
+  // element H2D each).  Must precede any device-side op on coarse_vector.
+  coarse_vector.update_device();
   coarse_vector.scal(real_t(0.5));
 #pragma omp barrier
 }

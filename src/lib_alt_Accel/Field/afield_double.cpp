@@ -48,8 +48,8 @@ void copy(AField<double, ACCEL>& v, const AField<float, ACCEL> &w)
   set_threadtask(ith, nth, is, ns, v.size_pad());
 
   for (int i = is; i < ns; ++i) {
-    v.set_host(i, double(w.cmp(i)) );
-  }
+    v.set_host(i, double(w.cmp_host(i)) );   // w already bulk-synced above;
+  }                                          // cmp_host avoids a per-element D2H
 
   BridgeACC::copy_to_device(v.ptr(0), v.size_pad());
 
