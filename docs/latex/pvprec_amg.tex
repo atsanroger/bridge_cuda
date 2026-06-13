@@ -13,6 +13,10 @@
 \usepackage{geometry}
 \usepackage{xcolor}
 \usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{matrix,positioning,fit,backgrounds}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
 \graphicspath{{../}{./}}
 \geometry{margin=2.5cm}
 
@@ -112,7 +116,7 @@ domain-wall height    & $M_0$            & $1.0$ \\
 M\"obius coefficients & $(b,c)$          & $(1.5,\,0.5)$ \\
 quark mass            & $m_q$            & $0.005$ \\
 PV mass               & $m_{\mathrm{PV}}$& $1.0$ \\
-alpha parameter       & $\alpha$         & $1.0$ \\
+Neff's alpha          & $\alpha$         & $1.0$ \\
 boundary conditions   &                  & $(1,1,1,-1)$ \\
 \bottomrule
 \end{tabular}
@@ -272,9 +276,12 @@ V-cycle:
 \end{algorithmic}
 \end{algorithm}
 
-\noindent All grid-transfer and coarse-grid work is in single precision
-(\texttt{float}); the outer FGMRES and the operator $\Aop$ are applied in double.
-No multiword/extended precision is used in this study.
+\noindent In the residual-matched reference run of Table~\ref{tab:results} the
+grid-transfer and coarse-grid work is in single precision (\texttt{float}) and the
+outer FGMRES and the operator $\Aop$ are applied in double. The batched propagator
+of Section~\ref{sec:batched} runs $\Aop$ and the entire V-cycle in single
+precision, with double precision confined to an optional, runtime-selectable outer
+residual.
 
 \paragraph{Setup parameters and a caveat.}
 Table~\ref{tab:mg} lists the multigrid parameters. \textbf{The near-null-space
@@ -398,6 +405,73 @@ the full twelve-wide batch is throughput-optimal (one block solve, amortised
 setup, maximal occupancy) but its block-Krylov basis and refinement scratch
 exceed the $10$~GB device, whereas data-centre GPUs run the full batch.
 
+\paragraph{The transfer operators as batched GEMMs.}
+The cost of the V-cycle is dominated by the inter-grid transfers. For a single
+right-hand side the restriction of the residual onto one aggregate is a set of
+inner products against the $n_b$ near-null basis vectors,
+\begin{equation}
+  C_{j} \;=\; \sum_{x\in\text{block}}\sum_{a} \overline{(B_j)}_{a}(x)\, R_{a}(x)
+  \;=\; \big(B\dg R\big)_j ,\qquad j=1,\dots,n_b ,
+  \label{eq:restrict}
+\end{equation}
+a tall--skinny matrix--vector product of the $n_b\times K$ block-basis matrix
+$B\dg$ with the $K$-vector $R$, where $K=(\text{block volume})\times N_{\mathrm{in}}$
+is the number of fine degrees of freedom inside the aggregate. As a mat--vec this
+is bandwidth-bound (flop/byte $\sim\!0.1$). Batching the $n_{\mathrm{rhs}}$
+colour--spin columns turns the skinny mat--vec into a dense matrix--matrix product
+\begin{equation}
+  C\;[\,n_b\times n_{\mathrm{rhs}}\,]
+  \;=\;
+  B\dg\;[\,n_b\times K\,]\;\cdot\;R\;[\,K\times n_{\mathrm{rhs}}\,] ,
+  \label{eq:restrictGEMM}
+\end{equation}
+one small GEMM per aggregate (Figure~\ref{fig:gemm}); the prolongation is the
+transpose, $F=B\,C$. The aggregates are independent, so the V-cycle is a
+\emph{batch} of independent small GEMMs --- compute-bound, and a direct match for
+the warp-level MMA (tensor-core) tiles. The outer solver is a block-FGMRES that
+carries all $n_{\mathrm{rhs}}$ columns through $\Aop$ and the V-cycle together,
+adding a block-Krylov convergence gain on top of the throughput gain; its
+small dense linear algebra (block Gram, Cholesky-QR, Hessenberg) is kept on the
+device so no per-iteration host transfer occurs.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[font=\small, >=latex]
+  % B^dagger : n_b x K
+  \fill[blue!8] (0,0) rectangle (3.0,1.0);
+  \draw[thick] (0,0) rectangle (3.0,1.0);
+  \node at (1.5,0.5) {$B\dg$};
+  \node[above] at (1.5,1.05) {\scriptsize $n_b \times K$};
+  \node at (3.35,0.5) {$\times$};
+  % R : K x n_rhs
+  \begin{scope}[xshift=3.7cm]
+    \fill[orange!12] (0,-0.6) rectangle (1.6,1.6);
+    \draw[thick] (0,-0.6) rectangle (1.6,1.6);
+    \foreach \x in {0.4,0.8,1.2} \draw[gray!60] (\x,-0.6) -- (\x,1.6);
+    \fill[orange!40] (0,-0.6) rectangle (0.4,1.6);
+    \node at (0.8,0.5) {$R$};
+    \node[above] at (0.8,1.65) {\scriptsize $K \times n_{\mathrm{rhs}}$};
+  \end{scope}
+  \node at (5.75,0.5) {$=$};
+  % C : n_b x n_rhs
+  \begin{scope}[xshift=6.1cm]
+    \fill[green!10] (0,0) rectangle (1.6,1.0);
+    \draw[thick] (0,0) rectangle (1.6,1.0);
+    \foreach \x in {0.4,0.8,1.2} \draw[gray!60] (\x,0) -- (\x,1.0);
+    \fill[green!35] (0,0) rectangle (0.4,1.0);
+    \node at (0.8,0.5) {$C$};
+    \node[above] at (0.8,1.05) {\scriptsize $n_b \times n_{\mathrm{rhs}}$};
+  \end{scope}
+\end{tikzpicture}
+\caption{Batched restriction on one aggregate, Eq.~\eqref{eq:restrictGEMM}. A
+single right-hand side (the shaded column) is a tall--skinny mat--vec, bandwidth-
+bound. Stacking the $n_{\mathrm{rhs}}$ colour--spin columns makes $R$ and $C$
+``fat'', so the per-aggregate transfer becomes a dense GEMM that saturates the
+tensor cores; the aggregates run as an independent batch. Prolongation is the
+transpose $F=B\,C$.}
+\label{fig:gemm}
+\end{figure}
+
 The resulting pseudoscalar correlator reproduces the production even-odd CGNE,
 \[
   C_{PP}^{\mathrm{AMG}} = 1.56750\times10^{-1}, \qquad
@@ -411,32 +485,66 @@ quantitative, fully-batched, FP32 check.
 \paragraph{The \texorpdfstring{$\alpha$}{alpha}-invariance check.}
 Carrying the Neff $\alpha$-form through the \emph{physical} operator (and hence,
 by the Galerkin construction, through the coarse operator) should leave the
-four-dimensional pion invariant while shifting the residual mass as
-$1/\alpha^2$. Repeating the batched solve at $\alpha=1$ and $\alpha=0.5$ on the
-same solver (Table~\ref{tab:alpha}) confirms both: the pion correlator is
-invariant to $1.8\times10^{-4}$ (the FP32 floor), while $m_{\mathrm{res}}$ grows
-by $\approx3.6\times$, broadly consistent with the factor $1/\alpha^2=4$ (the
-departure is attributable to the FP32 inner-solve floor and the small,
-artificially-conditioned test lattice). This validates the $\alpha$-form physics
-and confirms that $\alpha$ propagates correctly into the Galerkin coarse operator
---- the prerequisite for using $\alpha$ as the coarse-space spectral knob.
+four-dimensional pion invariant while shifting the residual mass roughly as
+$1/\alpha^2$. We solve the batched propagator at
+$\alpha\in\{0.38,0.5,0.76,1.0,1.25\}$ on the same solver (Table~\ref{tab:alpha},
+Figure~\ref{fig:mres}). Both expectations hold: the pseudoscalar correlator is
+invariant across the whole range to $\sim5\times10^{-4}$ (the FP32 inner-solve
+floor), while $m_{\mathrm{res}}$ varies by $\approx7\times$, tracking $1/\alpha^2$
+closely for $\alpha\gtrsim0.5$ and departing below it at $\alpha=0.38$ (where the
+operator is most ill-conditioned and the loose, single-precision inner solve is
+least converged). This validates the $\alpha$-form physics and, crucially,
+confirms that $\alpha$ propagates correctly into the Galerkin coarse operator ---
+the prerequisite for later using $\alpha$ as the coarse-space spectral knob.
 
 \begin{table}[h]
 \centering
-\begin{tabular}{lcc}
+\begin{tabular}{ccc}
 \toprule
-batched AMG & $C_{PP}$ & $m_{\mathrm{res}}$ \\
+$\alpha$ & $C_{PP}$ & $m_{\mathrm{res}}$ \\
 \midrule
-$\alpha=1.0$ & $1.56750\times10^{-1}$ & $9.66\times10^{-2}$ \\
-$\alpha=0.5$ & $1.56779\times10^{-1}$ & $3.50\times10^{-1}$ \\
+$0.38$ & $1.56801\times10^{-1}$ & $4.667\times10^{-1}$ \\
+$0.50$ & $1.56779\times10^{-1}$ & $3.500\times10^{-1}$ \\
+$0.76$ & $1.56751\times10^{-1}$ & $1.682\times10^{-1}$ \\
+$1.00$ & $1.56750\times10^{-1}$ & $9.658\times10^{-2}$ \\
+$1.25$ & $1.56758\times10^{-1}$ & $6.340\times10^{-2}$ \\
 \bottomrule
 \end{tabular}
-\caption{$\alpha$-invariance on the batched AMG solver, $12^4$, $\beta=5.7$,
-$m_q=0.005$. The pion $C_{PP}$ is invariant to the FP32 floor; the residual mass
-shifts $\approx3.6\times$, consistent with the $1/\alpha^2$ scaling of the
-$\alpha$-form.}
+\caption{$\alpha$-scan on the batched AMG solver, $12^4$, $\beta=5.7$,
+$m_q=0.005$, single precision. The pion $C_{PP}$ is invariant to the FP32 floor
+across the whole range; the residual mass $m_{\mathrm{res}}$ scans by $7\times$.}
 \label{tab:alpha}
 \end{table}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=11cm, height=7cm,
+    xlabel={$\alpha$}, ylabel={$m_{\mathrm{res}}$},
+    xmin=0.3, xmax=1.35, ymin=0.03, ymax=0.55,
+    grid=both, grid style={gray!20},
+    legend pos=north east, legend cell align=left,
+    tick label style={font=\small}, label style={font=\small},
+]
+% 1/alpha^2 reference, normalised at alpha=1 (m_res=0.09658)
+\addplot[domain=0.35:1.3, samples=80, dashed, thick, gray] {0.09658/(x*x)};
+\addlegendentry{$1/\alpha^2$ (normalised at $\alpha{=}1$)}
+% measured points
+\addplot[only marks, mark=*, mark size=2pt, blue] coordinates {
+  (0.38, 0.46669) (0.50, 0.35001) (0.76, 0.16817) (1.00, 0.09658) (1.25, 0.06340)
+};
+\addlegendentry{batched AMG (measured)}
+\end{axis}
+\end{tikzpicture}
+\caption{Residual mass $m_{\mathrm{res}}$ versus the M\"obius $\alpha$ on the
+batched AMG solver ($12^4$, $m_q=0.005$, single precision). The dashed curve is
+$1/\alpha^2$ normalised at $\alpha=1$. The pion correlator (Table~\ref{tab:alpha})
+is $\alpha$-invariant; $m_{\mathrm{res}}$ follows $1/\alpha^2$ for
+$\alpha\gtrsim0.5$ and falls below it at the most ill-conditioned point
+$\alpha=0.38$.}
+\label{fig:mres}
+\end{figure}
 
 \section{Future work}
 \label{sec:future}
@@ -460,48 +568,6 @@ residual-matched tolerance. The defining property of multigrid is a near
 mass-independent iteration count, set against the steep growth of CGNE as
 $m_q\to0$; this scaling, not a single-point ratio, is the quantitative case for
 the method.
-
-\item \textbf{The $\alpha$ parameter as a spectral knob.} The Neff $\alpha$-form
-of the M\"obius operator (arXiv:2602.14454) leaves the four-dimensional pion
-invariant while shifting the residual mass as $1/\alpha^2$ and compressing the
-spectral range of $\Aop$ (optimal $\alpha\approx0.5$). Boyle and Yamaguchi
-(arXiv:2103.05034) identify the wide coarse-space spectral range $[m_l,64]$ of the
-PV-preconditioned operator as a limiting factor for the MG-PV class; $\alpha$ is
-precisely a knob on that range. We will apply the optimal $\alpha$ inside the
-V-cycle coarse and smoother operators only, holding the physical operator at
-$\alpha=1$, and measure the reduction in outer iterations (with $C_{PP}$ and
-$m_{\mathrm{res}}$ unchanged as the $\alpha$-invariance check). This lever is
-absent from all existing domain-wall multigrid studies.
-
-\item \textbf{Multiword / FP32 precision in the multigrid path.} All published
-domain-wall multigrid runs use double precision throughout. We will carry the
-V-cycle and coarse-grid work in float--float (double-word) arithmetic and verify
-that the true residual reaches the FP64 floor at FP32 storage and bandwidth cost.
-This precision reach --- recovering double-precision accuracy from
-single-precision hardware --- is the principal novel direction, and it interacts
-with the $\alpha$ knob through the spectral range the coarse polynomial must
-resolve.
-
-\item \textbf{Multiple right-hand sides (MRHS).} Following Boyle
-(arXiv:2409.03904), batch the twelve colour--spin columns of the propagator (and,
-in the HMC context, multiple Hasenbusch factors) through $\Aop$ and the V-cycle
-with a block-FGMRES outer solver and a batched (GEMM) coarse operator. This makes
-the coarse-space cost --- the dominant expense of the five-dimensional
-PV-preconditioned coarse space, and the factor that rendered the MG-PV class
-uncompetitive in earlier comparisons --- sub-dominant, and adds a block-Krylov
-algorithmic gain on top of the throughput gain.
-
-\item \textbf{Combined MRHS $\times$ multiword $\times$ FP32.} Batched
-single-precision GEMM on tensor hardware, with multiword arithmetic restoring the
-precision, applied to the full V-cycle. This combination --- a precise,
-PV-preconditioned, positive-operator domain-wall multigrid on batched
-single-precision tensor cores --- is unexplored, and is attempted only once
-items~4 and 5 succeed in isolation.
-\emph{Status update.} The MRHS batched propagator and the FP32 V-cycle (in
-single-precision, not yet multiword form) are now implemented and validated; see
-Section~\ref{sec:batched}. The $\alpha$ lever has been exercised as a physics
-check (Table~\ref{tab:alpha}); applying it to the preconditioner only, for the
-iteration-count reduction, remains open.
 
 \item \textbf{Scale-up validation.} Repeat the comparison on larger volumes and
 smaller quark masses, on data-centre GPUs (A100/H100) whose memory and
