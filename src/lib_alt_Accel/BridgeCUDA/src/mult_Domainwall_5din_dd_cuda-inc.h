@@ -17,7 +17,7 @@ __global__ void mult_domainwall_5din_dd_5dir_dirac_dev(
                    int Ns,
                    int Nx, int Ny, int Nz, int Nt,
                    int Bx, int By, int Bz, int Bt,
-                   int ieo)
+                   int ieo, real_t alpha)
 {
   int Nst  = Nx * Ny * Nz * Nt;
   int Nin5 = NVCD * Ns;
@@ -76,7 +76,7 @@ __global__ void mult_domainwall_5din_dd_5dir_dirac_dev(
       for (int is = 0; is < Ns; ++is) {
 
         int is_up = (is+1) % Ns;
-        real_t Fup = 0.5;
+        real_t Fup = 0.5 * alpha;
         if (is == Ns-1) Fup = -0.5 * mq;
 
         real_t wu1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD*is_up), site)];
@@ -90,7 +90,7 @@ __global__ void mult_domainwall_5din_dd_5dir_dirac_dev(
         real_t vt4 = Fup * (wu4 - wu2);
 
         int is_dn = (is-1 + Ns) % Ns;
-        real_t Fdn = 0.5;
+        real_t Fdn = 0.5 * alpha;
         if (is == 0) Fdn = -0.5 * mq;
 
         real_t wd1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD*is_dn), site)];
@@ -111,15 +111,30 @@ __global__ void mult_domainwall_5din_dd_5dir_dirac_dev(
         real_t w3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)];
         real_t w4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)];
 
-        vp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)] = B_is * w1 + C_is * vt1;
-        vp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)] = B_is * w2 + C_is * vt2;
-        vp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)] = B_is * w3 + C_is * vt3;
-        vp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)] = B_is * w4 + C_is * vt4;
+        // alpha congruence on the self (diagonal-in-s) block: bulk -> alpha*w,
+        // s=0 / s=Ns-1 corners -> chiral (gamma5) mix 0.5(1+alpha) +/- 0.5(-+1+alpha).
+        real_t st1, st2, st3, st4;
+        if (is == 0) {
+          real_t f1 = 0.5 * (1.0 + alpha), f2 = 0.5 * (-1.0 + alpha);
+          st1 = f1 * w1 + f2 * w3;  st2 = f1 * w2 + f2 * w4;
+          st3 = f1 * w3 + f2 * w1;  st4 = f1 * w4 + f2 * w2;
+        } else if (is == Ns - 1) {
+          real_t f1 = 0.5 * (1.0 + alpha), f2 = 0.5 * (1.0 - alpha);
+          st1 = f1 * w1 + f2 * w3;  st2 = f1 * w2 + f2 * w4;
+          st3 = f1 * w3 + f2 * w1;  st4 = f1 * w4 + f2 * w2;
+        } else {
+          st1 = alpha * w1;  st2 = alpha * w2;  st3 = alpha * w3;  st4 = alpha * w4;
+        }
 
-        yp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)] = -0.5 * (b[is]*w1 + c[is]*vt1);
-        yp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)] = -0.5 * (b[is]*w2 + c[is]*vt2);
-        yp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)] = -0.5 * (b[is]*w3 + c[is]*vt3);
-        yp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)] = -0.5 * (b[is]*w4 + c[is]*vt4);
+        vp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)] = B_is * st1 + C_is * vt1;
+        vp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)] = B_is * st2 + C_is * vt2;
+        vp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)] = B_is * st3 + C_is * vt3;
+        vp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)] = B_is * st4 + C_is * vt4;
+
+        yp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)] = -0.5 * (b[is]*st1 + c[is]*vt1);
+        yp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)] = -0.5 * (b[is]*st2 + c[is]*vt2);
+        yp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)] = -0.5 * (b[is]*st3 + c[is]*vt3);
+        yp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)] = -0.5 * (b[is]*st4 + c[is]*vt4);
       }
     }
   }
@@ -128,10 +143,10 @@ __global__ void mult_domainwall_5din_dd_5dir_dirac_dev(
 //====================================================================
 void mult_domainwall_5din_dd_5dir_dirac(
                    real_t *vp, real_t *yp, real_t *wp,
-                   real_t mq, real_t M0, 
-                   int Ns, 
+                   real_t mq, real_t M0,
+                   int Ns,
                    real_t *b, real_t *c,
-                   int *Nsize, int *block_size, int ieo)
+                   int *Nsize, int *block_size, int ieo, real_t alpha)
 {
   int Nx = Nsize[0];
   int Ny = Nsize[1];
@@ -161,10 +176,10 @@ void mult_domainwall_5din_dd_5dir_dirac(
                    mq, M0, Ns,
                    Nx, Ny, Nz, Nt,
                    Bx, By, Bz, Bt,
-                   ieo);
+                   ieo, alpha);
 
   //Synchronize to ensure completion of kernel execution
-  CHECK(cudaDeviceSynchronize());
+  dw5din_kernel_sync();
 }
 
 //====================================================================
@@ -173,7 +188,7 @@ __global__ void mult_domainwall_5din_dd_5dirdag_dirac_dev(
        real_t mq, real_t M0, int Ns,
        int Nx, int Ny, int Nz, int Nt,
        int Bx, int By, int Bz, int Bt,
-       int ieo)
+       int ieo, real_t alpha)
 {
   int Nst  = Nx * Ny * Nz * Nt;
   int Nin5 = NVCD * Ns;
@@ -237,10 +252,24 @@ __global__ void mult_domainwall_5din_dd_5dirdag_dirac_dev(
         real_t yt3 = yp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)];
         real_t yt4 = yp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)];
 
-        real_t vt1 = B1 * wt1 + a1 * yt3;
-        real_t vt2 = B1 * wt2 + a1 * yt4;
-        real_t vt3 = B1 * wt3 + a1 * yt1;
-        real_t vt4 = B1 * wt4 + a1 * yt2;
+        // self block: S = B1*w + a1*gamma5(y); then alpha congruence (bulk
+        // alpha*S; s=0/Ns-1 corners chirally mixed, same as dd_5dir_dirac_dev).
+        real_t s1 = B1 * wt1 + a1 * yt3;
+        real_t s2 = B1 * wt2 + a1 * yt4;
+        real_t s3 = B1 * wt3 + a1 * yt1;
+        real_t s4 = B1 * wt4 + a1 * yt2;
+        real_t vt1, vt2, vt3, vt4;
+        if (is == 0) {
+          real_t f1 = 0.5 * (1.0 + alpha), f2 = 0.5 * (-1.0 + alpha);
+          vt1 = f1 * s1 + f2 * s3;  vt2 = f1 * s2 + f2 * s4;
+          vt3 = f1 * s3 + f2 * s1;  vt4 = f1 * s4 + f2 * s2;
+        } else if (is == Ns - 1) {
+          real_t f1 = 0.5 * (1.0 + alpha), f2 = 0.5 * (1.0 - alpha);
+          vt1 = f1 * s1 + f2 * s3;  vt2 = f1 * s2 + f2 * s4;
+          vt3 = f1 * s3 + f2 * s1;  vt4 = f1 * s4 + f2 * s2;
+        } else {
+          vt1 = alpha * s1;  vt2 = alpha * s2;  vt3 = alpha * s3;  vt4 = alpha * s4;
+        }
 
         int is_up = (is+1) % Ns;
         real_t C1 = c[is_up] * (4.0 - M0) - 1.0;
@@ -260,7 +289,7 @@ __global__ void mult_domainwall_5din_dd_5dirdag_dirac_dev(
         real_t xu3 = C1 * wu3 + aup * yu1;
         real_t xu4 = C1 * wu4 + aup * yu2;
 
-        real_t Fup = 0.5;
+        real_t Fup = 0.5 * alpha;
         if (is == Ns-1) Fup = -0.5 * mq;
 
         vt1 += Fup * (xu1 + xu3);
@@ -286,7 +315,7 @@ __global__ void mult_domainwall_5din_dd_5dirdag_dirac_dev(
         real_t xd3 = C2 * wd3 + adn * yd1;
         real_t xd4 = C2 * wd4 + adn * yd2;
 
-        real_t Fdn = 0.5;
+        real_t Fdn = 0.5 * alpha;
         if (is == 0) Fdn = -0.5 * mq;
 
         vt1 += Fdn * (xd1 - xd3);
@@ -306,7 +335,7 @@ __global__ void mult_domainwall_5din_dd_5dirdag_dirac_dev(
 void mult_domainwall_5din_dd_5dirdag_dirac(
        real_t *vp, real_t *yp, real_t *wp,
        real_t mq, real_t M0, int Ns, real_t *b, real_t *c,
-       int *Nsize, int *block_size, int ieo){
+       int *Nsize, int *block_size, int ieo, real_t alpha){
 
   int Nx = Nsize[0];
   int Ny = Nsize[1];
@@ -335,10 +364,10 @@ void mult_domainwall_5din_dd_5dirdag_dirac(
                    mq, M0, Ns,
                    Nx, Ny, Nz, Nt,
                    Bx, By, Bz, Bt,
-                   ieo);
+                   ieo, alpha);
 
   //Synchronize to ensure completion of kernel execution
-  CHECK(cudaDeviceSynchronize());
+  dw5din_kernel_sync();
   }
 
 //====================================================================
@@ -601,7 +630,7 @@ void mult_domainwall_5din_dd_hopb_dirac(
            ieo, flag);
 
     //Synchronize to ensure completion of kernel execution
-    CHECK(cudaDeviceSynchronize());
+    dw5din_kernel_sync();
 };
 
 #endif

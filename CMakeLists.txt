@@ -32,35 +32,12 @@ option(USE_QWS      "Enable QWS library"                   OFF)
 set(BRIDGE_GAUGE_GROUP "SU3" CACHE STRING "Gauge group: SU3 | SU2 | SU_N")
 set_property(CACHE BRIDGE_GAUGE_GROUP PROPERTY STRINGS SU3 SU2 SU_N)
 
-# ----------- BridgeACC symlink (mirrors Makefile link-inline target) -----------
-# Source files use #include "lib_alt_Accel/BridgeACC/..." which requires this symlink.
-if(USE_ALT_ACCEL)
-    if(USE_ACCEL_IMPL STREQUAL "cuda")
-        set(_BRIDGE_ACC_TARGET "BridgeCUDA")
-    elseif(USE_ACCEL_IMPL STREQUAL "nvshmem")
-        set(_BRIDGE_ACC_TARGET "BridgeNVSHMEM")
-    elseif(USE_ACCEL_IMPL STREQUAL "openacc")
-        set(_BRIDGE_ACC_TARGET "BridgeOpenACC")
-    endif()
-    execute_process(
-        COMMAND ${CMAKE_COMMAND} -E create_symlink "${_BRIDGE_ACC_TARGET}" "BridgeACC"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/src/lib_alt_Accel"
-    )
-endif()
+# ----------- CMake helper modules (cmake/) -----------
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
-# ----------- QXS inline symlink (mirrors Makefile link-inline for lib_alt_QXS) -----------
-# lib_alt_QXS sources use #include "lib_alt_QXS/inline/..." which requires this symlink.
-if(USE_ALT_QXS)
-    if(USE_QXS_ARCH STREQUAL "acle")
-        set(_QXS_INLINE "inline_ACLE")
-    else()
-        set(_QXS_INLINE "inline_General")
-    endif()
-    execute_process(
-        COMMAND ${CMAKE_COMMAND} -E create_symlink "${_QXS_INLINE}" "inline"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/src/lib_alt_QXS"
-    )
-endif()
+# Source-tree symlinks (BridgeACC backend + QXS inline arch), mirroring the
+# Makefile build's link-inline target.  See cmake/BridgeSymlinks.cmake.
+include(BridgeSymlinks)
 
 # ----------- CUDA/NVSHMEM sub-library (must precede src/ so bridgecuda is defined first) -----------
 if(USE_ALT_ACCEL AND (USE_ACCEL_IMPL STREQUAL "cuda" OR USE_ACCEL_IMPL STREQUAL "nvshmem"))
@@ -77,45 +54,6 @@ add_subdirectory(src)
 
 add_subdirectory(tests)
 
-# ----------- test_alt_* programs -----------
-file(READ "${CMAKE_SOURCE_DIR}/VERSION" _BRIDGE_VERSION)
-string(STRIP "${_BRIDGE_VERSION}" _BRIDGE_VERSION)
-
-foreach(_dir IN ITEMS
-        test_alt_multigrid
-        test_alt_dw_multigrid
-        test_alt_dw_multigrid_dev2
-        test_alt_dw_multigrid_dev4
-        test_alt_dw_multigrid_dev5
-        test_alt_dw_multigrid_dev6
-        test_alt_spectrum
-        test_alt_smear
-        test_alt_hmc)
-    set(_root_dir "${CMAKE_SOURCE_DIR}/${_dir}")
-    if(NOT IS_DIRECTORY "${_root_dir}")
-        continue()
-    endif()
-
-    # Flat layout: *.cpp directly in root (test_alt_multigrid, test_alt_dw_multigrid*)
-    file(GLOB _srcs CONFIGURE_DEPENDS "${_root_dir}/*.cpp")
-    if(_srcs)
-        set(_inc_dir "${_root_dir}")
-    else()
-        # src/ layout: test_alt_spectrum, test_alt_smear, test_alt_hmc
-        file(GLOB _srcs CONFIGURE_DEPENDS
-            "${_root_dir}/src/*.cpp"
-            "${_root_dir}/src/Tests/*.cpp")
-        set(_inc_dir "${_root_dir}/src")
-    endif()
-
-    if(NOT _srcs)
-        continue()
-    endif()
-
-    string(REPLACE "test_alt_" "" _short "${_dir}")
-    add_executable(bridge_test_alt_${_short} ${_srcs})
-    target_include_directories(bridge_test_alt_${_short} PRIVATE "${_inc_dir}")
-    target_compile_definitions(bridge_test_alt_${_short} PRIVATE
-        "_BRIDGE_VERSION=\"${_BRIDGE_VERSION}\"")
-    target_link_libraries(bridge_test_alt_${_short} PRIVATE bridge)
-endforeach()
+# ----------- Standalone test_alt_* programs -----------
+# (the foreach + the batched-AMG bridgecuda_mrhs link).  See cmake/BridgeAltTests.cmake.
+include(BridgeAltTests)

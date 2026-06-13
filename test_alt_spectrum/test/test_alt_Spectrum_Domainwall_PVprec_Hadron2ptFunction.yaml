@@ -1,10 +1,9 @@
-# FP (single precision) spectrum of the Pauli-Villars + site-diagonal
-# preconditioned Moebius domain-wall operator:
+# Hadron 2pt function (and propagator convergence study) solved through the
+# Pauli-Villars + site-diagonal preconditioned Moebius domain-wall operator
 #     A = (D_PV C_PV^{-1})^dagger C^{-1} D
-# Target operator for multigrid, cf. Kanamori, Chen, Matsufuru,
-# PoS(LATTICE2024)414.
+# (Kanamori, Chen, Matsufuru, PoS(LATTICE2024)414), via GMRES(m) on A.
 
-Test_Eigensolver:
+Test_Spectrum:
   ## gauge_config_status = {Continue,Cold_start,Hot_start}
   gauge_config_status      : Continue
   ## gauge_config_type = {Text,Binary,ILDG,...}
@@ -12,6 +11,8 @@ Test_Eigensolver:
   config_filename_input    : ./conf_quench_16x16x16x16.txt
   random_number_type       : Mseries
   seed_for_random_number   : 1234567UL
+  ## working precision of the GMRES-on-A solves = {double, float}
+  precision                : float
   verbose_level            : General
 
 Fopr:
@@ -25,15 +26,27 @@ Fopr:
   boundary_condition      : [1,1,1,-1]
   coefficient_b           : 1.5
   coefficient_c           : 0.5
+  parameter_alpha         : 1.0
   verbose_level           : General
 
-Eigensolver:
-  eigensolver_type               : IRArnoldi
-  fermion_mult_mode              : D
-  eigensolver_mode               : abs_descending
-  number_of_wanted_eigenvectors  : 8
-  number_of_working_eigenvectors : 40
-  convergence_criterion_squared  : 1.0e-6
-  maximum_number_of_iteration    : 120
-  threshold_value                : 1.0
-  verbose_level                  : Detailed
+# Optional gauge link smearing applied before the solves.
+# Set number_of_smearing : 0 (or smear_type : None) to disable.
+Smearing:
+  ## projection_type = {Stout_SU3, Maximum_SU_N}
+  projection_type     : Stout_SU3
+  ## smear_type = {APE, HYP, None}
+  smear_type          : APE
+  rho_uniform         : 0.1
+  number_of_smearing  : 0
+  verbose_level       : General
+
+Source:
+  ## source_type = {Local,Exponential,MomentumWall,Wall}
+  source_type     : Local
+  ## source_position = [x,y,z,t]
+  source_position : [0,0,0,0]
+  verbose_level   : General
+
+Corr2pt_4spinor:
+  filename_output : stdout
+  verbose_level   : General

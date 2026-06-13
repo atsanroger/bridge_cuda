@@ -9,7 +9,7 @@
 
 
 #include <stdio.h>
-
+#include <algorithm>
 #include "bridgeACC.h"
 
 namespace BridgeACC {

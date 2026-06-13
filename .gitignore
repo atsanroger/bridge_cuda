@@ -13,6 +13,9 @@ sample_hmc/conf_quench_*
 sample_hmc/conf_hmc_*
 sample_hmc/conf_output*
 **/conf_real16.txt
+# gauge configs copied into test run/ dirs (regenerable, large)
+**/run/conf*.txt
+**/nandbg/conf*.txt
 
 # === Editor / tool backups ===
 *.orig
@@ -21,10 +24,35 @@ sample_hmc/conf_output*
 Makefile.20[0-9][0-9]*
 *~
 *.plotbak
+# yaml snapshots / variant backups (main.yaml.b57bak, *.16p4, ...)
+*.b57bak
+*.16p4
+
+# === WSL / Windows metadata litter ===
+*:Zone.Identifier
+
+# === LaTeX build artifacts (keep the .tex source) ===
+docs/latex/*.aux
+docs/latex/*.log
+docs/latex/*.out
+docs/latex/*.toc
+docs/latex/*.pdf
+docs/latex/*.synctex.gz
 
 # === Local scratch ===
 *.log.tmp
 tmp_*.log
+# test run binaries + run/sweep logs (regenerable)
+**/run/exe
+**/run/*.log
+**/nandbg/*.log
+run_*.log
+sweep_launch.log
+# parameter-sweep output trees (logs, gpu dumps, per-test confs) + prebuilt sweep binaries
+**/sweep_2[0-9]*/
+**/sweep_bins/
+**/gpu_before
+**/gpu_after
 
 # === Claude Code / tooling litter (keep out of source tree) ===
 .progress_count

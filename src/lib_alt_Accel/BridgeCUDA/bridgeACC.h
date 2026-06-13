@@ -16,7 +16,13 @@
 typedef cudaStream_t cudaStream_t;
 
 //#define MAX_DEVPTR_REF 256
-#define MAX_DEVPTR_REF 1024
+//#define MAX_DEVPTR_REF 1024
+// Raised for the batched (MRHS) AMG: solving s=12 propagator columns at once
+// keeps s x (block-Krylov basis + V-cycle/smoother/coarse buffers) AFields live
+// simultaneously, which exceeds 1024.  The registry deregisters on field
+// destruction, so this caps SIMULTANEOUS live fields, not cumulative; 8192 x
+// 3 ptrs x 8 B ~ 200 KB, negligible.
+#define MAX_DEVPTR_REF 8192
 
 #define CHECK(call)                                    \
   { const cudaError_t error = call;                    \

@@ -77,6 +77,12 @@ class AFopr_Domainwall_PVprec : public AFopr<AFIELD>
   void set_mode(std::string mode) { m_mode = mode; }
   std::string get_mode() const { return m_mode; }
 
+  //! inner operators (physical-mass D and Pauli-Villars D_PV); for the dev8
+  //! batched MRHS A = (D_PV C_PV^-1)^dag C^-1 D, which needs both operators'
+  //! gauge + Moebius/LU coefficients.  Read-only, additive (no behaviour change).
+  AFopr_Domainwall_5din<AFIELD>* get_fopr()    { return m_fopr; }
+  AFopr_Domainwall_5din<AFIELD>* get_fopr_PV() { return m_fopr_PV; }
+
   void mult(AFIELD& v, const AFIELD& w)
   {
     if (m_mode == "DdagD") {

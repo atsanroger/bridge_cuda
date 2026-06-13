@@ -12,6 +12,37 @@
 #include "../inline/constant_memory_inline.h"
 
 //====================================================================
+// Launch-overhead reduction.
+//
+// The compute kernels in this file run on the legacy default stream (stream 0),
+// so consecutive launches are implicitly ordered and their data dependencies are
+// respected WITHOUT a host-side cudaDeviceSynchronize() between them. Every point
+// where the host actually reads device data -- reductions (norm2/dotc) and the
+// field->host convert/gramschmidt -- goes through a *synchronizing* cudaMemcpy,
+// which drains the default-stream queue and provides the real barrier. The only
+// mid-operator host read is the MPI halo path (chset_send/recv), guarded by
+// do_comm_any>0; the syncs in the hop1/hop2 wrappers (which pack/consume the MPI
+// buffers) are therefore KEPT for multi-rank correctness.
+//
+// A per-kernel cudaDeviceSynchronize() here only forces the host to BLOCK instead
+// of queuing the next launch, which serializes launch+execute and starves the GPU
+// (measured: GPU ~35% util, one host core pegged at 100% spinning) -- i.e. the
+// domain-wall operator apply was launch-latency bound on small/medium local
+// volumes. Dropping it lets the host run ahead and pipeline the launches.
+//
+// Set DW5DIN_SYNC_EACH_KERNEL=1 to restore the old per-kernel sync (e.g. to
+// localize an async kernel error during debugging).
+#ifndef DW5DIN_SYNC_EACH_KERNEL
+#define DW5DIN_SYNC_EACH_KERNEL 0
+#endif
+static inline void dw5din_kernel_sync()
+{
+#if DW5DIN_SYNC_EACH_KERNEL
+  CHECK(cudaDeviceSynchronize());
+#endif
+}
+
+//====================================================================
 __global__
 void mult_domainwall_5din_5dir_dirac_kernel(
     real_t * __restrict__ vp, real_t * __restrict__ yp,
@@ -138,7 +169,7 @@ void mult_domainwall_5din_5dir_dirac(
   mult_domainwall_5din_5dir_dirac_kernel<<<gridSize, blockSize>>>(
       vp_dev, yp_dev, wp_dev, mq, M0, Ns, alpha, Nst_pad);
 
-  CHECK(cudaDeviceSynchronize());
+  dw5din_kernel_sync();
 }
 
 //====================================================================
@@ -284,7 +315,7 @@ void mult_domainwall_5din_5dirdag_dirac(
   mult_domainwall_5din_5dirdag_dirac_kernel<<<gridSize, blockSize>>>(
       vp_dev, yp_dev, wp_dev, mq, M0, Ns, alpha, Nst_pad);
 
-  CHECK(cudaDeviceSynchronize());
+  dw5din_kernel_sync();
 }
 
 //====================================================================
@@ -335,7 +366,7 @@ void mult_domainwall_5din_mult_gm5_dirac(
     mult_domainwall_5din_mult_gm5_dirac_kernel<<<gridSize, blockSize>>>(
         vp_dev, wp_dev, Ns, Nst);
 
-    CHECK(cudaDeviceSynchronize());
+    dw5din_kernel_sync();
 }
 
 
@@ -381,7 +412,7 @@ void mult_domainwall_5din_mult_R(
     mult_domainwall_5din_mult_R_kernel<<<gridSize, blockSize>>>(
         vp_dev, wp_dev, Ns, Nst);
 
-    CHECK(cudaDeviceSynchronize());
+    dw5din_kernel_sync();
 }
 //----------------------------------------------------------------
 __global__ void mult_domainwall_5din_mult_gm5R_dirac_kernel(
@@ -433,7 +464,7 @@ void mult_domainwall_5din_mult_gm5R_dirac(
     mult_domainwall_5din_mult_gm5R_dirac_kernel<<<gridSize, blockSize>>>(
         vp_dev, wp_dev, Ns, Nx, Ny, Nz, Nt);
 
-    cudaDeviceSynchronize();
+    dw5din_kernel_sync();
 }
 
 //====================================================================
@@ -468,7 +499,7 @@ void mult_domainwall_5din_clear(real_t *vp, int Ns, int *Nsize) {
 
     mult_domainwall_5din_clear_kernel<<<gridSize, blockSize>>>(vp_dev, Ns, Nst);
 
-    CHECK(cudaDeviceSynchronize());
+    dw5din_kernel_sync();
 }
 
 //====================================================================
@@ -755,435 +786,351 @@ void mult_domainwall_5din_hopb_dirac(
     do_comm_x, do_comm_y, do_comm_z, do_comm_t,
     flag, Nst_pad); 
     
-    CHECK(cudaDeviceSynchronize());
+  dw5din_kernel_sync();
 }
 //====================================================================
 __global__ void mult_domainwall_5din_L_inv_dirac_kernel(
-    real_t *vp, real_t *wp, int Ns, 
-    int Nx, int Ny, int Nz, int Nt, 
-    int Nin5, real_t *e, real_t *dpinv, real_t *dm) {
+    real_t * __restrict__ vp, real_t * __restrict__ wp, int Ns, int Nin5,
+    const real_t * __restrict__ e, const real_t * __restrict__ dpinv,
+    const real_t * __restrict__ dm, int Nst_pad) {
 
-    const int site = blockIdx.x * blockDim.x + threadIdx.x;
-    const int Nst = Nx * Ny * Nz * Nt;
+  // Forward substitution L^{-1} (serial over s, independent per color/Re-Im).
+  // One thread per (site,ivc); carries the 4 spin components across the
+  // s-recurrence.  e/dpinv/dm are per-operator device arrays (no cudaMalloc).
+  const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
+  const int GridSize = blockDim.x * gridDim.x;
 
-    if (site < Nst) {
-        real_t vt[NVCD], yt[NVCD], xt[NVCD];
+  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize) {
+    int idx2_wp = idx / NWP;
+    int idx_in  = idx % NWP;
+    int ivc     = idx2_wp % NVC;
+    int idx_out = idx2_wp / NVC;
+    int site    = idx_in + NWP * idx_out;
 
-        int is = 0;
+    real_t vt1, vt2, vt3, vt4, yt1, yt2, yt3, yt4, xt1, xt2, xt3, xt4;
 
-        for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-            vt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-            vp[IDX2(Nin5, (ivcd + NVCD * is), site)] = vt[ivcd];
-            yt[ivcd] = e[0] * vt[ivcd];
-        }
+    vt1 = wp[IDX2(Nin5, (ID1 + ivc), site)];
+    vt2 = wp[IDX2(Nin5, (ID2 + ivc), site)];
+    vt3 = wp[IDX2(Nin5, (ID3 + ivc), site)];
+    vt4 = wp[IDX2(Nin5, (ID4 + ivc), site)];
+    vp[IDX2(Nin5, (ID1 + ivc), site)] = vt1;
+    vp[IDX2(Nin5, (ID2 + ivc), site)] = vt2;
+    vp[IDX2(Nin5, (ID3 + ivc), site)] = vt3;
+    vp[IDX2(Nin5, (ID4 + ivc), site)] = vt4;
+    real_t e0 = e[0];
+    yt1 = e0 * vt1; yt2 = e0 * vt2; yt3 = e0 * vt3; yt4 = e0 * vt4;
 
-        // Loop over is
-        for(int is = 1; is < Ns - 1; ++is) {
-
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-
-                xt[ivcd] = vt[ivcd];
-                vt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-
-            }
-
-            real_t a = real_t(0.5) * dm[is] * dpinv[is - 1];
-
-            for(int ivc = 0; ivc < NVC; ++ivc){
-                vt[ID1 + ivc] += a * (xt[ID1 + ivc] + xt[ID3 + ivc]);
-                vt[ID2 + ivc] += a * (xt[ID2 + ivc] + xt[ID4 + ivc]);
-                vt[ID3 + ivc] += a * (xt[ID3 + ivc] + xt[ID1 + ivc]);
-                vt[ID4 + ivc] += a * (xt[ID4 + ivc] + xt[ID2 + ivc]);
-            }
-
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-                vp[IDX2(Nin5, (ivcd + NVCD * is), site)] = vt[ivcd];
-                yt[ivcd] += e[is] * vt[ivcd];
-            }
-        }
-
-        is = Ns - 1;
-        for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-            xt[ivcd] = vt[ivcd];
-            vt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-        }
-
-        real_t a = real_t(0.5) * dm[is] * dpinv[is - 1];
-
-        for(int ivc = 0; ivc < NVC; ++ivc){
-            vt[ID1 + ivc] += a * (xt[ID1 + ivc] + xt[ID3 + ivc]);
-            vt[ID2 + ivc] += a * (xt[ID2 + ivc] + xt[ID4 + ivc]);
-            vt[ID3 + ivc] += a * (xt[ID3 + ivc] + xt[ID1 + ivc]);
-            vt[ID4 + ivc] += a * (xt[ID4 + ivc] + xt[ID2 + ivc]);
-            vt[ID1 + ivc] += -0.5 * (yt[ID1 + ivc] - yt[ID3 + ivc]);
-            vt[ID2 + ivc] += -0.5 * (yt[ID2 + ivc] - yt[ID4 + ivc]);
-            vt[ID3 + ivc] += -0.5 * (yt[ID3 + ivc] - yt[ID1 + ivc]);
-            vt[ID4 + ivc] += -0.5 * (yt[ID4 + ivc] - yt[ID2 + ivc]);
-        }
-
-        for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-            vp[IDX2(Nin5, (ivcd + NVCD * is), site)] = vt[ivcd];
-        }
+    for (int is = 1; is < Ns - 1; ++is) {
+      xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+      vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+      vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+      vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+      vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+      real_t a = real_t(0.5) * dm[is] * dpinv[is - 1];
+      vt1 += a * (xt1 + xt3);
+      vt2 += a * (xt2 + xt4);
+      vt3 += a * (xt3 + xt1);
+      vt4 += a * (xt4 + xt2);
+      vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = vt1;
+      vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt2;
+      vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt3;
+      vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt4;
+      real_t eis = e[is];
+      yt1 += eis * vt1; yt2 += eis * vt2; yt3 += eis * vt3; yt4 += eis * vt4;
     }
+
+    {
+      int is = Ns - 1;
+      xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+      vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+      vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+      vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+      vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+      real_t a = real_t(0.5) * dm[is] * dpinv[is - 1];
+      vt1 += a * (xt1 + xt3);
+      vt2 += a * (xt2 + xt4);
+      vt3 += a * (xt3 + xt1);
+      vt4 += a * (xt4 + xt2);
+      vt1 += -0.5 * (yt1 - yt3);
+      vt2 += -0.5 * (yt2 - yt4);
+      vt3 += -0.5 * (yt3 - yt1);
+      vt4 += -0.5 * (yt4 - yt2);
+      vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = vt1;
+      vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt2;
+      vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt3;
+      vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt4;
+    }
+  }
 }
 
 void mult_domainwall_5din_L_inv_dirac(
     real_t *vp, real_t *wp, int Ns, int *Nsize, real_t *e, real_t *dpinv, real_t *dm) {
+  // e/dpinv/dm are device-resident (mapped once by the operator); fetch the
+  // device pointers -- no per-call cudaMalloc/cudaMemcpy/cudaFree.
+  int Nin5 = NVCD * Ns;
+  int Nst  = Nsize[0] * Nsize[1] * Nsize[2] * Nsize[3];
+  int Nst_pad = ceil_nwp(Nst);
 
-    int Nx = Nsize[0];
-    int Ny = Nsize[1];
-    int Nz = Nsize[2];
-    int Nt = Nsize[3];
-    int Nin5 = NVCD * Ns;
-    int Nst = Nx * Ny * Nz * Nt;
+  real_t* vp_dev    = (real_t*)dev_ptr(vp);
+  real_t* wp_dev    = (real_t*)dev_ptr(wp);
+  real_t* e_dev     = (real_t*)dev_ptr(e);
+  real_t* dpinv_dev = (real_t*)dev_ptr(dpinv);
+  real_t* dm_dev    = (real_t*)dev_ptr(dm);
 
-    real_t* vp_dev = (real_t*)dev_ptr(vp);
-    real_t* wp_dev = (real_t*)dev_ptr(wp);
+  int blockSize = VECTOR_LENGTH;
+  int gridSize  = (Nst_pad * NVC + blockSize - 1) / blockSize;
+  mult_domainwall_5din_L_inv_dirac_kernel<<<gridSize, blockSize>>>(
+      vp_dev, wp_dev, Ns, Nin5, e_dev, dpinv_dev, dm_dev, Nst_pad);
 
-    real_t* e_dev;
-    real_t* dpinv_dev; 
-    real_t* dm_dev;
-
-    size_t nsize = Ns * sizeof(real_t);
-
-    CHECK(cudaMalloc((void **)&e_dev     , nsize));
-    CHECK(cudaMalloc((void **)&dpinv_dev , nsize));
-    CHECK(cudaMalloc((void **)&dm_dev    , nsize));
-
-    CHECK(cudaMemcpy(e_dev, e, nsize, cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(dpinv_dev, dpinv, nsize, cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(dm_dev, dm, nsize, cudaMemcpyHostToDevice));
-
-    int blockSize = VECTOR_LENGTH;
-    int gridSize = (Nst + blockSize - 1)/ blockSize;
-
-    mult_domainwall_5din_L_inv_dirac_kernel<<<gridSize, blockSize>>>(
-        vp_dev, wp_dev, Ns, Nx, Ny, Nz, Nt, Nin5, e_dev, dpinv_dev, dm_dev);
-
-    cudaDeviceSynchronize();
-    
-    CHECK(cudaFree(e_dev));
-    CHECK(cudaFree(dpinv_dev));
-    CHECK(cudaFree(dm_dev));
-
+  dw5din_kernel_sync();
 }
 
 //====================================================================
 __global__ void mult_domainwall_5din_U_inv_dirac_kernel(
-    real_t *vp, real_t *wp, int Ns, 
-    int Nx, int Ny, int Nz, int Nt, int Nin5, 
-    real_t *f, real_t *dpinv, real_t *dm) {
+    real_t * __restrict__ vp, real_t * __restrict__ wp, int Ns, int Nin5,
+    const real_t * __restrict__ f, const real_t * __restrict__ dpinv,
+    const real_t * __restrict__ dm, int Nst_pad) {
 
-    int site = blockIdx.x * blockDim.x + threadIdx.x;
-    int Nst = Nx * Ny * Nz * Nt;
+  // Backward substitution U^{-1}.  yt is fixed at the s=Ns-1 boundary value.
+  const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
+  const int GridSize = blockDim.x * gridDim.x;
 
-    if (site < Nst) {
-        real_t vt[NVCD], yt[NVCD], xt[NVCD];
+  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize) {
+    int idx2_wp = idx / NWP;
+    int idx_in  = idx % NWP;
+    int ivc     = idx2_wp % NVC;
+    int idx_out = idx2_wp / NVC;
+    int site    = idx_in + NWP * idx_out;
 
-        int is   = Ns - 1;
-        real_t a = dpinv[Ns - 1];
+    real_t vt1, vt2, vt3, vt4, yt1, yt2, yt3, yt4, xt1, xt2, xt3, xt4;
 
-        for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-            vt[ivcd] = a * wp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-            vp[IDX2(Nin5, (ivcd + NVCD * is), site)] = vt[ivcd];
-        }
+    int is0 = Ns - 1;
+    real_t a0 = dpinv[Ns - 1];
+    vt1 = a0 * wp[IDX2(Nin5, (ID1 + ivc + NVCD * is0), site)];
+    vt2 = a0 * wp[IDX2(Nin5, (ID2 + ivc + NVCD * is0), site)];
+    vt3 = a0 * wp[IDX2(Nin5, (ID3 + ivc + NVCD * is0), site)];
+    vt4 = a0 * wp[IDX2(Nin5, (ID4 + ivc + NVCD * is0), site)];
+    vp[IDX2(Nin5, (ID1 + ivc + NVCD * is0), site)] = vt1;
+    vp[IDX2(Nin5, (ID2 + ivc + NVCD * is0), site)] = vt2;
+    vp[IDX2(Nin5, (ID3 + ivc + NVCD * is0), site)] = vt3;
+    vp[IDX2(Nin5, (ID4 + ivc + NVCD * is0), site)] = vt4;
+    yt1 = 0.5 * (vt1 + vt3);
+    yt2 = 0.5 * (vt2 + vt4);
+    yt3 = 0.5 * (vt3 + vt1);
+    yt4 = 0.5 * (vt4 + vt2);
 
-        for(int ivc = 0; ivc < NVC; ++ivc){
-            yt[ID1 + ivc] = 0.5 * (vt[ID1 + ivc] + vt[ID3 + ivc]);
-            yt[ID2 + ivc] = 0.5 * (vt[ID2 + ivc] + vt[ID4 + ivc]);
-            yt[ID3 + ivc] = 0.5 * (vt[ID3 + ivc] + vt[ID1 + ivc]);
-            yt[ID4 + ivc] = 0.5 * (vt[ID4 + ivc] + vt[ID2 + ivc]);
-        }
-
-        for (is = Ns - 2; is >= 0; --is) {
-
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-                xt[ivcd] = vt[ivcd];
-                vt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-            }
-
-            real_t a = real_t(0.5) * dm[is];
-            
-            for(int ivc = 0; ivc < NVC; ++ivc){
-                vt[ID1 + ivc] += a * (xt[ID1 + ivc] - xt[ID3 + ivc]);
-                vt[ID2 + ivc] += a * (xt[ID2 + ivc] - xt[ID4 + ivc]);
-                vt[ID3 + ivc] += a * (xt[ID3 + ivc] - xt[ID1 + ivc]);
-                vt[ID4 + ivc] += a * (xt[ID4 + ivc] - xt[ID2 + ivc]);
-            }
-
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-                vt[ivcd] += -f[is] * yt[ivcd];
-            }
-
-            real_t aa = dpinv[is];
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-                vt[ivcd] *= aa;
-            }
-
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-                vp[IDX2(Nin5, (ivcd + NVCD * is), site)] = vt[ivcd];
-            }
-        }
+    for (int is = Ns - 2; is >= 0; --is) {
+      xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+      vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+      vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+      vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+      vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+      real_t a = real_t(0.5) * dm[is];
+      vt1 += a * (xt1 - xt3);
+      vt2 += a * (xt2 - xt4);
+      vt3 += a * (xt3 - xt1);
+      vt4 += a * (xt4 - xt2);
+      real_t fis = f[is];
+      vt1 += -fis * yt1; vt2 += -fis * yt2; vt3 += -fis * yt3; vt4 += -fis * yt4;
+      real_t aa = dpinv[is];
+      vt1 *= aa; vt2 *= aa; vt3 *= aa; vt4 *= aa;
+      vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = vt1;
+      vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt2;
+      vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt3;
+      vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt4;
     }
+  }
 }
 
 void mult_domainwall_5din_U_inv_dirac(
-    real_t *vp, real_t *wp, int Ns, int *Nsize, 
-    real_t *f, real_t *dpinv, real_t *dm) {
+    real_t *vp, real_t *wp, int Ns, int *Nsize, real_t *f, real_t *dpinv, real_t *dm) {
+  int Nin5 = NVCD * Ns;
+  int Nst  = Nsize[0] * Nsize[1] * Nsize[2] * Nsize[3];
+  int Nst_pad = ceil_nwp(Nst);
 
-    int Nx = Nsize[0];
-    int Ny = Nsize[1];
-    int Nz = Nsize[2];
-    int Nt = Nsize[3];
-    int Nin5 = NVCD * Ns;
-    int Nst = Nx * Ny * Nz * Nt;
+  real_t* vp_dev    = (real_t*)dev_ptr(vp);
+  real_t* wp_dev    = (real_t*)dev_ptr(wp);
+  real_t* f_dev     = (real_t*)dev_ptr(f);
+  real_t* dpinv_dev = (real_t*)dev_ptr(dpinv);
+  real_t* dm_dev    = (real_t*)dev_ptr(dm);
 
-    real_t* vp_dev = (real_t*)dev_ptr(vp);
-    real_t* wp_dev = (real_t*)dev_ptr(wp);
+  int blockSize = VECTOR_LENGTH;
+  int gridSize  = (Nst_pad * NVC + blockSize - 1) / blockSize;
+  mult_domainwall_5din_U_inv_dirac_kernel<<<gridSize, blockSize>>>(
+      vp_dev, wp_dev, Ns, Nin5, f_dev, dpinv_dev, dm_dev, Nst_pad);
 
-    real_t* f_dev;
-    real_t* dpinv_dev; 
-    real_t* dm_dev;
-
-    size_t nsize = Ns * sizeof(real_t);
-
-    CHECK(cudaMalloc((void **)&f_dev,     nsize));
-    CHECK(cudaMalloc((void **)&dpinv_dev, nsize));
-    CHECK(cudaMalloc((void **)&dm_dev,    nsize));
-
-    CHECK(cudaMemcpy(f_dev,     f,      nsize, cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(dpinv_dev, dpinv,  nsize, cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(dm_dev,    dm,     nsize, cudaMemcpyHostToDevice));
-
-
-    int blockSize = VECTOR_LENGTH;
-    int gridSize = (Nst + blockSize - 1)/ blockSize;
-
-    mult_domainwall_5din_U_inv_dirac_kernel<<<gridSize, blockSize>>>(
-        vp_dev, wp_dev, Ns, Nx, Ny, Nz, Nt, Nin5, f_dev, dpinv_dev, dm_dev);
-
-    cudaDeviceSynchronize();
-
-    CHECK(cudaFree(f_dev));
-    CHECK(cudaFree(dpinv_dev));
-    CHECK(cudaFree(dm_dev));
-
+  dw5din_kernel_sync();
 }
 
 //====================================================================
 __global__ void mult_domainwall_5din_Ldag_inv_dirac_kernel(
-    real_t *vp, real_t *wp, int Ns, 
-    int Nx, int Ny, int Nz, int Nt, int Nin5, 
-    real_t *e, real_t *dpinv, real_t *dm) {
+    real_t * __restrict__ vp, real_t * __restrict__ wp, int Ns, int Nin5,
+    const real_t * __restrict__ e, const real_t * __restrict__ dpinv,
+    const real_t * __restrict__ dm, int Nst_pad) {
 
-    int site = blockIdx.x * blockDim.x + threadIdx.x;
-    int Nst = Nx * Ny * Nz * Nt;
+  const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
+  const int GridSize = blockDim.x * gridDim.x;
 
-    if (site < Nst) {
-        real_t vt[NVCD], yt[NVCD], xt[NVCD];
+  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize) {
+    int idx2_wp = idx / NWP;
+    int idx_in  = idx % NWP;
+    int ivc     = idx2_wp % NVC;
+    int idx_out = idx2_wp / NVC;
+    int site    = idx_in + NWP * idx_out;
 
-        int is = Ns - 1;
+    real_t vt1, vt2, vt3, vt4, yt1, yt2, yt3, yt4, xt1, xt2, xt3, xt4;
 
-        for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-            vt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-            vp[IDX2(Nin5, (ivcd + NVCD * is), site)] = vt[ivcd];
-        }
+    int is0 = Ns - 1;
+    vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is0), site)];
+    vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is0), site)];
+    vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is0), site)];
+    vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is0), site)];
+    vp[IDX2(Nin5, (ID1 + ivc + NVCD * is0), site)] = vt1;
+    vp[IDX2(Nin5, (ID2 + ivc + NVCD * is0), site)] = vt2;
+    vp[IDX2(Nin5, (ID3 + ivc + NVCD * is0), site)] = vt3;
+    vp[IDX2(Nin5, (ID4 + ivc + NVCD * is0), site)] = vt4;
+    yt1 = 0.5 * (vt1 - vt3);
+    yt2 = 0.5 * (vt2 - vt4);
+    yt3 = 0.5 * (vt3 - vt1);
+    yt4 = 0.5 * (vt4 - vt2);
 
-        for(int ivc = 0; ivc < NVC; ++ivc){
-            yt[ID1 + ivc] = 0.5 * (vt[ID1 + ivc] - vt[ID3 + ivc]);
-            yt[ID2 + ivc] = 0.5 * (vt[ID2 + ivc] - vt[ID4 + ivc]);
-            yt[ID3 + ivc] = 0.5 * (vt[ID3 + ivc] - vt[ID1 + ivc]);
-            yt[ID4 + ivc] = 0.5 * (vt[ID4 + ivc] - vt[ID2 + ivc]);
-        }
-
-        for (int is = Ns - 2; is >= 0; --is) {
-
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-                xt[ivcd] = vt[ivcd];
-                vt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-            }
-
-            real_t a = real_t(0.5) * dm[is + 1] * dpinv[is];
-
-            for(int ivc = 0; ivc < NVC; ++ivc){
-                vt[ID1 + ivc] += a * (xt[ID1 + ivc] + xt[ID3 + ivc]);
-                vt[ID2 + ivc] += a * (xt[ID2 + ivc] + xt[ID4 + ivc]);
-                vt[ID3 + ivc] += a * (xt[ID3 + ivc] + xt[ID1 + ivc]);
-                vt[ID4 + ivc] += a * (xt[ID4 + ivc] + xt[ID2 + ivc]);
-            }
-
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-                vt[ivcd] += -e[is] * yt[ivcd];
-            }
-
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-                vp[IDX2(Nin5, (ivcd + NVCD * is), site)] = vt[ivcd];
-            }
-        }
+    for (int is = Ns - 2; is >= 0; --is) {
+      xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+      vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+      vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+      vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+      vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+      real_t a = real_t(0.5) * dm[is + 1] * dpinv[is];
+      vt1 += a * (xt1 + xt3);
+      vt2 += a * (xt2 + xt4);
+      vt3 += a * (xt3 + xt1);
+      vt4 += a * (xt4 + xt2);
+      real_t eis = e[is];
+      vt1 += -eis * yt1; vt2 += -eis * yt2; vt3 += -eis * yt3; vt4 += -eis * yt4;
+      vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = vt1;
+      vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt2;
+      vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt3;
+      vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt4;
     }
+  }
 }
 
 void mult_domainwall_5din_Ldag_inv_dirac(
     real_t *vp, real_t *wp, int Ns, int *Nsize, real_t *e, real_t *dpinv, real_t *dm) {
+  int Nin5 = NVCD * Ns;
+  int Nst  = Nsize[0] * Nsize[1] * Nsize[2] * Nsize[3];
+  int Nst_pad = ceil_nwp(Nst);
 
-    int Nx = Nsize[0];
-    int Ny = Nsize[1];
-    int Nz = Nsize[2];
-    int Nt = Nsize[3];
-    int Nin5 = NVCD * Ns;
-    int Nst = Nx * Ny * Nz * Nt;
+  real_t* vp_dev    = (real_t*)dev_ptr(vp);
+  real_t* wp_dev    = (real_t*)dev_ptr(wp);
+  real_t* e_dev     = (real_t*)dev_ptr(e);
+  real_t* dpinv_dev = (real_t*)dev_ptr(dpinv);
+  real_t* dm_dev    = (real_t*)dev_ptr(dm);
 
-    real_t* vp_dev = (real_t*)dev_ptr(vp);
-    real_t* wp_dev = (real_t*)dev_ptr(wp);
+  int blockSize = VECTOR_LENGTH;
+  int gridSize  = (Nst_pad * NVC + blockSize - 1) / blockSize;
+  mult_domainwall_5din_Ldag_inv_dirac_kernel<<<gridSize, blockSize>>>(
+      vp_dev, wp_dev, Ns, Nin5, e_dev, dpinv_dev, dm_dev, Nst_pad);
 
-    real_t* e_dev;
-    real_t* dpinv_dev;
-    real_t* dm_dev;
-
-    size_t nsize = Ns * sizeof(real_t);
-
-    CHECK(cudaMalloc((void **)&e_dev , nsize));
-    CHECK(cudaMalloc((void **)&dpinv_dev , nsize));
-    CHECK(cudaMalloc((void **)&dm_dev , nsize));
-
-    CHECK(cudaMemcpy(e_dev, e, nsize, cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(dpinv_dev, dpinv, nsize, cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(dm_dev, dm, nsize, cudaMemcpyHostToDevice));
-
-    int blockSize = VECTOR_LENGTH;
-    int gridSize = (Nst + blockSize - 1)/ blockSize;
-    
-    mult_domainwall_5din_Ldag_inv_dirac_kernel<<<gridSize, blockSize>>>(
-        vp_dev, wp_dev, Ns, Nx, Ny, Nz, Nt, Nin5, e_dev, dpinv_dev, dm_dev);
-
-    cudaDeviceSynchronize();
-
-    CHECK(cudaFree(e_dev));
-    CHECK(cudaFree(dpinv_dev));
-    CHECK(cudaFree(dm_dev));
-
+  dw5din_kernel_sync();
 }
-
 
 //====================================================================
 __global__ void mult_domainwall_5din_Udag_inv_dirac_kernel(
-    real_t *vp, real_t *wp, int Ns, 
-    int Nx, int Ny, int Nz, int Nt, int Nin5, 
-    real_t *f, real_t *dpinv, real_t *dm) {
+    real_t * __restrict__ vp, real_t * __restrict__ wp, int Ns, int Nin5,
+    const real_t * __restrict__ f, const real_t * __restrict__ dpinv,
+    const real_t * __restrict__ dm, int Nst_pad) {
 
-    int site = blockIdx.x * blockDim.x + threadIdx.x;
-    int Nst = Nx * Ny * Nz * Nt;
+  // Forward substitution Udag^{-1}; yt accumulates over s.
+  const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
+  const int GridSize = blockDim.x * gridDim.x;
 
-    if (site < Nst) {
-        real_t vt[NVCD], yt[NVCD], xt[NVCD];
-        int is = 0;
-        real_t a = dpinv[0];
-        for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-            vt[ivcd] = a * wp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-            vp[IDX2(Nin5, (ivcd + NVCD * is), site)] = vt[ivcd];
-        }
-        for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-            yt[ivcd] = f[0] * vt[ivcd];
-        }
+  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize) {
+    int idx2_wp = idx / NWP;
+    int idx_in  = idx % NWP;
+    int ivc     = idx2_wp % NVC;
+    int idx_out = idx2_wp / NVC;
+    int site    = idx_in + NWP * idx_out;
 
-        for (int is = 1; is < Ns - 1; ++is) {
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-                xt[ivcd] = vt[ivcd];
-                vt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * is), site)];
-            }
+    real_t vt1, vt2, vt3, vt4, yt1, yt2, yt3, yt4, xt1, xt2, xt3, xt4;
 
-            real_t a = real_t(0.5) * dm[is - 1];
-            for(int ivc = 0; ivc < NVC; ++ivc){
-                vt[ID1 + ivc] += a * (xt[ID1 + ivc] - xt[ID3 + ivc]);
-                vt[ID2 + ivc] += a * (xt[ID2 + ivc] - xt[ID4 + ivc]);
-                vt[ID3 + ivc] += a * (xt[ID3 + ivc] - xt[ID1 + ivc]);
-                vt[ID4 + ivc] += a * (xt[ID4 + ivc] - xt[ID2 + ivc]);
-            }
+    real_t a0 = dpinv[0];
+    vt1 = a0 * wp[IDX2(Nin5, (ID1 + ivc), site)];
+    vt2 = a0 * wp[IDX2(Nin5, (ID2 + ivc), site)];
+    vt3 = a0 * wp[IDX2(Nin5, (ID3 + ivc), site)];
+    vt4 = a0 * wp[IDX2(Nin5, (ID4 + ivc), site)];
+    vp[IDX2(Nin5, (ID1 + ivc), site)] = vt1;
+    vp[IDX2(Nin5, (ID2 + ivc), site)] = vt2;
+    vp[IDX2(Nin5, (ID3 + ivc), site)] = vt3;
+    vp[IDX2(Nin5, (ID4 + ivc), site)] = vt4;
+    real_t f0 = f[0];
+    yt1 = f0 * vt1; yt2 = f0 * vt2; yt3 = f0 * vt3; yt4 = f0 * vt4;
 
-            real_t aa = dpinv[is];
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-                vt[ivcd] *= aa;
-            }
-
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-                vp[IDX2(Nin5, (ivcd + NVCD * is), site)] = vt[ivcd];
-            }
-
-            for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-                yt[ivcd] += f[is] * vt[ivcd];
-            }
-        }
-
-        for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-            xt[ivcd] = vt[ivcd];
-            vt[ivcd] = wp[IDX2(Nin5, (ivcd + NVCD * (Ns - 1)), site)];
-        }
-
-        a = real_t(0.5) * dm[Ns - 2];
-        for(int ivc = 0; ivc < NVC; ++ivc){
-            vt[ID1 + ivc] += a * (xt[ID1 + ivc] - xt[ID3 + ivc]);
-            vt[ID2 + ivc] += a * (xt[ID2 + ivc] - xt[ID4 + ivc]);
-            vt[ID3 + ivc] += a * (xt[ID3 + ivc] - xt[ID1 + ivc]);
-            vt[ID4 + ivc] += a * (xt[ID4 + ivc] - xt[ID2 + ivc]);
-        }
-        for(int ivc = 0; ivc < NVC; ++ivc){
-            vt[ID1 + ivc] += -0.5 * (yt[ID1 + ivc] + yt[ID3 + ivc]);
-            vt[ID2 + ivc] += -0.5 * (yt[ID2 + ivc] + yt[ID4 + ivc]);
-            vt[ID3 + ivc] += -0.5 * (yt[ID3 + ivc] + yt[ID1 + ivc]);
-            vt[ID4 + ivc] += -0.5 * (yt[ID4 + ivc] + yt[ID2 + ivc]);
-        }
-
-        real_t aa = dpinv[Ns - 1];
-        for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-            vt[ivcd] *= aa;
-        }
-
-        for(int ivcd = 0; ivcd < NVCD; ++ivcd){
-            vp[IDX2(Nin5, (ivcd + NVCD * (Ns - 1)), site)] = vt[ivcd];
-        }
+    for (int is = 1; is < Ns - 1; ++is) {
+      xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+      vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+      vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+      vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+      vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+      real_t a = real_t(0.5) * dm[is - 1];
+      vt1 += a * (xt1 - xt3);
+      vt2 += a * (xt2 - xt4);
+      vt3 += a * (xt3 - xt1);
+      vt4 += a * (xt4 - xt2);
+      real_t aa = dpinv[is];
+      vt1 *= aa; vt2 *= aa; vt3 *= aa; vt4 *= aa;
+      vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = vt1;
+      vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt2;
+      vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt3;
+      vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt4;
+      real_t fis = f[is];
+      yt1 += fis * vt1; yt2 += fis * vt2; yt3 += fis * vt3; yt4 += fis * vt4;
     }
+
+    {
+      int is = Ns - 1;
+      xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+      vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+      vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+      vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+      vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+      real_t a = real_t(0.5) * dm[Ns - 2];
+      vt1 += a * (xt1 - xt3);
+      vt2 += a * (xt2 - xt4);
+      vt3 += a * (xt3 - xt1);
+      vt4 += a * (xt4 - xt2);
+      vt1 += -0.5 * (yt1 + yt3);
+      vt2 += -0.5 * (yt2 + yt4);
+      vt3 += -0.5 * (yt3 + yt1);
+      vt4 += -0.5 * (yt4 + yt2);
+      real_t aa = dpinv[Ns - 1];
+      vt1 *= aa; vt2 *= aa; vt3 *= aa; vt4 *= aa;
+      vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = vt1;
+      vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt2;
+      vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt3;
+      vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt4;
+    }
+  }
 }
 
 void mult_domainwall_5din_Udag_inv_dirac(
     real_t *vp, real_t *wp, int Ns, int *Nsize, real_t *f, real_t *dpinv, real_t *dm) {
+  int Nin5 = NVCD * Ns;
+  int Nst  = Nsize[0] * Nsize[1] * Nsize[2] * Nsize[3];
+  int Nst_pad = ceil_nwp(Nst);
 
-    int Nx = Nsize[0];
-    int Ny = Nsize[1];
-    int Nz = Nsize[2];
-    int Nt = Nsize[3];
-    int Nin5 = NVCD * Ns;
-    int Nst = Nx * Ny * Nz * Nt;
+  real_t* vp_dev    = (real_t*)dev_ptr(vp);
+  real_t* wp_dev    = (real_t*)dev_ptr(wp);
+  real_t* f_dev     = (real_t*)dev_ptr(f);
+  real_t* dpinv_dev = (real_t*)dev_ptr(dpinv);
+  real_t* dm_dev    = (real_t*)dev_ptr(dm);
 
-    real_t* vp_dev = (real_t*)dev_ptr(vp);
-    real_t* wp_dev = (real_t*)dev_ptr(wp);
+  int blockSize = VECTOR_LENGTH;
+  int gridSize  = (Nst_pad * NVC + blockSize - 1) / blockSize;
+  mult_domainwall_5din_Udag_inv_dirac_kernel<<<gridSize, blockSize>>>(
+      vp_dev, wp_dev, Ns, Nin5, f_dev, dpinv_dev, dm_dev, Nst_pad);
 
-    real_t* f_dev;
-    real_t* dpinv_dev; 
-    real_t* dm_dev;
-
-    size_t nsize = Ns * sizeof(real_t);
-
-    CHECK(cudaMalloc((void **)&f_dev , nsize));
-    CHECK(cudaMalloc((void **)&dpinv_dev , nsize));
-    CHECK(cudaMalloc((void **)&dm_dev , nsize));
-
-    CHECK(cudaMemcpy(f_dev, f, nsize, cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(dpinv_dev, dpinv, nsize, cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(dm_dev, dm, nsize, cudaMemcpyHostToDevice));
-
-    int blockSize = VECTOR_LENGTH;
-    int gridSize = (Nst + blockSize - 1)/ blockSize;
-
-    // Launch the CUDA kernel
-    mult_domainwall_5din_Udag_inv_dirac_kernel<<<gridSize, blockSize>>>(
-        vp_dev, wp_dev, Ns, Nx, Ny, Nz, Nt, Nin5, f_dev, dpinv_dev, dm_dev);
-
-    cudaDeviceSynchronize();
-
-    CHECK(cudaFree(f_dev));
-    CHECK(cudaFree(dpinv_dev));
-    CHECK(cudaFree(dm_dev));
-
+  dw5din_kernel_sync();
 }
 
 
@@ -2101,69 +2048,13 @@ void mult_domainwall_5din_hop2_dirac(
         int do_comm_z = do_comm[2];
         int do_comm_t = do_comm[3];
 
-        // cudaStream_t* cuda_stream = nullptr;
-        // int nstream = 4;
-        // CREATE_CUDA_STREAMS(&cuda_stream, nstream);
-
-        // if (cuda_stream == nullptr) {
-        //     fprintf(stderr, "Failed to create CUDA streams.\n");
-        // }
-
-        // if( do_comm[0] > 0){
-        //     size_t size_bx = Nin5bd * Ny * Nz * Nt;
-        //     update_device_asy(buf2_xp, 0 ,size_bx, cuda_stream[0]);
-        //     update_device_asy(buf2_xm, 0 ,size_bx, cuda_stream[0]);
-        // }
-
-        // if( do_comm[1] > 0){
-        //     size_t size_by = Nin5bd * Nx * Nz * Nt;
-        //     update_device_asy(buf2_yp, 0 ,size_by, cuda_stream[1]);
-        //     update_device_asy(buf2_ym, 0 ,size_by, cuda_stream[1]);
-        // }
-
-        // if( do_comm[2] > 0){
-        //     size_t size_bz = Nin5bd * Ny * Nx * Nt;
-        //     update_device_asy(buf2_zp, 0 ,size_bz, cuda_stream[2]);
-        //     update_device_asy(buf2_zm, 0 ,size_bz, cuda_stream[2]);
-        // }
-
-        // if( do_comm[3] > 0){
-        //     size_t size_bt = Nin5bd * Ny * Nx * Nz;
-        //     update_device_asy(buf2_tp, 0 ,size_bt, cuda_stream[3]);
-        //     update_device_asy(buf2_tm, 0 ,size_bt, cuda_stream[3]);
-        // }
-
-        // DESTROY_CUDA_STREAMS(&cuda_stream, nstream);
-
         real_t * vp_dev = (real_t*)dev_ptr(vp);
         real_t * up_dev = (real_t*)dev_ptr(up);
         real_t * wp_dev = (real_t*)dev_ptr(wp);
 
-        // real_t * buf2_xp_dev = (real_t*)dev_ptr(buf2_xp);
-        // real_t * buf2_xm_dev = (real_t*)dev_ptr(buf2_xm);
-        // real_t * buf2_yp_dev = (real_t*)dev_ptr(buf2_yp);
-        // real_t * buf2_ym_dev = (real_t*)dev_ptr(buf2_ym);
-        // real_t * buf2_zp_dev = (real_t*)dev_ptr(buf2_zp);
-        // real_t * buf2_zm_dev = (real_t*)dev_ptr(buf2_zm);
-        // real_t * buf2_tp_dev = (real_t*)dev_ptr(buf2_tp);
-        // real_t * buf2_tm_dev = (real_t*)dev_ptr(buf2_tm);
-
         int blockSize  = VECTOR_LENGTH;
 
         int sharedsize = NDF * sizeof(real_t);
-/*
-        int gridSize4D   = (Nst + blockSize - 1)/ blockSize;
-        mult_domainwall_5din_hop2_4D_dirac_dev<<<gridSize4D, VECTOR_LENGTH, sharedsize>>>(
-            vp_dev,  up_dev,  wp_dev,
-            buf2_xp_dev, buf2_xm_dev,
-            buf2_yp_dev, buf2_ym_dev,
-            buf2_zp_dev, buf2_zm_dev,
-            buf2_tp_dev, buf2_tm_dev,
-            Ns,  
-            bc_x, bc_y, bc_z, bc_t,
-            do_comm_x, do_comm_y, do_comm_z, do_comm_t,
-            Nx, Ny, Nz, Nt);
-*/
         int gridSize5D   = (Nst_pad * Ns + blockSize - 1)/ blockSize;
         mult_domainwall_5din_hop2_5D_dirac_dev<<<gridSize5D, VECTOR_LENGTH, sharedsize>>>(
             vp_dev,  up_dev,  wp_dev,
@@ -2175,7 +2066,6 @@ void mult_domainwall_5din_hop2_dirac(
             bc_x, bc_y, bc_z, bc_t,
             do_comm_x, do_comm_y, do_comm_z, do_comm_t,
             Nx, Ny, Nz, Nt, Nst_pad);
-
 
         CHECK(cudaDeviceSynchronize());
 }

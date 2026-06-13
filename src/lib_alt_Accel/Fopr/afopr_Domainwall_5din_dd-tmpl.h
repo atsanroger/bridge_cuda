@@ -45,6 +45,8 @@ void AFopr_Domainwall_5din_dd<AFIELD>::init(const Parameters& params)
 
   m_repr = "Dirac";  // now only the Dirac repr is available.
 
+  m_alpha = real_t(1.0);  // Neff alpha; overridden in set_parameters if given.
+
   std::string repr;
   if (!params.fetch_string("gamma_matrix_type", repr)) {
     if (repr != "Dirac") {
@@ -139,6 +141,16 @@ void AFopr_Domainwall_5din_dd<AFIELD>::tidyup()
 #endif
 
   }
+
+#ifdef USE_ACCEL_CUDA
+  if (m_coeff_on_device) {
+    BridgeACC::afield_tidyup(m_e.data(),     m_Ns - 1);
+    BridgeACC::afield_tidyup(m_f.data(),     m_Ns - 1);
+    BridgeACC::afield_tidyup(m_dpinv.data(), m_Ns);
+    BridgeACC::afield_tidyup(m_dm.data(),    m_Ns);
+    m_coeff_on_device = false;
+  }
+#endif
 
 }
 
@@ -237,6 +249,16 @@ void AFopr_Domainwall_5din_dd<AFIELD>::set_parameters(const Parameters& params)
     b = 1.0;
     c = 0.0;
   }
+
+  // Neff alpha (bulk-vs-boundary 5D scaling); default 1.0 = standard Moebius.
+  // Must be set before set_precond_parameters().
+  double alpha = 1.0;
+  if (params.fetch_double("parameter_alpha", alpha)) {
+    vout.general(m_vl, "  parameter alpha is not provided: set to 1.0.\n");
+    alpha = 1.0;
+  }
+  if (ThreadManager::get_thread_id() == 0) m_alpha = real_t(alpha);
+#pragma omp barrier
 
   set_parameters(real_t(mq), real_t(M0), Ns, bc,
                  real_t(b), real_t(c), block_size);
@@ -406,13 +428,16 @@ void AFopr_Domainwall_5din_dd<AFIELD>::set_precond_parameters()
       m_f.resize(m_Ns - 1);
     }
 
+    // Neff alpha congruence on the 5D bulk diagonal (same as the non-eo 5din):
+    // m_dp/m_dm scale by alpha; alpha cancels in the m_e/m_f LU factors because
+    // m_f[0] is divided by alpha. alpha = 1 reproduces the standard coefficients.
     for (int is = 0; is < m_Ns; ++is) {
-      m_dp[is] = 1.0 + m_b[is] * (4.0 - m_M0);
-      m_dm[is] = 1.0 - m_c[is] * (4.0 - m_M0);
+      m_dp[is] = m_alpha * (1.0 + m_b[is] * (4.0 - m_M0));
+      m_dm[is] = m_alpha * (1.0 - m_c[is] * (4.0 - m_M0));
     }
 
     m_e[0] = m_mq * m_dm[m_Ns - 1] / m_dp[0];
-    m_f[0] = m_mq * m_dm[0];
+    m_f[0] = m_mq * m_dm[0] / m_alpha;
     for (int is = 1; is < m_Ns - 1; ++is) {
       m_e[is] = m_e[is - 1] * m_dm[is - 1] / m_dp[is];
       m_f[is] = m_f[is - 1] * m_dm[is] / m_dp[is - 1];
@@ -431,6 +456,22 @@ void AFopr_Domainwall_5din_dd<AFIELD>::set_precond_parameters()
     // independent, so it will not clobber any eo operator's mass-dependent
     // const_e/f/dpinv living in the same process).
     BridgeACC::setDomainwallConstantBC(m_b.data(), m_c.data(), m_Ns);
+
+    // Mass-dependent LU coefficients (e/f/dpinv/dm) are per-operator, so they
+    // are kept as this operator's own device copy (mapped once, re-uploaded on
+    // rebuild) and read by the L/U-inverse kernels via dev_ptr -- NOT shared
+    // __constant__ memory (which a coexisting D/D_PV would clobber).
+    if (!m_coeff_on_device) {
+      BridgeACC::afield_init(m_e.data(),     m_Ns - 1);
+      BridgeACC::afield_init(m_f.data(),     m_Ns - 1);
+      BridgeACC::afield_init(m_dpinv.data(), m_Ns);
+      BridgeACC::afield_init(m_dm.data(),    m_Ns);
+      m_coeff_on_device = true;
+    }
+    BridgeACC::copy_to_device(m_e.data(),     m_Ns - 1);
+    BridgeACC::copy_to_device(m_f.data(),     m_Ns - 1);
+    BridgeACC::copy_to_device(m_dpinv.data(), m_Ns);
+    BridgeACC::copy_to_device(m_dm.data(),    m_Ns);
 #endif
   }
 
@@ -757,7 +798,7 @@ void AFopr_Domainwall_5din_dd<AFIELD>::mult_D_sap(AFIELD& v,
     BridgeACC::mult_domainwall_5din_dd_5dir_dirac(
                                 vp, yp, wp,
                                 m_mq, m_M0, m_Ns, &m_b[0], &m_c[0],
-                                m_Nsize, &m_block_size[0], jeo);
+                                m_Nsize, &m_block_size[0], jeo, m_alpha);
 
     BridgeACC::mult_domainwall_5din_dd_hopb_dirac(
                                  vp, up, yp,
@@ -808,7 +849,7 @@ void AFopr_Domainwall_5din_dd<AFIELD>::mult_Ddag_sap(AFIELD& v,
     BridgeACC::mult_domainwall_5din_dd_5dirdag_dirac(
                                 vp, yp, wp, m_mq, m_M0, m_Ns,
                                 &m_b[0], &m_c[0],
-                                m_Nsize, &m_block_size[0], jeo);
+                                m_Nsize, &m_block_size[0], jeo, m_alpha);
   }
 
 #pragma omp barrier

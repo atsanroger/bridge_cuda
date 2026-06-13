@@ -81,7 +81,6 @@ void apply_smearing(Field_G *u, const Parameters& params){
   // done!
 }
 
-
 // TWDIAG helper: apply one named eo sub-operator to the odd half of a source,
 // reverse the result to a double Field_F. Works for any AField type / mw mode.
 template<typename AF, Impl AIMPL>

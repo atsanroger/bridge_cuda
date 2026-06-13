@@ -49,6 +49,7 @@ class AFopr_Domainwall_5din_dd : public AFopr_dd<AFIELD>
   // parameters common to overlap fermion
   real_t m_mq;                 //!< quark mass
   real_t m_M0;                 //!< domain-wall height
+  real_t m_alpha;              //!< Neff alpha (bulk-vs-boundary 5D scaling)
   int m_Ns;                    //!< size of fifth-dimension
   std::vector<int> m_boundary; //!< boundary conditions
   std::vector<real_t> m_b;     //!< coefficient b (array)
@@ -68,6 +69,9 @@ class AFopr_Domainwall_5din_dd : public AFopr_dd<AFIELD>
   std::vector<real_t> m_e;
   std::vector<real_t> m_f;
   real_t m_g;
+  //! true once m_e/m_f/m_dpinv/m_dm are device-mapped (afield_init); the LU
+  //! kernels then read the per-operator device copies via dev_ptr.
+  bool m_coeff_on_device = false;
 
   int m_Nsize[4];  // lattice sizes in units of SIMD variable
   int m_bc[4];

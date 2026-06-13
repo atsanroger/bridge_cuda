@@ -14,10 +14,71 @@
 #include "lib/Tools/gammaMatrixSet.h"
 #include "lib/Measurements/Fermion/source.h"
 #include "lib/Measurements/Fermion/corr2pt_4spinor.h"
+#include "lib/Smear/director_Smear.h"
+#include "lib/Measurements/Gauge/staple_lex.h"
 
 #include "lib_alt/Solver/asolver_GMRES_m_Cmplx.h"
 
 #include <cmath>
+
+// static (internal linkage) + unique name: the reference spectrum tmpl defines
+// its own non-static calc_plaquette, and both tmpls land in the same TU.
+static double pvprec_calc_plaquette(const Field_G *u){
+  // parepare parameter
+  Parameters params_staple;
+  params_staple.set_string("verbose_level", "general");
+  Timer timer("calc_plqauette");
+  timer.start();
+
+  // calculate plaquette
+  const unique_ptr<Staple> staple(Staple::New("Lexical"));
+  staple->set_parameters(params_staple);
+  const double result = staple->plaquette(*u);
+
+  // done!
+  timer.stop();
+  timer.report();
+  return result;
+}
+
+// Apply gauge link smearing (stout/APE etc.) in place, driven by the "Smearing"
+// section of the parameter file. No-op when the section is absent, smear_type is
+// "None", or number_of_smearing == 0. static (internal linkage) so it does not
+// collide with the identically-purposed helper in the reference spectrum tmpl
+// when both are pulled into the same translation unit.
+static void pvprec_apply_smearing(Field_G *u, const Parameters& params_smear)
+{
+  Bridge::VerboseLevel vl = CommonParameters::Vlevel();
+
+  std::string str_smear_type = "None";
+  params_smear.fetch_string("smear_type", str_smear_type);
+  int number_of_smearing = 0;
+  params_smear.fetch_int("number_of_smearing", number_of_smearing);
+
+  if (str_smear_type == "None" || number_of_smearing <= 0) {
+    vout.general(vl, "  smearing: none\n");
+    return;
+  }
+
+  const std::string str_proj_type = params_smear.get_string("projection_type");
+  vout.general(vl, "  smearing: %s / %s x %d\n",
+               str_proj_type.c_str(), str_smear_type.c_str(), number_of_smearing);
+  vout.general(vl, "  plaquette (before smearing): %.15f\n", pvprec_calc_plaquette(u));
+
+  unique_ptr<Projection> proj(Projection::New(str_proj_type));
+  proj->set_parameters(params_smear);
+  unique_ptr<Smear> smear(Smear::New(str_smear_type, proj.get()));
+  smear->set_parameters(params_smear);
+  const unique_ptr<Director_Smear> dr_smear(new Director_Smear(smear.get()));
+  dr_smear->set_parameters(params_smear);
+  dr_smear->set_config(u);
+
+  const int      Nsmear = dr_smear->get_Nsmear();
+  const Field_G *Usmear = (Field_G *)dr_smear->getptr_smearedConfig(Nsmear);
+  copy(*u, *Usmear);
+
+  vout.general(vl, "  plaquette (after  smearing): %.15f\n", pvprec_calc_plaquette(u));
+}
 
 template<typename AFIELD>
 const std::string Spectrum_Domainwall_PVprec_alt<AFIELD>::class_name = "Spectrum_Domainwall_PVprec_alt";
@@ -55,6 +116,9 @@ int Spectrum_Domainwall_PVprec_alt<AFIELD>::solve_A(std::string file_params)
   unique_ptr<AFOPR> fopr(AFOPR::New(fopr_type, params_fopr));
 
   setup_config(U, params_test);
+  if (params_all.is_set("Smearing")) {
+    pvprec_apply_smearing(U.get(), params_all.lookup("Smearing"));
+  }
   fopr->set_config(U.get());
   fopr->set_mode("D");
 
@@ -125,7 +189,7 @@ int Spectrum_Domainwall_PVprec_alt<AFIELD>::solve_propagator(std::string file_pa
   int Nvol = CommonParameters::Nvol();
 
   params_all = ParameterManager::read(file_params);
-  Parameters params_test = params_all.lookup("Test_Eigensolver");
+  Parameters params_test = params_all.lookup("Test_Spectrum");
   Parameters params_fopr = params_all.lookup("Fopr");
 
   string str_vlevel = params_test.get_string("verbose_level");
@@ -139,6 +203,9 @@ int Spectrum_Domainwall_PVprec_alt<AFIELD>::solve_propagator(std::string file_pa
   unique_ptr<AFOPR> fopr(AFOPR::New(fopr_type, params_fopr));
 
   setup_config(U, params_test);
+  if (params_all.is_set("Smearing")) {
+    pvprec_apply_smearing(U.get(), params_all.lookup("Smearing"));
+  }
   fopr->set_config(U.get());
   fopr->set_mode("D");                 // mult() applies the full A
 
@@ -160,17 +227,16 @@ int Spectrum_Domainwall_PVprec_alt<AFIELD>::solve_propagator(std::string file_pa
   // GMRES(m): robust for the highly non-normal A (no BiCGStab breakdown).
   ASolver_GMRES_m_Cmplx<AFIELD> solver(fopr.get());
   Parameters params_solver;
+  // FP32: target ||r||^2/||b||^2 < 1e-10, ABOVE the float recursive-residual
+  // floor (~1e-12) so the restarted GMRES converges cleanly without grazing the
+  // floor (which risks an Arnoldi divide-by-~0 nan). FP64: chase 1e-13. The
+  // iteration count to this FIXED tolerance is the conditioning probe vs alpha.
+  const bool   is_fp64     = (sizeof(real_t) == sizeof(double));
+  const double inner_crit2 = is_fp64 ? 1.0e-13 : 1.0e-10;
   params_solver.set_int("maximum_number_of_iteration", 1);
-  params_solver.set_int("maximum_number_of_restart", 100);
+  params_solver.set_int("maximum_number_of_restart", 200);
   params_solver.set_int("number_of_orthonormal_vectors", 30);
-  // ||r||^2 < 1e-13  (||r|| < ~3e-7): propagator-grade tolerance kept ABOVE the
-  // achievable recursive-residual floor (~1e-15 rr/bnorm2 WITH reorthogonalization).
-  // The floor is noisy run to run (GPU reductions are non-deterministic) and a
-  // single GMRES(N_M) cycle can drop the residual by many orders, so a criterion
-  // AT the floor (e.g. 1e-16) sometimes overshoots into it and the next Arnoldi
-  // step divides by ~0 -> nan. 1e-13 leaves ~2 orders of margin (crosses near iter
-  // ~1900, safely before the nan onset ~2250) and is more than enough for 2pt.
-  params_solver.set_double("convergence_criterion_squared", 1.0e-13);
+  params_solver.set_double("convergence_criterion_squared", inner_crit2);
   params_solver.set_string("verbose_level", "Detailed");
   solver.set_parameters(params_solver);
 
@@ -234,7 +300,7 @@ int Spectrum_Domainwall_PVprec_alt<AFIELD>::solve_2pt(std::string file_params)
   int Nvol = CommonParameters::Nvol();
 
   params_all = ParameterManager::read(file_params);
-  Parameters params_test   = params_all.lookup("Test_Eigensolver");
+  Parameters params_test   = params_all.lookup("Test_Spectrum");
   Parameters params_fopr   = params_all.lookup("Fopr");
   Parameters params_source = params_all.lookup("Source");
 
@@ -244,9 +310,12 @@ int Spectrum_Domainwall_PVprec_alt<AFIELD>::solve_2pt(std::string file_params)
   const bool   do_check        = params_test.is_set("expected_result");
   const double expected_result = do_check ? params_test.get_double("expected_result") : 0.0;
 
-  // gauge configuration
+  // gauge configuration (+ optional link smearing from the "Smearing" section)
   U.reset(new Field_G(Nvol, Ndim));
   setup_config(U, params_test);
+  if (params_all.is_set("Smearing")) {
+    pvprec_apply_smearing(U.get(), params_all.lookup("Smearing"));
+  }
 
   // gamma matrix set (for the meson correlators)
   string gmset_type = params_fopr.get_string("gamma_matrix_type");
@@ -281,17 +350,23 @@ int Spectrum_Domainwall_PVprec_alt<AFIELD>::solve_2pt(std::string file_params)
   AFIELD psi(NFin, NFvol, NFex), rchk(NFin, NFvol, NFex);
   AFIELD delta(NFin, NFvol, NFex), rphys(NFin, NFvol, NFex);
 
-  // outer iterative-refinement controls (see the per-source loop below)
-  const int    max_refine    = 8;
-  const double refine_target2 = 1.0e-18;   // ||D psi - eta||^2/||eta||^2 (rel ~1e-9)
+  // Precision-dependent tolerances. FP32 (real_t=float): rr/|b|^2 floors at
+  // ~1e-9 for this 5D source, so the inner GMRES targets 1e-8 (above the floor)
+  // and a few refinement steps clean up the true residual. FP64: chase the
+  // tight 1e-13 / 1e-18 used historically.
+  const bool   is_fp64       = (sizeof(real_t) == sizeof(double));
+  const int    max_refine    = is_fp64 ? 8       : 3;
+  const double refine_target2 = is_fp64 ? 1.0e-18 : 1.0e-12;
+  const int    max_restart   = is_fp64 ? 200     : 40;
+  const double inner_crit2   = is_fp64 ? 1.0e-13 : 1.0e-8;
 
   // GMRES(m): identical settings to solve_propagator (robust on non-normal A).
   ASolver_GMRES_m_Cmplx<AFIELD> solver(fopr.get());
   Parameters params_solver;
   params_solver.set_int("maximum_number_of_iteration", 1);
-  params_solver.set_int("maximum_number_of_restart", 100);
+  params_solver.set_int("maximum_number_of_restart", max_restart);
   params_solver.set_int("number_of_orthonormal_vectors", 30);
-  params_solver.set_double("convergence_criterion_squared", 1.0e-13);
+  params_solver.set_double("convergence_criterion_squared", inner_crit2);
   params_solver.set_string("verbose_level", "General");
   solver.set_parameters(params_solver);
 

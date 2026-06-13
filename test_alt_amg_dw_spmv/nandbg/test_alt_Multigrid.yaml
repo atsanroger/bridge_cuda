@@ -1,0 +1,55 @@
+Gauge:
+  gauge_config_status      : Continue
+  gauge_config_type_input  : Text
+  config_filename_input    : ./conf.txt
+Smearing:
+  projection_type : Stout_SU3
+  smear_type    : None
+  rho_uniform   : 0.1
+  number_of_smearing  : 0
+  verbose_level : General
+TestType:
+  solver_type : MG
+Fprop:
+  fprop_type : Multigrid
+  testvector_type : eigenvector
+  Eigen_params :
+    fopr_mode : D
+    filename_base : testvector
+    eigensolver_type : IRArnoldi_block
+    eigensolver_mode : abs_ascending
+    number_of_wanted_eigenvectors : 40
+    number_of_working_eigenvectors : 20
+    maximum_number_of_iteration : 200
+    convergence_criterion_squared : 1.e-26
+    threshold_value : 10.0
+    verbose_level : Detailed
+MGSolver:
+  maximum_number_of_iteration : 200
+  maximum_number_of_restart:     1
+  convergence_criterion_squared: 1e-12
+  number_of_orthonormal_vectors: 5
+  verbose_level : Detailed
+  MultiGrid_Level1:
+    sap_block : [4,4,4,4]
+    setup_number_of_vectors: 16
+    setup_number_of_step  : 2
+    maximum_number_of_iteration : 30
+    maximum_number_of_restart : 1
+    number_of_orthonormal_vectors : 20
+    convergence_criterion_squared: 1.0e-2
+    smoother_number_of_iteration : 4
+    smoother_convergence_criterion_squared: 1.0e-3
+    verbose_level : Detailed
+Fopr:
+  fermion_type            : Domainwall_5din
+  kernel_type             : Wilson
+  gamma_matrix_type  : Dirac
+  quark_mass              : 0.01
+  quark_mass_PauliVillars : 1.0
+  domain_wall_height      : 1.0
+  extent_of_5th_dimension : 8
+  boundary_condition      : [1,1,1,-1]
+  coefficient_b           : 1.5
+  coefficient_c           : 0.5
+  verbose_level      : General

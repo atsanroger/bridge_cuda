@@ -1,0 +1,9 @@
+Main:
+  lattice_size             : [16,16,16,16]
+  grid_size                : [1,1,1,1]
+  number_of_thread         : 1
+  device_number_offset     : 0
+  number_of_color          : 3
+  log_filename             : stdout
+  ildg_log_filename        : stdout
+  verbose_level            : General

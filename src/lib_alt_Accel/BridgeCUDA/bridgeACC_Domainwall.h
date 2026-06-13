@@ -145,12 +145,12 @@ void mult_domainwall_5din_Udag_inv_dirac(
 void mult_domainwall_5din_dd_5dir_dirac(
            double * vp, double * yp, double * wp,
            double mq, double M0, int Ns, double *b, double *c,
-           int *Nsize, int *block_size, int ieo);
+           int *Nsize, int *block_size, int ieo, double alpha = 1.0);
 
 void mult_domainwall_5din_dd_5dirdag_dirac(
            double * vp, double * yp, double * wp,
            double mq, double M0, int Ns, double *b, double *c,
-           int *Nsize, int *block_size, int ieo);
+           int *Nsize, int *block_size, int ieo, double alpha = 1.0);
 
 void mult_domainwall_5din_dd_hopb_dirac(
                             double * vp, double * up,
@@ -521,12 +521,12 @@ void mult_domainwall_5din_Udag_inv_dirac(
 void mult_domainwall_5din_dd_5dir_dirac(
                 float * vp, float * yp, float * wp,
                 float mq, float M0, int Ns, float *b, float *c,
-                int *Nsize, int *block_size, int ieo);
+                int *Nsize, int *block_size, int ieo, float alpha = 1.0);
 
 void mult_domainwall_5din_dd_5dirdag_dirac(
                 float * vp, float * yp, float * wp,
                 float mq, float M0, int Ns, float *b, float *c,
-                int *Nsize, int *block_size, int ieo);
+                int *Nsize, int *block_size, int ieo, float alpha = 1.0);
 
 void mult_domainwall_5din_dd_hopb_dirac(
                             float * vp, float * up,

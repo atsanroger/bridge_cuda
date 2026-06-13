@@ -161,6 +161,17 @@ public:
 
   void mult_prec_alt(AFIELD&, const AFIELD&);
 
+  //! purely-additive read-only accessors (dev8 MRHS coarse-Dirac batching):
+  //! expose the link / clover-inverse host base pointers + geometry so the
+  //! batched coarse_mrhs kernel can drive the SAME operator state.  No
+  //! behaviour change; mirrors the accessors on AFopr_Domainwall_5din.
+  real_t* get_U_ptr()        { return m_U.ptr(0); }        //!< coarse hop link (D bulk)
+  real_t* get_Clov_inv_ptr() { return m_Clov_inv.ptr(0); } //!< Clov^-1 (mult_prec)
+  real_t* get_Clov_ptr()     { return m_Clov.ptr(0); }
+  int     get_ncol() const   { return m_ncol; }
+  const int* get_Nsize_arr() const { return m_Nsize; }
+  const int* get_bc2_arr()   const { return m_bc2; }
+
 
  private:
   //! initial setup.

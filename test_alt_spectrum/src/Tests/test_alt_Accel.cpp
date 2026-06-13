@@ -52,9 +52,9 @@ int Test_alt_Accel::test_all()
   // result += test_Spectrum_Staggered();
   // result += test_Eigenvalue_Domainwall_PVprec_Arnoldi();
   // result += test_Solve_Domainwall_PVprec_BiCGStab();
-  // result += test_Solve_Domainwall_PVprec_Propagator();
+  // result += test_Solve_Domainwall_PVprec_Propagator(); // FLOAT GMRES-on-A: convergence (nconv) + true residual vs alpha
    result += test_Spectrum_Domainwall_5din();           // CGNE 2pt + m_res (reference; non-eo vs eo alpha cross-check)
-  // result += test_Solve_Domainwall_PVprec_2pt();        // A-based GMRES 2pt + m_res: confirm vs preset 4.58e-01 / mres 1.87e-3
+   result += test_Solve_Domainwall_PVprec_2pt();        // A-based GMRES 2pt + m_res: confirm vs preset 4.58e-01 / mres 1.87e-3
   // result += test_Spectrum_Domainwall();
   // result += test_Spectrum_OptimalDomainwall();
   // result += test_Eigenvalue_Wilson_Lanczos();
@@ -287,17 +287,37 @@ int Test_alt_Accel::test_Eigenvalue_Domainwall_PVprec_Arnoldi()
 }
 
 //====================================================================
+// Read the working precision ("double" or "float") from the Test_Eigensolver
+// section of the PVprec parameter file. Defaults to "float" (the RTX 3080
+// research path). Lets the yaml pick FP64 vs FP32 without a recompile.
+static std::string pvprec_precision(const std::string& test_file)
+{
+  Parameters params_all = ParameterManager::read(test_file);
+  std::string prec = "float";
+  // 2pt / propagator yamls use the Test_Spectrum section; the eigenvalue
+  // diagnostic yaml uses Test_Eigensolver.
+  if (params_all.is_set("Test_Spectrum"))
+    params_all.lookup("Test_Spectrum").fetch_string("precision", prec);
+  else if (params_all.is_set("Test_Eigensolver"))
+    params_all.lookup("Test_Eigensolver").fetch_string("precision", prec);
+  return prec;
+}
+
+//====================================================================
 int Test_alt_Accel::test_Solve_Domainwall_PVprec_BiCGStab()
 {
   // Solve A x = b on the positive MG target operator
   // A = (D_PV C_PV^{-1})^dagger C^{-1} D  [Kanamori, Chen, Matsufuru].
   // (GMRES(m); BiCGStab breaks down on the non-normal A.)
-  Spectrum_Domainwall_PVprec_alt<AField<double, IMPL> > test_solve;
   string test_file = "test_alt_Eigenvalue_Arnoldi_Domainwall_PVprec.yaml";
-
   int result = 0;
-  result += test_solve.solve_A(test_file);
-
+  if (pvprec_precision(test_file) == "double") {
+    Spectrum_Domainwall_PVprec_alt<AField<double, IMPL> > t;
+    result += t.solve_A(test_file);
+  } else {
+    Spectrum_Domainwall_PVprec_alt<AField<float, IMPL> > t;
+    result += t.solve_A(test_file);
+  }
   return result;
 }
 
@@ -307,12 +327,16 @@ int Test_alt_Accel::test_Solve_Domainwall_PVprec_Propagator()
   // Solve the physical propagator D psi = eta via the preconditioned operator
   // A = (D_PV C_PV^{-1})^dag C^{-1} D, and certify ||D psi - eta||/||eta||.
   // psi == D^{-1} eta == CGNE solution -> identical 2pt functions.
-  Spectrum_Domainwall_PVprec_alt<AField<double, IMPL> > test_solve;
-  string test_file = "test_alt_Eigenvalue_Arnoldi_Domainwall_PVprec.yaml";
-
+  // Precision (double/float) is selected by the yaml "precision" field.
+  string test_file = "test_alt_Spectrum_Domainwall_PVprec_Hadron2ptFunction.yaml";
   int result = 0;
-  result += test_solve.solve_propagator(test_file);
-
+  if (pvprec_precision(test_file) == "double") {
+    Spectrum_Domainwall_PVprec_alt<AField<double, IMPL> > t;
+    result += t.solve_propagator(test_file);
+  } else {
+    Spectrum_Domainwall_PVprec_alt<AField<float, IMPL> > t;
+    result += t.solve_propagator(test_file);
+  }
   return result;
 }
 
@@ -321,13 +345,16 @@ int Test_alt_Accel::test_Solve_Domainwall_PVprec_2pt()
 {
   // Full hadron 2pt function with every quark propagator solved through the
   // preconditioned operator A (psi = D^{-1} eta exactly), i.e. the SAME 2pt a
-  // direct CGNE measurement gives.
-  Spectrum_Domainwall_PVprec_alt<AField<double, IMPL> > test_solve;
-  string test_file = "test_alt_Eigenvalue_Arnoldi_Domainwall_PVprec.yaml";
-
+  // direct CGNE measurement gives. Precision selected by the yaml "precision".
+  string test_file = "test_alt_Spectrum_Domainwall_PVprec_Hadron2ptFunction.yaml";
   int result = 0;
-  result += test_solve.solve_2pt(test_file);
-
+  if (pvprec_precision(test_file) == "double") {
+    Spectrum_Domainwall_PVprec_alt<AField<double, IMPL> > t;
+    result += t.solve_2pt(test_file);
+  } else {
+    Spectrum_Domainwall_PVprec_alt<AField<float, IMPL> > t;
+    result += t.solve_2pt(test_file);
+  }
   return result;
 }
 

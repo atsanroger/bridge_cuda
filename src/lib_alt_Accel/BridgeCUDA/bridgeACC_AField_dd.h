@@ -36,6 +36,10 @@ namespace BridgeACC {
   void reduce_block(double* out, double* out_red,
                     int* Nsize, int* block_size, int ieo);
 
+  void block_orthogonalize_all_eo(double* tp, double* const* basis_host, int nbasis,
+                                  double fac, int Nin, int Nex,
+                                  int* Nsize, int* block_size, int ncgs);
+
 // real_t = float
 
   void block_axpy_eo(float* vp, float* out,
@@ -59,6 +63,10 @@ namespace BridgeACC {
 
   void reduce_block(float* out, float* out_red,
                     int* Nsize, int* block_size, int ieo);
+
+  void block_orthogonalize_all_eo(float* tp, float* const* basis_host, int nbasis,
+                                  float fac, int Nin, int Nex,
+                                  int* Nsize, int* block_size, int ncgs);
 
 //====================================================================
 

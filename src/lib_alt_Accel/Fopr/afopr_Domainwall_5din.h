@@ -192,6 +192,27 @@ class AFopr_Domainwall_5din : public AFopr<AFIELD>
   void Prec(AFIELD&, const AFIELD&);
   void Precdag(AFIELD&, const AFIELD&);
 
+  // --- read-only accessors for the dev8 MRHS batched-operator verify ---
+  //     purely additive (no behaviour change); expose the internal packed gauge
+  //     and Moebius parameters so an external MRHS D kernel can be checked
+  //     against the production single-RHS D on the SAME operator state.
+  real_t* get_U_ptr() { return m_U.ptr(0); }
+  real_t  get_mq()    const { return m_mq; }
+  real_t  get_M0()    const { return m_M0; }
+  real_t  get_alpha() const { return m_alpha; }
+  int     get_Ns()    const { return m_Ns; }
+  const std::vector<real_t>& get_b_array() const { return m_b; }
+  const std::vector<real_t>& get_c_array() const { return m_c; }
+  const int* get_Nsize_arr()   const { return m_Nsize; }
+  const int* get_bc_arr()      const { return m_bc; }
+  const int* get_bc2_arr()     const { return m_bc2; }  // bulk-hop boundary (hopb)
+  const int* get_do_comm_arr() const { return do_comm; }
+  // LU-inverse (Prec) coefficient host bases (device-mapped); for MRHS Prec.
+  real_t* get_e_ptr()     { return m_e.data(); }
+  real_t* get_f_ptr()     { return m_f.data(); }
+  real_t* get_dpinv_ptr() { return m_dpinv.data(); }
+  real_t* get_dm_ptr()    { return m_dm.data(); }
+
  private:
 
   //! initial setup.
