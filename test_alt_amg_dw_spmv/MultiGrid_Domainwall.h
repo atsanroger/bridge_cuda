@@ -44,6 +44,11 @@ class MultiGrid_Domainwall : public MultiGrid<AFIELD1, AFIELD2>
   Index_t m_block_index;
   std::vector<AFIELD2> m_testvectors;
   mutable AFIELD2 m_tmp1, m_tmp2;
+  // gm5 v[i] is invariant after setup; cache it so restriction/prolongation do
+  // not re-apply the fine domain-wall gm5 operator on every call (spmv is
+  // memory-bound, so the redundant gm5 mat-vec is pure wasted bandwidth).
+  mutable std::vector<AFIELD2> m_gm5_testvec;
+  mutable bool m_gm5_cached = false;
   Field m_field_tmp;
 
   int m_nin;
@@ -140,6 +145,10 @@ class MultiGrid_Domainwall : public MultiGrid<AFIELD1, AFIELD2>
 
   void make_fine_vector(AFIELD2& fine_vector, const AFIELD1& coarse_vector) const;
   void make_coarse_vector(AFIELD1& coarse_vector, const AFIELD2& fine_vector) const;
+
+ private:
+  //! (re)build the cached gm5 v[i] if stale; invariant across a solve.
+  void ensure_gm5_cache() const;
 };
 
 #endif // MULTIGRID_DOMAINWALL_H_INCLUDED

@@ -464,6 +464,7 @@ void MultiGrid_Domainwall<AFIELD1, AFIELD2>::set_testvectors(const std::vector<A
   for (int ivec = 0; ivec < m_nvec; ++ivec) {
     copy(m_testvectors[ivec], w[ivec]);
   }
+  m_gm5_cached = false;                 // testvectors changed -> gm5 cache stale
 }
 
 
@@ -476,6 +477,7 @@ void MultiGrid_Domainwall<AFIELD1, AFIELD2>::set_testvectors()
 
   set_testvectors_impl_global(m_testvectors, m_afopr_fine);
   //set_testvectors_impl_local(m_testvectors, m_afopr_fine, m_field_tmp);
+  m_gm5_cached = false;                 // testvectors changed -> gm5 cache stale
 
   timer.stop();
   double elapsed_time = timer.elapsed_sec();
@@ -603,6 +605,21 @@ void MultiGrid_Domainwall<AFIELD1, AFIELD2>::set_coarse_vector(
 
 //====================================================================
 template<class AFIELD1, class AFIELD2>
+void MultiGrid_Domainwall<AFIELD1, AFIELD2>::ensure_gm5_cache() const
+{
+  const int num_vectors = m_testvectors.size();
+  if (m_gm5_cached && (int)m_gm5_testvec.size() == num_vectors) return;
+  m_gm5_testvec.resize(num_vectors);
+  for (int ivec = 0; ivec < num_vectors; ++ivec) {
+    m_gm5_testvec[ivec].reset(m_nin, m_fine_nvol, 1);
+    m_afopr_fine->mult_gm5(m_gm5_testvec[ivec], m_testvectors[ivec]);  // gm5 v[i]
+  }
+  m_gm5_cached = true;
+}
+
+
+//====================================================================
+template<class AFIELD1, class AFIELD2>
 void MultiGrid_Domainwall<AFIELD1, AFIELD2>::make_fine_vector(AFIELD2& fine_vector, const AFIELD1& coarse_vector) const
 {
   vout.general("%s: make_fine_vector is called\n", class_name.c_str());
@@ -631,6 +648,8 @@ void MultiGrid_Domainwall<AFIELD1, AFIELD2>::make_fine_vector(AFIELD2& fine_vect
 
   const int coarse_nvol = m_block_index.coarse_nvol();
 
+  ensure_gm5_cache();                          // gm5 v[i] cached once (invariant)
+
   set_coarse_array(coarse_vector);
 
 #pragma omp barrier
@@ -638,14 +657,7 @@ void MultiGrid_Domainwall<AFIELD1, AFIELD2>::make_fine_vector(AFIELD2& fine_vect
   fine_vector.set(0.0);
 
   for (int ivec = 0; ivec < num_vectors; ++ivec) {
-    // imple-2
-    m_afopr_fine->mult_gm5(m_tmp1, m_testvectors[ivec]);
-
-    // impl-1
-    //copy(m_tmp2, m_testvectors[ivec]);
-    //m_afopr_fine->mult_gm5(m_tmp1, m_tmp2);
-    //axpy(m_tmp2, -1.0, m_tmp1);               // tmp2 = (1 - gm5) v[i]
-    //axpy(m_tmp1, +1.0, m_testvectors[ivec]);  // tmp1 = (1 + gm5) v[i]
+    // imple-2: gm5 v[i] cached (no per-call mult_gm5; spmv is memory-bound)
 
 #pragma omp barrier
 
@@ -654,12 +666,9 @@ void MultiGrid_Domainwall<AFIELD1, AFIELD2>::make_fine_vector(AFIELD2& fine_vect
     // impl-2
     block_axpy(fine_vector, array1, m_testvectors[ivec], real_t(0.5),
                m_block_index);
-    // impl-1
-    //block_axpy(fine_vector, array1, m_tmp2, real_t(0.5),
-    //                                                  m_block_index);
 
     complex_t *array2 = &m_coarse_array[coarse_nvol * (2 * ivec + 1)];
-    block_axpy(fine_vector, array2, m_tmp1, real_t(0.5),
+    block_axpy(fine_vector, array2, m_gm5_testvec[ivec], real_t(0.5),
                m_block_index);
   }
 
@@ -692,9 +701,11 @@ void MultiGrid_Domainwall<AFIELD1, AFIELD2>::make_coarse_vector(AFIELD1& coarse_
 
   const int coarse_nvol = m_block_index.coarse_nvol();
 
+  ensure_gm5_cache();                          // gm5 v[i] cached once (invariant)
+
   for (int ivec = 0; ivec < num_vectors; ++ivec) {
     copy(m_tmp1, m_testvectors[ivec]);
-    m_afopr_fine->mult_gm5(m_tmp2, m_testvectors[ivec]);
+    copy(m_tmp2, m_gm5_testvec[ivec]);          // gm5 v[i] (cached, no mult_gm5)
 #pragma omp barrier
     axpy(m_tmp1, -1.0, m_tmp2);              // tmp1 = (1 - gm5) v[i]
     axpy(m_tmp2, +1.0, m_testvectors[ivec]); // tmp2 = (1 + gm5) v[i]
@@ -741,6 +752,7 @@ void MultiGrid_Domainwall<AFIELD1, AFIELD2>::gramschmidt(
   gramschmidt_in_block_impl(vectors, m_afopr_fine, m_block_index,
                             m_tmp1, m_tmp2,
                             &(m_real_array[0]), &(m_complex_array[0]));
+  m_gm5_cached = false;                 // testvectors changed -> gm5 cache stale
 }
 
 
