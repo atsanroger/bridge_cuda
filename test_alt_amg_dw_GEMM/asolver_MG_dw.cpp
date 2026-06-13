@@ -62,6 +62,10 @@ typedef AField<double, ACCEL>  AField_d;
 #include "asolver_SAP_dw2.h"
 #include "asolver_PVexact_dw.h"
 
+#include <cstdio>     // fflush
+#include <unistd.h>   // dup, dup2, close (mute fd 1 around the setup smoother)
+#include <fcntl.h>    // open, O_WRONLY
+
 // multigrid
 using MultiGrid_t = MultiGrid_Domainwall<AField_f, AField_f>;
 

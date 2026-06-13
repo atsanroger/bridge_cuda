@@ -522,7 +522,22 @@ void ASolver_MG_dw<AFIELD>::run_setup_initial(
     m_multigrid->set_testvectors(); // generate initial random vectors
 
 
-    // initial setup
+    // initial setup: smooth each random vector into a near-null vector.  The
+    // fixed-iteration smoother never meets its stop_cond, so the shared Bridge
+    // GMRES prints a vout.crucial "not converged" per vector -- and CRUCIAL is
+    // the lowest verbose level, so no setting can mute it.  Redirect fd 1 to
+    // /dev/null for the duration of this (purely diagnostic) chatter, then
+    // restore.  Done once by the master thread with barriers so it is safe
+    // whether or not run_setup_initial runs inside a parallel region.
+    int mg_saved_fd = -1;
+#pragma omp master
+    {
+      fflush(stdout);
+      mg_saved_fd = dup(1);
+      int dn = open("/dev/null", O_WRONLY);
+      if (dn >= 0) { dup2(dn, 1); close(dn); }
+    }
+#pragma omp barrier
     for (int i = 0; i < m_nvec; ++i) {
       int   nconv = -1;
       float diff  = -1.0;
@@ -531,6 +546,12 @@ void ASolver_MG_dw<AFIELD>::run_setup_initial(
                            nconv, diff);
       m_afopr_PV->mult(testvec_work[i], m_vec_fineF);
     } // i
+#pragma omp barrier
+#pragma omp master
+    {
+      fflush(stdout);
+      if (mg_saved_fd >= 0) { dup2(mg_saved_fd, 1); close(mg_saved_fd); }
+    }
 #pragma omp master
     {
       m_timer_gramschmidt->start();
