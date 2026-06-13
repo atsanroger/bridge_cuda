@@ -149,6 +149,26 @@ midpoint pseudoscalar density $J_{5q}$. This chiral source/sink construction is
 identical across the three solvers compared below, so their pseudoscalar
 correlators $C_{PP}(t)$ are directly comparable.
 
+\paragraph{Inheritance from Kanamori--Chen--Matsufuru.} The construction of this
+section and of Section~\ref{sec:target} --- the 5D--4D chiral source/sink
+(Eqs.~\eqref{eq:source}--\eqref{eq:sink}), the Pauli--Villars target operator
+$\Aop$, the exact site-local $\Cinv$ via the $\texttt{Prec}$ ($L^{-1}U^{-1}$)
+mode, and the left-preconditioning identity --- follows the notes of Kanamori,
+Chen and Matsufuru \cite{KCM2024}. The present work implements these in Bridge++
+(the equations above are exactly the code's source-lift and sink-projection
+steps) and builds the aggregation multigrid of Section~\ref{sec:algorithm} on top
+of them.
+
+\paragraph{The M\"obius/Neff $\alpha$-form.} The fifth-dimension structure carries
+a parameter $\alpha$ (the Neff form \cite{NeffAlpha}): in the present operator it
+multiplies the $s\!\pm\!1$ chiral shift and the wall projectors of $\Ddw$. Because
+$m_{\mathrm{res}}$ measures the residual overlap of the two chiral walls, $\alpha$
+is a direct knob on it: the four-dimensional, chiral-projected propagator $q$
+(Eq.~\eqref{eq:sink}) is left \emph{invariant}, while $m_{\mathrm{res}}$ scans
+roughly as $1/\alpha^2$ (optimal $\alpha\approx0.5$ for the conditioning of
+$\Aop$, see Section~\ref{sec:target}). We verify both directly on the batched
+solver in Section~\ref{sec:batched} (Table~\ref{tab:alpha}, Figure~\ref{fig:mres}).
+
 \section{The preconditioned target operator}
 \label{sec:target}
 
