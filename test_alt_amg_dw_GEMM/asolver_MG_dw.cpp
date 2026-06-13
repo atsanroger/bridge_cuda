@@ -102,6 +102,10 @@ using Smoother_t = ASolver_SAP_dw<AField_f>;
 #include "asolver_MG_dw-tmpl.h"
 
 template<>
+#ifdef USE_ALT_ACCEL
+const std::string ASolver_MG_dw<AField_d>::class_name = "ASolver_MG_dw<AField<double, ACCEL> >";
+#else
 const std::string ASolver_MG_dw<AField_d>::class_name = "ASolver_MG_dw<AField<double, QXS> >";
+#endif
 
 template class ASolver_MG_dw<AField_d>;

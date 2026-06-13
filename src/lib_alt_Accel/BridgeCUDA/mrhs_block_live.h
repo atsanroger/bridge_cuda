@@ -98,6 +98,15 @@ void block_update(float* const* W_host, float* const* V_host, const float* G_dev
 // the block-Krylov dense LA on the GPU (NO per-step host roundtrip).
 void block_chol_inv(float* Lout_dev, float* negLi_dev, const float* G_dev, int s);
 
+// ---- batched BLAS-1 over s columns (nflt = floats per field = Nin*Nvol*Nex) --
+// Collapse the per-column copy/axpy/scal/norm2 of the block-Krylov solver into a
+// single kernel over all s columns (kills the per-column launch overhead that is
+// the launch-bound floor on a small lattice).  y/x are AField host base ptrs.
+void block_copy (float* const* y, float* const* x, int s, long nflt);  // y[c]=x[c]
+void block_axpy (float* const* y, float* const* x, float a, int s, long nflt); // y[c]+=a*x[c]
+void block_scal (float* const* y, float a, int s, long nflt);          // y[c]*=a
+void block_norm2(double* out_host, float* const* x, int s, long nflt); // out[c]=||x[c]||^2
+
 // ---- small device-memory helpers (keep all CUDA calls inside the .cu) ------
 float* dev_alloc(long nfloat);                 // cudaMalloc nfloat*sizeof(float)
 void   dev_free(float* p);                     // cudaFree

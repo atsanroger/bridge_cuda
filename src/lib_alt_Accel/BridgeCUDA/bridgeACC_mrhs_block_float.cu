@@ -80,6 +80,16 @@ void mrhs_fwd_update(real_t* const* W, real_t* const* V, const real_t* G_dev,
 void mrhs_fwd_chol_inv(real_t* Lout_dev, real_t* negLi_dev, const real_t* G_dev, int s)
 { block_chol_inv(Lout_dev, negLi_dev, G_dev, s); }
 
+// batched BLAS-1 over s columns (collapses per-column copy/axpy/scal/norm2)
+void mrhs_fwd_copy(real_t* const* y, real_t* const* x, int s, long nflt)
+{ mrhs_copy(y, x, s, nflt); }
+void mrhs_fwd_axpy(real_t* const* y, real_t* const* x, real_t a, int s, long nflt)
+{ mrhs_axpy(y, x, a, s, nflt); }
+void mrhs_fwd_scal(real_t* const* y, real_t a, int s, long nflt)
+{ mrhs_scal(y, a, s, nflt); }
+void mrhs_fwd_norm2(double* out, real_t* const* x, int s, long nflt)
+{ mrhs_norm2(out, x, s, nflt); }
+
 void mrhs_fwd_set_moebius_bc(const real_t* b, const real_t* c, int Ns)
 { mrhs_set_moebius_bc_dev(b, c, Ns); }
 
@@ -165,6 +175,15 @@ void block_update(float* const* W_host, float* const* V_host, const float* G_dev
 
 void block_chol_inv(float* Lout_dev, float* negLi_dev, const float* G_dev, int s)
 { BridgeACC::mrhs_fwd_chol_inv(Lout_dev, negLi_dev, G_dev, s); }
+
+void block_copy(float* const* y, float* const* x, int s, long nflt)
+{ BridgeACC::mrhs_fwd_copy(y, x, s, nflt); }
+void block_axpy(float* const* y, float* const* x, float a, int s, long nflt)
+{ BridgeACC::mrhs_fwd_axpy(y, x, a, s, nflt); }
+void block_scal(float* const* y, float a, int s, long nflt)
+{ BridgeACC::mrhs_fwd_scal(y, a, s, nflt); }
+void block_norm2(double* out_host, float* const* x, int s, long nflt)
+{ BridgeACC::mrhs_fwd_norm2(out_host, x, s, nflt); }
 
 void set_moebius_bc(const float* b, const float* c, int Ns)
 { BridgeACC::mrhs_fwd_set_moebius_bc(b, c, Ns); }

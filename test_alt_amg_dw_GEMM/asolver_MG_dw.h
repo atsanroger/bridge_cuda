@@ -216,7 +216,8 @@ class ASolver_MG_dw : public ASolver<AFIELD>
                               const std::vector<AFIELD>& eta,
                               int max_refine, double refine_target2,
                               std::vector<int>& nref,
-                              std::vector<double>& phys_res);
+                              std::vector<double>& phys_res,
+                              bool use_double_refine = true);
 
   //! returns the pointer to the fermion operator.
   AFopr<AFIELD> *get_fopr() { return m_afopr_fineD; }

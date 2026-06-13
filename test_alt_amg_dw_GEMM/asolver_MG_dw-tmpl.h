@@ -1621,7 +1621,8 @@ template<typename AFIELD>
 void ASolver_MG_dw<AFIELD>::solve_block_propagator(
     std::vector<AFIELD>& psi, const std::vector<AFIELD>& eta,
     int max_refine, double refine_target2,
-    std::vector<int>& nref, std::vector<double>& phys_res)
+    std::vector<int>& nref, std::vector<double>& phys_res,
+    bool use_double_refine)
 {
   using AF     = AFIELD_f;
   using real_d = real_t;
@@ -1652,8 +1653,20 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
   // launch-overhead-bound).  restart_len=12, 1 restart, stop 1e-6 ~= 12 V-cycles.
   bsolver.set_parameters(/*restart_len=*/12, /*max_restart=*/1, /*stop_cond_sq=*/1.0e-6);
 
+  // The physical-residual refinement maps between the A_F system and the
+  // physical D system via the PVprec operator's "leftprec" (b' = P_L r) and
+  // "physicalD" (D psi) modes.  use_double_refine picks WHICH precision applies
+  // those two operators: the double op m_afopr_fineD (mixed-precision, FP64
+  // accuracy) or the FLOAT op m_afopr_A_F (FP32-only, no FP64 on the 3080).  The
+  // bookkeeping (psi accumulation, residual) stays in AFIELD either way; only
+  // the operator apply changes, with a float<->double convert around it.
+  vout.general("%s: solve_block_propagator: refinement operator = %s\n",
+               class_name.c_str(), use_double_refine ? "double (m_afopr_fineD)"
+                                                      : "float (m_afopr_A_F)");
+
   std::vector<AF>     B(s), X(s);
   std::vector<AFIELD> bprime(s), delta(s), rphys(s), Dx(s);
+  std::vector<AF>     rphys_f(s), psi_f(s), Dx_f(s);   // float scratch (float path)
   std::vector<double> eta2(s);
   for (int c = 0; c < s; ++c) {
     B[c].reset(Nin, Nvol, Nex);
@@ -1666,6 +1679,11 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
     psi[c].set(real_d(0.0));
     copy(rphys[c], eta[c]);                 // psi = 0 -> r_phys = eta
     eta2[c] = eta[c].norm2();
+    if (!use_double_refine) {
+      rphys_f[c].reset(Nin, Nvol, Nex);
+      psi_f[c].reset(Nin, Nvol, Nex);
+      Dx_f[c].reset(Nin, Nvol, Nex);
+    }
   }
   nref.assign(s, 0);
   phys_res.assign(s, 1.0);
@@ -1675,8 +1693,13 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
   // ---- batched physical-residual refinement (all s columns together) ----
   for (int it = 0; it < max_refine; ++it) {
     for (int c = 0; c < s; ++c) {
-      m_afopr_fineD->mult(bprime[c], rphys[c], "leftprec");  // b' = P_L r_phys
-      copy(B[c], bprime[c]);                                 // float <- double
+      if (use_double_refine) {
+        m_afopr_fineD->mult(bprime[c], rphys[c], "leftprec"); // b' = P_L r_phys (double)
+        copy(B[c], bprime[c]);                                // float <- double
+      } else {
+        copy(rphys_f[c], rphys[c]);                           // float <- double
+        m_afopr_A_F->mult(B[c], rphys_f[c], "leftprec");      // b' = P_L r_phys (float)
+      }
     }
     std::vector<double> relres; int vcy = 0;
     bsolver.solve(X, B, relres, vcy);                        // A_F X = B (batched)
@@ -1685,7 +1708,13 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
     for (int c = 0; c < s; ++c) {
       copy(delta[c], X[c]);                                  // double <- float
       axpy(psi[c], real_d(1.0), delta[c]);                   // psi += delta
-      m_afopr_fineD->mult(Dx[c], psi[c], "physicalD");       // D psi
+      if (use_double_refine) {
+        m_afopr_fineD->mult(Dx[c], psi[c], "physicalD");      // D psi (double)
+      } else {
+        copy(psi_f[c], psi[c]);                               // float <- double
+        m_afopr_A_F->mult(Dx_f[c], psi_f[c], "physicalD");    // D psi (float)
+        copy(Dx[c], Dx_f[c]);                                 // double <- float
+      }
       copy(rphys[c], eta[c]);
       axpy(rphys[c], real_d(-1.0), Dx[c]);                   // r_phys = eta - D psi
       res2[c] = rphys[c].norm2() / eta2[c];

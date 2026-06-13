@@ -644,8 +644,19 @@ namespace {
       int NFex  = afopr_fineD->field_nex();
 
       const int    Nprop          = Nc * Nd;   // 12 color-spin propagator columns
-      const int    max_refine     = 6;         // cheap-inner refinement: ~1e-2/step
-      const double refine_target2 = 1.0e-18;   // physical ||r||^2/||eta||^2 (early-out)
+
+      // yaml-selectable fine-operator precision for the physical-residual
+      // refinement (TestType.refinement_precision = {double, float}). float ->
+      // FP32-only AMG (no FP64 on the 3080), residual floors ~1e-6 (squared
+      // ~1e-12), enough for the pion 2pt; double -> mixed-precision to FP64.
+      std::string refine_prec = "float";
+      if (params_all.is_set("TestType"))
+        params_all.lookup("TestType").fetch_string("refinement_precision", refine_prec);
+      const bool   use_double_refine = (refine_prec == "double");
+      const int    max_refine     = use_double_refine ? 6 : 3;
+      const double refine_target2 = use_double_refine ? 1.0e-18 : 1.0e-12;
+      vout.general(vl, "2pt refinement precision = %s (max_refine=%d, target2=%.1e)\n",
+                   refine_prec.c_str(), max_refine, refine_target2);
 
       // ---- PASS 1: build all Nprop 5d sources eta_all (double) ----
       std::vector<AFIELD_d> eta_all(Nprop), psi_all(Nprop);
@@ -689,7 +700,8 @@ namespace {
       std::vector<int>    nref_v;
       std::vector<double> phys_res;
       asolver_mg->solve_block_propagator(psi_all, eta_all, max_refine,
-                                         refine_target2, nref_v, phys_res);
+                                         refine_target2, nref_v, phys_res,
+                                         use_double_refine);
       vout.general(vl, "  color spin   nref   ||D psi-eta||/||eta||\n");
       double worst_prop = 0.0;
       for (int ispin = 0; ispin < Nd; ++ispin) {

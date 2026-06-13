@@ -222,7 +222,7 @@ void BlockFGMRES_dw<AFIELD>::blockQR(std::vector<AFIELD>& R, int s,
   for (int j = 0; j < s; ++j) { m_QRtmp[j].set(real_t(0.0)); vp[j] = m_QRtmp[j].ptr(0); }
   mrhs_live::block_update(vp, rp, m_negLi_dev, s, m_Nin, m_Nex, m_Nsize);
 
-  for (int j = 0; j < s; ++j) copy(R[j], m_QRtmp[j]);   // R <- orthonormal block
+  mrhs_live::block_copy(rp, vp, s, (long)m_Nin*m_Nvol*m_Nex);  // R <- orthonormal block (batched)
 }
 
 //====================================================================
@@ -234,10 +234,15 @@ double BlockFGMRES_dw<AFIELD>::solve(std::vector<AFIELD>& X,
 {
   const int s = (int)B.size();
   const int m = m_m;
+  const long nflt = (long)m_Nin * m_Nvol * m_Nex;   // floats per field (batched BLAS-1)
   total_vcycles = 0;
 
+  real_t* Bp[256]; real_t* Rp[256]; real_t* AXp[256];   // stack host-base ptr arrays
+  for (int r = 0; r < s; ++r) Bp[r] = const_cast<AFIELD&>(B[r]).ptr(0);
+
   std::vector<double> bnorm(s);
-  for (int r = 0; r < s; ++r) bnorm[r] = std::sqrt(B[r].norm2());
+  mrhs_live::block_norm2(bnorm.data(), Bp, s, nflt);    // s norms, one launch
+  for (int r = 0; r < s; ++r) bnorm[r] = std::sqrt(bnorm[r]);
 
   for (int r = 0; r < s; ++r) { X[r].reset(m_Nin, m_Nvol, m_Nex); X[r].set(real_t(0.0)); }
 
@@ -272,12 +277,17 @@ double BlockFGMRES_dw<AFIELD>::solve(std::vector<AFIELD>& X,
 
   double worst = 1.0;
 
+  for (int r = 0; r < s; ++r) Rp[r] = R[r].ptr(0);
+  std::vector<double> rn(s);
+
   for (int cyc = 0; cyc < m_max_restart; ++cyc) {
-    // R0 = B - A X  (s columns; batched A if available)
+    // R0 = B - A X  (s columns; batched A + batched BLAS-1)
     if (m_has_block_A) {
       std::vector<AFIELD>& AX = m_AX;
       m_Ablk(AX, X);
-      for (int r = 0; r < s; ++r) { copy(R[r], B[r]); axpy(R[r], real_t(-1.0), AX[r]); }
+      for (int r = 0; r < s; ++r) AXp[r] = AX[r].ptr(0);
+      mrhs_live::block_copy(Rp, Bp, s, nflt);            // R = B
+      mrhs_live::block_axpy(Rp, AXp, real_t(-1.0), s, nflt);  // R -= AX
     } else {
       for (int r = 0; r < s; ++r) {
         m_A(wtmp, X[r]);          // wtmp = A X_r
@@ -285,16 +295,19 @@ double BlockFGMRES_dw<AFIELD>::solve(std::vector<AFIELD>& X,
         axpy(R[r], real_t(-1.0), wtmp);
       }
     }
-    // converged?
+    // converged?  (s norms in one launch)
+    mrhs_live::block_norm2(rn.data(), Rp, s, nflt);
     worst = 0.0;
     for (int r = 0; r < s; ++r) {
-      double rr = std::sqrt(R[r].norm2()) / (bnorm[r] > 0 ? bnorm[r] : 1.0);
+      double rr = std::sqrt(rn[r]) / (bnorm[r] > 0 ? bnorm[r] : 1.0);
       if (rr > worst) worst = rr;
     }
     if (worst * worst < m_stop2) break;
 
     // V[0] L0 = R0  -- L0 written to device buffer m_L0_dev (no host transfer)
-    for (int c = 0; c < s; ++c) copy(V[0][c], R[c]);
+    real_t* V0p[256];
+    for (int c = 0; c < s; ++c) V0p[c] = V[0][c].ptr(0);
+    mrhs_live::block_copy(V0p, Rp, s, nflt);             // V[0] = R (batched)
     blockQR(V[0], s, m_L0_dev);
 
     // block-Arnoldi: every Hessenberg block H[k][j] is computed and consumed
@@ -323,7 +336,9 @@ double BlockFGMRES_dw<AFIELD>::solve(std::vector<AFIELD>& X,
         mrhs_live::block_update(wp, vkp, Hslot, s, m_Nin, m_Nex, m_Nsize);
       }
       // V[j+1] H[j+1][j] = W  -- subdiagonal R-factor written to its device slot
-      for (int c = 0; c < s; ++c) copy(V[j + 1][c], W[c]);
+      real_t* Vj1p[256];
+      for (int c = 0; c < s; ++c) Vj1p[c] = V[j + 1][c].ptr(0);
+      mrhs_live::block_copy(Vj1p, wp, s, nflt);          // V[j+1] = W (batched)
       blockQR(V[j + 1], s, m_Hess_dev + hess_off(j + 1, j, s));
       jdone = j + 1;
     }
@@ -373,19 +388,27 @@ double BlockFGMRES_dw<AFIELD>::solve(std::vector<AFIELD>& X,
     }
   }
 
-  // final per-column true residual (batched A if available); reuse m_AX / m_R scratch.
+  // final true residual R = B - A X (batched A + batched BLAS-1); reuse m_AX/m_R.
   relres.assign(s, 0.0);
   worst = 0.0;
-  if (m_has_block_A) m_Ablk(m_AX, X);
-  for (int r = 0; r < s; ++r) {
-    if (m_has_block_A) { copy(wtmp, m_AX[r]); }
-    else m_A(wtmp, X[r]);
-    AFIELD& rr = m_R[r];
-    copy(rr, B[r]);
-    axpy(rr, real_t(-1.0), wtmp);
-    double v = std::sqrt(rr.norm2()) / (bnorm[r] > 0 ? bnorm[r] : 1.0);
-    relres[r] = v;
-    if (v > worst) worst = v;
+  if (m_has_block_A) {
+    m_Ablk(m_AX, X);
+    for (int r = 0; r < s; ++r) AXp[r] = m_AX[r].ptr(0);
+    mrhs_live::block_copy(Rp, Bp, s, nflt);              // R = B
+    mrhs_live::block_axpy(Rp, AXp, real_t(-1.0), s, nflt);    // R -= AX
+    mrhs_live::block_norm2(rn.data(), Rp, s, nflt);
+    for (int r = 0; r < s; ++r) {
+      double v = std::sqrt(rn[r]) / (bnorm[r] > 0 ? bnorm[r] : 1.0);
+      relres[r] = v; if (v > worst) worst = v;
+    }
+  } else {
+    for (int r = 0; r < s; ++r) {
+      m_A(wtmp, X[r]);
+      AFIELD& rr = m_R[r];
+      copy(rr, B[r]); axpy(rr, real_t(-1.0), wtmp);
+      double v = std::sqrt(rr.norm2()) / (bnorm[r] > 0 ? bnorm[r] : 1.0);
+      relres[r] = v; if (v > worst) worst = v;
+    }
   }
   return worst;
 }

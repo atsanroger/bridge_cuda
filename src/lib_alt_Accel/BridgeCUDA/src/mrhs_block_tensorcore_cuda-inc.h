@@ -1126,6 +1126,97 @@ void block_chol_inv(real_t* Lout_dev, real_t* negLi_dev, const real_t* G_dev, in
   afield_dd_kernel_sync();
 }
 
+// ---------------------------------------------------------------------------
+// Batched BLAS-1 over s columns.  Each field is nflt contiguous (re,im) floats;
+// copy/axpy/scal are element-wise and norm2 is a sum of squares, all invariant
+// under the NWP-tiled layout (a bijection of the nflt floats), so one flat
+// kernel over all s columns is bit-identical to s per-column AField ops -- and
+// replaces s kernel launches with ONE.  This is the block BLAS-1 layer the
+// nested block-Krylov was missing (per-column copy/axpy/norm = the launch-bound
+// floor on a small lattice).  All pointers are host base ptrs (dev_ptr-mapped).
+__global__
+void mrhs_copy_dev(real_t* const* y, real_t* const* x, int s, long nflt)
+{
+  const long stride = (long)gridDim.x * blockDim.x, tot = nflt * (long)s;
+  for (long t = (long)blockIdx.x*blockDim.x + threadIdx.x; t < tot; t += stride) {
+    int c = (int)(t / nflt); long i = t - (long)c*nflt; y[c][i] = x[c][i];
+  }
+}
+__global__
+void mrhs_axpy_dev(real_t* const* y, real_t* const* x, real_t a, int s, long nflt)
+{
+  const long stride = (long)gridDim.x * blockDim.x, tot = nflt * (long)s;
+  for (long t = (long)blockIdx.x*blockDim.x + threadIdx.x; t < tot; t += stride) {
+    int c = (int)(t / nflt); long i = t - (long)c*nflt; y[c][i] += a * x[c][i];
+  }
+}
+__global__
+void mrhs_scal_dev(real_t* const* y, real_t a, int s, long nflt)
+{
+  const long stride = (long)gridDim.x * blockDim.x, tot = nflt * (long)s;
+  for (long t = (long)blockIdx.x*blockDim.x + threadIdx.x; t < tot; t += stride) {
+    int c = (int)(t / nflt); long i = t - (long)c*nflt; y[c][i] *= a;
+  }
+}
+// one block per column; block-stride sum of squares -> out[c] (double accum).
+__global__
+void mrhs_norm2_dev(double* out, real_t* const* x, int s, long nflt)
+{
+  const int c = blockIdx.x;
+  if (c >= s) return;
+  const real_t* xc = x[c];
+  double loc = 0.0;
+  for (long i = threadIdx.x; i < nflt; i += blockDim.x) { double v = xc[i]; loc += v*v; }
+  __shared__ double sh[256];
+  sh[threadIdx.x] = loc; __syncthreads();
+  for (int k = blockDim.x/2; k > 0; k >>= 1) {
+    if (threadIdx.x < k) sh[threadIdx.x] += sh[threadIdx.x+k];
+    __syncthreads();
+  }
+  if (threadIdx.x == 0) out[c] = sh[0];
+}
+
+static int mrhs_blas1_blocks(long tot, int nth)
+{ long nbl = (tot + nth - 1)/nth; return (int)(nbl > 65535 ? 65535 : (nbl < 1 ? 1 : nbl)); }
+
+// y[c] = x[c]                       (batched copy, all s columns, one launch)
+void mrhs_copy(real_t* const* y_host, real_t* const* x_host, int s, long nflt)
+{
+  static real_t **yd=nullptr,**xd=nullptr; static int cy=0,cx=0;
+  real_t** y = map_upload(y_host, s, yd, cy);
+  real_t** x = map_upload(x_host, s, xd, cx);
+  int nth=256; mrhs_copy_dev<<<mrhs_blas1_blocks(nflt*(long)s,nth),nth>>>(y,x,s,nflt);
+  afield_dd_kernel_sync();
+}
+// y[c] += a * x[c]                  (batched axpy, shared scalar a)
+void mrhs_axpy(real_t* const* y_host, real_t* const* x_host, real_t a, int s, long nflt)
+{
+  static real_t **yd=nullptr,**xd=nullptr; static int cy=0,cx=0;
+  real_t** y = map_upload(y_host, s, yd, cy);
+  real_t** x = map_upload(x_host, s, xd, cx);
+  int nth=256; mrhs_axpy_dev<<<mrhs_blas1_blocks(nflt*(long)s,nth),nth>>>(y,x,a,s,nflt);
+  afield_dd_kernel_sync();
+}
+// y[c] *= a                         (batched scal, shared scalar a)
+void mrhs_scal(real_t* const* y_host, real_t a, int s, long nflt)
+{
+  static real_t **yd=nullptr; static int cy=0;
+  real_t** y = map_upload(y_host, s, yd, cy);
+  int nth=256; mrhs_scal_dev<<<mrhs_blas1_blocks(nflt*(long)s,nth),nth>>>(y,a,s,nflt);
+  afield_dd_kernel_sync();
+}
+// out_host[c] = ||x[c]||^2          (batched norm2, s norms -> host once)
+void mrhs_norm2(double* out_host, real_t* const* x_host, int s, long nflt)
+{
+  static real_t **xd=nullptr; static int cx=0;
+  static double* od=nullptr;  static int co=0;
+  real_t** x = map_upload(x_host, s, xd, cx);
+  if (s > co) { if(od) cudaFree(od); CHECK(cudaMalloc((void**)&od, sizeof(double)*s)); co=s; }
+  mrhs_norm2_dev<<<s, 256>>>(od, x, s, nflt);
+  CHECK(cudaMemcpy(out_host, od, sizeof(double)*s, cudaMemcpyDeviceToHost));
+  afield_dd_kernel_sync();
+}
+
 } // namespace
 
 #endif // MRHS_BLOCK_TENSORCORE_CUDA_INCLUDED
