@@ -65,10 +65,10 @@
 \contentsline {subsubsection}{\numberline {3.5.1}FP32-base: beyond FP64 without FP64 hardware}{23}{subsubsection.3.5.1}%
 \contentsline {subsubsection}{\numberline {3.5.2}FP64-base: a triple-double precision ladder}{24}{subsubsection.3.5.2}%
 \contentsline {subsubsection}{\numberline {3.5.3}Reach, not rate: recursive versus true residual}{25}{subsubsection.3.5.3}%
-\contentsline {subsubsection}{\numberline {3.5.4}Caveats}{26}{subsubsection.3.5.4}%
-\contentsline {subsection}{\numberline {3.6}Future Research: Systematic Wilson vs DWF Benchmark}{27}{subsection.3.6}%
-\contentsline {subsubsection}{\numberline {3.6.1}The $2 \times 3$ Benchmark Matrix}{27}{subsubsection.3.6.1}%
-\contentsline {subsubsection}{\numberline {3.6.2}Hypotheses Revisited in Light of the Measurements}{27}{subsubsection.3.6.2}%
-\contentsline {subsubsection}{\numberline {3.6.3}Implementation Plan}{28}{subsubsection.3.6.3}%
-\contentsline {subsubsection}{\numberline {3.6.4}Metrics and Analysis}{28}{subsubsection.3.6.4}%
-\contentsline {section}{References}{28}{section*.3}%
+\contentsline {subsubsection}{\numberline {3.5.4}Caveats}{27}{subsubsection.3.5.4}%
+\contentsline {subsection}{\numberline {3.6}Future Research: Systematic Wilson vs DWF Benchmark}{28}{subsection.3.6}%
+\contentsline {subsubsection}{\numberline {3.6.1}The $2 \times 3$ Benchmark Matrix}{28}{subsubsection.3.6.1}%
+\contentsline {subsubsection}{\numberline {3.6.2}Hypotheses Revisited in Light of the Measurements}{28}{subsubsection.3.6.2}%
+\contentsline {subsubsection}{\numberline {3.6.3}Implementation Plan}{29}{subsubsection.3.6.3}%
+\contentsline {subsubsection}{\numberline {3.6.4}Metrics and Analysis}{29}{subsubsection.3.6.4}%
+\contentsline {section}{References}{29}{section*.3}%

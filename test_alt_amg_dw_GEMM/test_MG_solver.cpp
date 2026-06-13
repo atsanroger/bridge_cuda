@@ -147,6 +147,12 @@ namespace {
 
     fprop.report_performance();
 
+    // CGNE convergence count for the quark-mass scaling comparison (cf.
+    // RESULT_AMG_CONV): even-odd CGNR iterations to the same tolerance.
+    double mq_print = params_fopr.get_double("quark_mass");
+    vout.crucial("RESULT_CGNE_CONV: mq=%.5f  cgne_iters(nconv)=%d  diff=%.3e\n",
+                 mq_print, nconv, diff);
+
     return EXIT_SUCCESS;
 
   }
@@ -592,6 +598,12 @@ namespace {
       timer_solve->report();
       double etime = timer_solve->elapsed_msec();
 
+      // convergence count of the V-cycle-preconditioned outer FGMRES on A
+      // (the textbook mass-scaling metric): outer iterations = V-cycles.
+      double mq_print = params_all.lookup("Fopr").get_double("quark_mass");
+      vout.crucial("RESULT_AMG_CONV: mq=%.5f  outer_iters(nconv)=%d  A-resid_diff=%.3e\n",
+                   mq_print, nconv, diff);
+
       double flop_solve = asolver_mg->flop_count();
       vout.general(" Flops (double+float) : %f GFlop/sec\n",
                    1.0e-6 * flop_solve / etime);
@@ -609,8 +621,15 @@ namespace {
     // difference vs that reference is the inner solver: AMG V-cycle instead of
     // unpreconditioned GMRES. The resulting C_PP / m_res therefore cross-check
     // directly against the CGNE and GMRES-on-A measurements on the same setup.
+    //
+    // Opt-out via TestType.run_2pt (default true): set false to run only the
+    // (cheap) single-RHS reference convergence solve, e.g. for a quark-mass
+    // scaling sweep of the outer iteration count without the full 12-column 2pt.
     // ================================================================
-    {
+    bool run_2pt = true;
+    if (params_all.is_set("TestType"))
+      params_all.lookup("TestType").fetch_bool("run_2pt", run_2pt);
+    if (run_2pt) {
       using real_t = AFIELD_d::real_t;   // double
       const int Nvol = CommonParameters::Nvol();
       const int Lt   = CommonParameters::Lt();

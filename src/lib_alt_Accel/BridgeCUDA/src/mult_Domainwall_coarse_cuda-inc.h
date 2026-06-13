@@ -523,14 +523,6 @@ void mult_domainwall_coarse_1(real_t* buf_xp, real_t* buf_xm,
   int size_bt = 2 * Ncol * Nx * Ny * Nz;
 
   real_t * v1_dev     = (real_t*)dev_ptr(v1);
-  real_t * buf_xp_dev = (real_t*)dev_ptr(buf_xp);
-  real_t * buf_xm_dev = (real_t*)dev_ptr(buf_xm);
-  real_t * buf_yp_dev = (real_t*)dev_ptr(buf_yp);
-  real_t * buf_ym_dev = (real_t*)dev_ptr(buf_ym);
-  real_t * buf_zp_dev = (real_t*)dev_ptr(buf_zp);
-  real_t * buf_zm_dev = (real_t*)dev_ptr(buf_zm);
-  real_t * buf_tp_dev = (real_t*)dev_ptr(buf_tp);
-  real_t * buf_tm_dev = (real_t*)dev_ptr(buf_tm);
 
   int blockSize  = VECTOR_LENGTH;
   //int sharedSize = NDF * blockSize * sizeof(real_t); 
@@ -538,60 +530,40 @@ void mult_domainwall_coarse_1(real_t* buf_xp, real_t* buf_xm,
   if(do_comm_x > 0) {
     int gridSize   = (Nyzt + blockSize - 1)/ blockSize;
     mult_domainwall_coarse_xpb_1_dev<<<gridSize, blockSize>>>
-                          (buf_xp_dev, v1_dev, Ncol, Nx, Ny, Nz, Nt);
+                          (buf_xp, v1_dev, Ncol, Nx, Ny, Nz, Nt);
 
     mult_domainwall_coarse_xmb_1_dev<<<gridSize, blockSize>>>
-                          (buf_xm_dev, v1_dev, Ncol, Nx, Ny, Nz, Nt);
+                          (buf_xm, v1_dev, Ncol, Nx, Ny, Nz, Nt);
   }
 
   if(do_comm_y > 0) {
     int gridSize   = (Nxzt + blockSize - 1)/ blockSize;
     mult_domainwall_coarse_ypb_1_dev<<<gridSize, blockSize>>>
-                          (buf_yp_dev, v1_dev, Ncol, Nx, Ny, Nz, Nt);
+                          (buf_yp, v1_dev, Ncol, Nx, Ny, Nz, Nt);
 
     mult_domainwall_coarse_ymb_1_dev<<<gridSize, blockSize>>>
-                          (buf_ym_dev, v1_dev, Ncol, Nx, Ny, Nz, Nt);
+                          (buf_ym, v1_dev, Ncol, Nx, Ny, Nz, Nt);
   }
 
   if(do_comm_z > 0) {
     int gridSize   = (Nxyt + blockSize - 1)/ blockSize;
     mult_domainwall_coarse_zpb_1_dev<<<gridSize, blockSize>>>
-                          (buf_zp_dev, v1_dev, Ncol, Nx, Ny, Nz, Nt);
+                          (buf_zp, v1_dev, Ncol, Nx, Ny, Nz, Nt);
 
     mult_domainwall_coarse_zmb_1_dev<<<gridSize, blockSize>>>
-                          (buf_zm_dev, v1_dev, Ncol, Nx, Ny, Nz, Nt);
+                          (buf_zm, v1_dev, Ncol, Nx, Ny, Nz, Nt);
   }
 
   if(do_comm_t > 0) {
     int gridSize   = (Nxyz + blockSize - 1)/ blockSize;
      mult_domainwall_coarse_tpb_1_dev<<<gridSize, blockSize>>>
-                          (buf_tp_dev, v1_dev, Ncol, Nx, Ny, Nz, Nt);
+                          (buf_tp, v1_dev, Ncol, Nx, Ny, Nz, Nt);
 
     mult_domainwall_coarse_tmb_1_dev<<<gridSize, blockSize>>>
-                          (buf_tm_dev, v1_dev, Ncol, Nx, Ny, Nz, Nt);
+                          (buf_tm, v1_dev, Ncol, Nx, Ny, Nz, Nt);
   }
 
   CHECK(cudaDeviceSynchronize());
-
-  if ( do_comm_x > 0) {
-      update_host(buf_xp, 0 , size_bx);
-      update_host(buf_xm, 0 , size_bx);
-  } 
-        
-  if ( do_comm_y > 0) {
-      update_host(buf_yp, 0 , size_by);
-      update_host(buf_ym, 0 , size_by);
-  } 
-
-  if ( do_comm_z > 0) {
-      update_host(buf_zp, 0 , size_bz);
-      update_host(buf_zm, 0 , size_bz);
-  } 
-
-  if ( do_comm_t > 0) {
-      update_host(buf_tp, 0 , size_bt);
-      update_host(buf_tm, 0 , size_bt);
-  } 
 }
 
 //====================================================================
@@ -716,47 +688,17 @@ void mult_domainwall_coarse_2(real_t* v2, real_t* u,
   int size_bz = 2 * Ncol * Nx * Ny * Nt;
   int size_bt = 2 * Ncol * Nx * Ny * Nz;
 
-  if( do_comm[0] > 0){
-    update_device(buf_xp, 0 ,size_bx);
-    update_device(buf_xm, 0 ,size_bx);
-  }
-
-  if( do_comm[1] > 0){
-    update_device(buf_yp, 0 ,size_by);
-    update_device(buf_ym, 0 ,size_by);
-  }
-
-  if( do_comm[2] > 0){
-    update_device(buf_zp, 0 ,size_bz);
-    update_device(buf_zm, 0 ,size_bz);
-  }
-
-  if( do_comm[3] > 0){
-    update_device(buf_tp, 0 ,size_bt);
-    update_device(buf_tm, 0 ,size_bt);
-  }
-
   real_t * v2_dev     = (real_t*)dev_ptr(v2);
   real_t * u_dev      = (real_t*)dev_ptr(u);
-  real_t * buf_xp_dev = (real_t*)dev_ptr(buf_xp);
-  real_t * buf_xm_dev = (real_t*)dev_ptr(buf_xm);
-  real_t * buf_yp_dev = (real_t*)dev_ptr(buf_yp);
-  real_t * buf_ym_dev = (real_t*)dev_ptr(buf_ym);
-  real_t * buf_zp_dev = (real_t*)dev_ptr(buf_zp);
-  real_t * buf_zm_dev = (real_t*)dev_ptr(buf_zm);
-  real_t * buf_tp_dev = (real_t*)dev_ptr(buf_tp);
-  real_t * buf_tm_dev = (real_t*)dev_ptr(buf_tm);
 
   int blockSize = VECTOR_LENGTH;
   int gridSize = (NcolH * Nst + blockSize - 1)/ blockSize;
-  //int sharedsize = NDF * blockSize * sizeof(real_t);
-
   mult_domainwall_coarse_2_dev<<<gridSize, blockSize>>>(
                     v2_dev,  u_dev, 
-                    buf_xp_dev, buf_xm_dev,
-                    buf_yp_dev, buf_ym_dev,
-                    buf_zp_dev, buf_zm_dev,
-                    buf_tp_dev, buf_tm_dev,
+                    buf_xp, buf_xm,
+                    buf_yp, buf_ym,
+                    buf_zp, buf_zm,
+                    buf_tp, buf_tm,
                     Ncol,
                     Nx, Ny, Nz, Nt,
                     do_comm_x, do_comm_y, do_comm_z, do_comm_t);

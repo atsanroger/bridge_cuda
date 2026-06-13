@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.22 (TeX Live 2022/dev/Debian) (preloaded format=pdflatex 2026.6.6)  7 JUN 2026 01:00
+This is pdfTeX, Version 3.141592653-2.6-1.40.22 (TeX Live 2022/dev/Debian) (preloaded format=pdflatex 2026.6.6)  13 JUN 2026 18:24
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -1129,33 +1129,33 @@ File: ..//verify1_recursive_vs_true.png Graphic file (type png)
 <use ..//verify1_recursive_vs_true.png>
 Package pdftex.def Info: ..//verify1_recursive_vs_true.png  used on input line 
 1629.
-(pdftex.def)             Requested size: 327.7763pt x 131.10991pt.
-<..//sweep16_real_q450/ladder_real_mq0.10.png, id=714, 679.338pt x 455.05179pt>
+(pdftex.def)             Requested size: 455.24411pt x 182.10019pt.
+ [25pdfTeX warning (ext4): destination with the same identifier (name{figure.7}
+) has been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.1636 
+        <..//multiword_precision_ladder.png>]
+<..//sweep16_real_q450/ladder_real_mq0.10.png, id=722, 679.338pt x 455.05179pt>
 
 File: ..//sweep16_real_q450/ladder_real_mq0.10.png Graphic file (type png)
 <use ..//sweep16_real_q450/ladder_real_mq0.10.png>
 Package pdftex.def Info: ..//sweep16_real_q450/ladder_real_mq0.10.png  used on 
 input line 1640.
 (pdftex.def)             Requested size: 282.24911pt x 189.06516pt.
-<..//sweep16_real_q450/ladder_real_mq0.05.png, id=715, 679.338pt x 455.05179pt>
+<..//sweep16_real_q450/ladder_real_mq0.05.png, id=723, 679.338pt x 455.05179pt>
 
 File: ..//sweep16_real_q450/ladder_real_mq0.05.png Graphic file (type png)
 <use ..//sweep16_real_q450/ladder_real_mq0.05.png>
 Package pdftex.def Info: ..//sweep16_real_q450/ladder_real_mq0.05.png  used on 
 input line 1641.
 (pdftex.def)             Requested size: 282.24911pt x 189.06516pt.
- [25pdfTeX warning (ext4): destination with the same identifier (name{figure.7}
+ [26pdfTeX warning (ext4): destination with the same identifier (name{figure.8}
 ) has been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
 l.1649 
-       pdfTeX warning (ext4): destination with the same identifier (name{figure
-.8}) has been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.1649 
-        <..//multiword_precision_ladder.png> <..//verify1_recursive_vs_true.png
->]
+        <..//verify1_recursive_vs_true.png>]
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
 (hyperref)                removing `math shift' on input line 1669.
@@ -1168,13 +1168,13 @@ Package hyperref Warning: Token not allowed in a PDF string (Unicode):
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
 (hyperref)                removing `math shift' on input line 1669.
 
-[26pdfTeX warning (ext4): destination with the same identifier (name{figure.9})
+[27pdfTeX warning (ext4): destination with the same identifier (name{figure.9})
  has been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
 l.1680 
         <..//sweep16_real_q450/ladder_real_mq0.10.png> <..//sweep16_real_q450/l
-adder_real_mq0.05.png>] [27pdfTeX warning (ext4): destination with the same ide
+adder_real_mq0.05.png>] [28pdfTeX warning (ext4): destination with the same ide
 ntifier (name{table.6}) has been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
@@ -1184,7 +1184,7 @@ er (name{table.7}) has been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
 l.1742 \end{enumerate}
-                      ] [28pdfTeX warning (ext4): destination with the same ide
+                      ] [29pdfTeX warning (ext4): destination with the same ide
 ntifier (name{table.8}) has been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
@@ -1195,7 +1195,7 @@ Underfull \hbox (badness 4120) in paragraph at lines 1852--1855
 1/cmr/m/n/12 , []$\T1/cmtt/m/n/12 https : / / bridge . kek . jp /
  []
 
-[29] (./multiword.aux)
+[30] (./multiword.aux)
 
 LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
 
@@ -1203,9 +1203,9 @@ Package rerunfilecheck Info: File `multiword.out' has not changed.
 (rerunfilecheck)             Checksum: C73A5CDFB06FEAAFEC3C21455905BEC6;16260.
  ) 
 Here is how much of TeX's memory you used:
- 30731 strings out of 480171
- 611354 string characters out of 5894490
- 1108096 words of memory out of 5000000
+ 30732 strings out of 480171
+ 611361 string characters out of 5894490
+ 1108097 words of memory out of 5000000
  47922 multiletter control sequences out of 15000+600000
  495971 words of font info for 98 fonts, out of 8000000 for 9000
  59 hyphenation exceptions out of 8191
@@ -1241,10 +1241,10 @@ blic/cm-super/sfrm1200.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfrm14
 exmf/fonts/type1/public/cm-super/sfti1200.pfb></usr/share/texmf/fonts/type1/pub
 lic/cm-super/sfti1440.pfb></usr/share/texmf/fonts/type1/public/cm-super/sftt080
 0.pfb></usr/share/texmf/fonts/type1/public/cm-super/sftt1200.pfb>
-Output written on multiword.pdf (29 pages, 1214813 bytes).
+Output written on multiword.pdf (30 pages, 1215181 bytes).
 PDF statistics:
- 968 PDF objects out of 1000 (max. 8388607)
- 842 compressed objects within 9 object streams
- 223 named destinations out of 1000 (max. 500000)
+ 972 PDF objects out of 1000 (max. 8388607)
+ 845 compressed objects within 9 object streams
+ 224 named destinations out of 1000 (max. 500000)
  619 words of extra memory for PDF output out of 10000 (max. 10000000)
 

@@ -50,13 +50,13 @@ bare DW operator $\Ddw$ is non-normal and its spectrum straddles the imaginary
 axis, so Krylov methods applied directly to $\Ddw$ converge poorly. Following
 Kanamori, Chen and Matsufuru [PoS(LATTICE2024)414] we instead solve the
 Pauli--Villars (PV) and site-diagonal preconditioned operator
-$\Aop=(\Dpv\,\Cpvinv)\dg\,\Cinv\,\Ddw$, whose spectrum lies in a small disk in
-the open right half-plane. A left-preconditioning identity makes the solution of
+$\Aop=(\Dpv\,\Cpvinv)\dg\,\Cinv\,\Ddw$, whose spectrum lies in the open right
+half-plane. A left-preconditioning identity makes the solution of
 $\Aop$ return $\Ddw^{-1}b$ exactly. The outer iteration is a flexible GMRES
 (FGMRES) on $\Aop$, preconditioned by a two-grid V-cycle (a Schwarz
 alternating-procedure smoother and an $\Aop$-Galerkin coarse-grid correction
 built from chirality-split, block-orthonormalised near-null vectors). We give the
-complete operator definitions, the 5D--4D chiral projection of source and sink,
+complete operator definitions,
 the algorithm, the full set of test parameters, and a \emph{residual-matched}
 iteration-count comparison against the production even-odd CGNE solver and against
 unpreconditioned GMRES on $\Aop$. We emphasise that the near-null-space setup is
@@ -124,64 +124,21 @@ boundary conditions   &                  & $(1,1,1,-1)$ \\
 \label{tab:params}
 \end{table}
 
-\subsection{5D--4D chiral projection of source and sink}
-\label{sec:projection}
-The physical (four-dimensional) propagator is carried on the two chiral boundary
-walls. A four-dimensional point source $\eta(x)$ is lifted to the five-dimensional
-right-hand side by placing its $\Pp$ and $\Pm$ chiral halves on the two walls and
-multiplying by the M\"obius factor $(c\Dw-1)$:
-\begin{equation}
-b_s \;=\; (c\,\Dw - 1)\,\Big[\,\Pp\,\eta\;\delta_{s,0}
-\;+\; \Pm\,\eta\;\delta_{s,N_s-1}\,\Big].
-\label{eq:source}
-\end{equation}
-After solving $\Ddw\,\psi=b$, the four-dimensional propagator is reconstructed by
-the chiral projection of the two boundary slices,
-\begin{equation}
-q(x) \;=\; \Pm\,\psi_{0}(x) \;+\; \Pp\,\psi_{N_s-1}(x)
-\;=\; \tfrac12\big[(1-\gamma_5)\psi_{0} + (1+\gamma_5)\psi_{N_s-1}\big].
-\label{eq:sink}
-\end{equation}
-The residual mass is obtained from the same construction applied at the fifth-
-dimension \emph{midpoint} cut $s=N_s/2-1,\,N_s/2$,
-$q_{\mathrm{mid}} = \Pm\,\psi_{N_s/2} + \Pp\,\psi_{N_s/2-1}$, which defines the
-midpoint pseudoscalar density $J_{5q}$. This chiral source/sink construction is
-identical across the three solvers compared below, so their pseudoscalar
-correlators $C_{PP}(t)$ are directly comparable.
-
-\paragraph{Inheritance from Kanamori--Chen--Matsufuru.} The construction of this
-section and of Section~\ref{sec:target} --- the 5D--4D chiral source/sink
-(Eqs.~\eqref{eq:source}--\eqref{eq:sink}), the Pauli--Villars target operator
-$\Aop$, the exact site-local $\Cinv$ via the $\texttt{Prec}$ ($L^{-1}U^{-1}$)
-mode, and the left-preconditioning identity --- follows the notes of Kanamori,
-Chen and Matsufuru \cite{KCM2024}. The present work implements these in Bridge++
-(the equations above are exactly the code's source-lift and sink-projection
-steps) and builds the aggregation multigrid of Section~\ref{sec:algorithm} on top
-of them.
-
-\paragraph{The M\"obius/Neff $\alpha$-form.} The fifth-dimension structure carries
-a parameter $\alpha$ (the Neff form \cite{NeffAlpha}): in the present operator it
-multiplies the $s\!\pm\!1$ chiral shift and the wall projectors of $\Ddw$. Because
-$m_{\mathrm{res}}$ measures the residual overlap of the two chiral walls, $\alpha$
-is a direct knob on it: the four-dimensional, chiral-projected propagator $q$
-(Eq.~\eqref{eq:sink}) is left \emph{invariant}, while $m_{\mathrm{res}}$ scans
-roughly as $1/\alpha^2$ (optimal $\alpha\approx0.5$ for the conditioning of
-$\Aop$, see Section~\ref{sec:target}). We verify both directly on the batched
-solver in Section~\ref{sec:batched} (Table~\ref{tab:alpha}, Figure~\ref{fig:mres}).
-
 \section{The preconditioned target operator}
 \label{sec:target}
 
 The bare operator $\Ddw$ is non-normal: its eigenvalues have both signs of real
 part, and unpreconditioned GMRES/FGMRES stagnate. We therefore form the positive
-(right-half-plane) target operator of Ref.~[PoS(LATTICE2024)414],
+(right-half-plane) target operator of Ref.~\cite{KCM2024},
 \begin{equation}
 \boxed{\;\Aop \;=\; \big(\Dpv\,\Cpvinv\big)\dg\;\Cinv\;\Ddw\;}
 \label{eq:A}
 \end{equation}
-in which all four factors are applied exactly. Empirically (16$^4$, Arnoldi) the
-spectrum of $\Aop$ lies in a small disk with \emph{positive real part} and
-spectral radius $\approx0.47$, in agreement with the reference. Since $\Cinv$ and
+in which all four factors are applied exactly. The mechanism is that of
+Brower, Clark, Howarth and Weinberg \cite{BrowerPV}: left-multiplying the
+non-normal $\Ddw$ by $(\Dpv\Cpvinv)\dg$ rotates its sign-straddling spectrum into
+the open right half-plane, which is what allows a Krylov method to converge on
+$\Aop$ where it stagnates on $\Ddw$. Since $\Cinv$ and
 $\Cpvinv$ are site-local, \textbf{one application of $\Aop$ costs two
 four-dimensional hopping sweeps} (one through $\Ddw$, one through $\Dpv\dg$), i.e.\
 $2N_s = 16$ eight-point Wilson hops on the present lattice.
@@ -202,6 +159,54 @@ a small physical residual $\norm{b-\Ddw x}$.} We therefore always drive and repo
 the \emph{physical} relative residual $\norm{b-\Ddw x}/\norm{b}$ when comparing
 solvers, never the $\Aop$-residual alone.
 
+\paragraph{The M\"obius/Neff $\alpha$-form.} The fifth-dimension structure carries
+a parameter $\alpha$ (the better-conditioned domain-wall form of Neff
+\cite{NeffOriginal}, studied for solver acceleration in \cite{ChenAlpha}): in the
+present operator it
+multiplies the $s\!\pm\!1$ chiral shift and the wall projectors of $\Ddw$. Because
+$m_{\mathrm{res}}$ measures the residual overlap of the two chiral walls, $\alpha$
+is a direct knob on it: the four-dimensional, chiral-projected boundary-wall
+propagator is left \emph{invariant}, while $m_{\mathrm{res}}$ scans roughly as
+$1/\alpha^2$ (optimal
+$\alpha\approx0.5$ for the conditioning of $\Aop$, detailed next). We verify both
+directly on the batched solver in Section~\ref{sec:batched}
+(Table~\ref{tab:alpha}, Figure~\ref{fig:mres}).
+
+\paragraph{Effect of $\alpha$ on $\Aop$.}
+The M\"obius/Neff parameter $\alpha$ enters $\Aop$
+through \emph{both} factors $\Ddw$ and $\Dpv\,\Cpvinv$: it rescales the
+$s\!\pm\!1$ chiral coupling that the site-local $C$ removes, and so it sets how
+tightly the PV factor $(\Dpv\Cpvinv)\dg$ cancels the bulk modes of $C^{-1}\Ddw$.
+Geometrically, $\alpha$ controls the radius of the disk in which the spectrum of
+$\Aop$ sits: increasing $\alpha$ spreads the eigenvalues (a wider spectral range,
+harder for both the smoother and the coarse solve), while decreasing it
+compresses them toward a point but at the cost of a near-degenerate, ill-balanced
+operator. The conditioning is optimised at an intermediate value
+$\alpha\approx0.5$, consistent with the $\alpha$-form analysis of \cite{ChenAlpha}
+and with the broader observation of Boyle and Yamaguchi \cite{BoyleYamaguchi} that
+the effective spectral window $[m_q, M_0]$ of the domain-wall operator limits the
+reach of a PV-preconditioned multigrid. Because $\alpha$ flows into the Galerkin
+coarse operator $\Aop_c=R\,\Aop\,P$ unchanged, it is also a knob on the coarse
+spectrum; we verify in Section~\ref{sec:batched} (Figure~\ref{fig:mres}) that the
+four-dimensional pion is left invariant while $m_{\mathrm{res}}\sim1/\alpha^2$,
+the signature that $\alpha$ is propagated correctly through every factor of
+$\Aop$.
+
+\paragraph{Inheritance and lineage.} The construction of this section --- the
+Pauli--Villars target operator $\Aop$, the exact site-local $\Cinv$ via the
+$\texttt{Prec}$ ($L^{-1}U^{-1}$) mode, the left-preconditioning identity, and the
+5D--4D chiral source/sink used to carry the physical propagator on the boundary
+walls --- follows the design note of Kanamori, Chen and Matsufuru \cite{KCM2024}.
+That note is itself the domain-wall specialisation of the adaptive aggregation
+multigrid implemented in Bridge++ for the Wilson--Clover operator
+\cite{BridgeMG}, which in turn follows the DD-$\alpha$AMG method of Frommer
+\emph{et al.}\ \cite{DDalphaAMG}; the idea of preconditioning the non-normal
+domain-wall operator with the Pauli--Villars operator so that the spectrum is
+pushed into the open right half-plane is due to Brower, Clark, Howarth and
+Weinberg \cite{BrowerPV}. The present work implements this construction in
+Bridge++ and builds the batched aggregation multigrid of
+Section~\ref{sec:algorithm} on top of it.
+
 \section{The multigrid algorithm}
 \label{sec:algorithm}
 
@@ -213,11 +218,17 @@ is required because the V-cycle preconditioner is not a fixed linear operator.
 The fine lattice is partitioned into non-overlapping blocks (aggregates) of size
 $3^4$ in spacetime (the full $N_s$ is kept in the fifth dimension), giving a
 coarse lattice of $4^4$ sites on the $12^4$ volume. A set of $N_v=8$ near-null
-vectors $\{w_k\}$ is generated in the setup phase. Within each aggregate the
-vectors are split by chirality $P_\pm$ and \emph{block orthonormalised}; the
-chirality split doubles the coarse degrees of freedom to $2N_v=16$ per aggregate.
-This defines the prolongation $P$ (piecewise span of the orthonormal block
-vectors) and the restriction $R = P\dg$.
+vectors $\{w_k\}$ is generated in the setup phase by the procedure of the design
+note \cite{KCM2024,BridgeMG}: starting from random vectors, the smoother is
+applied and the multigrid preconditioner is then applied recursively a few times,
+so the vectors are driven towards the near-null space of $\Aop$. Within each
+aggregate the vectors are split by chirality and \emph{block orthonormalised}. The
+relevant chirality for the domain-wall operator is $\Gamma_5 = \mathcal{R}\,\gamma_5$,
+where $\mathcal{R}$ is the reflection in the fifth dimension, and the projector is
+$\tfrac12(1\pm\Gamma_5)$ (the first-choice projection of \cite{KCM2024}); the
+split doubles the coarse degrees of freedom to $2N_v=16$ per aggregate. This
+defines the prolongation $P$ (piecewise span of the orthonormal block vectors) and
+the restriction $R = P\dg$.
 
 \paragraph{Block orthonormalisation.}
 The block Gram--Schmidt is performed by a \emph{batched classical} Gram--Schmidt
@@ -245,7 +256,8 @@ HDCG produces a coarse stencil reaching all points of taxicab distance up to
 four --- a $321$-point four-dimensional stencil (only reduced to $81$ points at a
 minimum $4^4$ block), so re-evaluating the little Dirac operator along an HMC
 trajectory costs thousands of fine multiplies. The recent multiple-right-hand-side
-domain-wall multigrid likewise adopts a \emph{four-hop} coarse operator. At the
+domain-wall multigrid \cite{BoyleMRHS} likewise adopts a \emph{four-hop} coarse
+operator. At the
 opposite end, a \emph{zero-hop} (purely block-diagonal, no inter-aggregate
 coupling) coarse approximation is the cheapest but discards the long-wavelength
 coupling that gives multigrid its mass/volume independence. \textbf{Our coarse
@@ -254,17 +266,21 @@ operator is a one-hop (nearest-neighbour) coarse Dirac operator}
 PV-preconditioned $\Aop$ is truncated to a nearest-neighbour stencil, which
 preserves sparsity (and hence recursive coarsenability) at a small fraction of
 the assembly cost of the four-hop stencils, while retaining the inter-aggregate
-coupling absent from the zero-hop choice. A general comparison of these
-domain-wall multigrid coarsening strategies is given by Boyle and Yamaguchi
-(arXiv:2103.05034).
+coupling absent from the zero-hop choice. This is the nearest-neighbour-truncated,
+right-preconditioned coarse operator of the design note \cite{KCM2024}. A general
+comparison of these domain-wall multigrid coarsening strategies is given by Boyle
+and Yamaguchi \cite{BoyleYamaguchi}.
 
 \subsection{Smoother}
 The smoother is a Schwarz alternating procedure (SAP) on the same $3^4$ blocks: a
 domain-decomposed block solve of $\Aop$ that damps the high-frequency error the
-coarse grid cannot represent. Four smoother sweeps are used, each block solve run
-to $10^{-3}$. (A CGNR-on-$\Ddw$ smoother diverges at small $m_q$ with $M_0=1$, the
-near-critical regime the PV preconditioning is designed to avoid; the SAP smoother
-on $\Aop$ is robust there.)
+coarse grid cannot represent. This is the fixed-iteration SAP of the design note
+(its Algorithm~4), with each block solved by a fixed-iteration minimal-residual
+sweep; we use $\nu=4$ outer SAP sweeps with the block solve run to $10^{-3}$. (A
+CGNR-on-$\Ddw$ smoother diverges at small $m_q$ with $M_0=1$, the near-critical
+regime the PV preconditioning is designed to avoid; the SAP smoother on $\Aop$ is
+robust there.) The smoother strength is the dominant convergence lever of the
+V-cycle, as quantified in Section~\ref{sec:scaling}.
 
 \subsection{The V-cycle and the outer iteration}
 One application of the preconditioner $M^{-1}\approx\Aop^{-1}$ is a two-grid
@@ -340,7 +356,7 @@ grid transfer / coarse prec. &                   & single (\texttt{float}) \\
 \section{Reference solvers}
 \label{sec:reference}
 We compare against two baselines that solve the \emph{same} physical propagator,
-with the \emph{same} chiral source/sink construction of Sec.~\ref{sec:projection}:
+with the \emph{same} 5D--4D chiral source/sink construction:
 \begin{itemize}
 \item \textbf{Even-odd CGNE} on the normal equation $\Ddw\dg\Ddw$ --- the
 production domain-wall solver, run in standard precision.
@@ -566,6 +582,139 @@ $\alpha=0.38$.}
 \label{fig:mres}
 \end{figure}
 
+\section{Quark-mass scaling and solver tuning}
+\label{sec:scaling}
+
+The defining promise of multigrid is an iteration count that is nearly independent
+of the quark mass, set against the growth of a Krylov solver as $m_q\to0$. We test
+this directly on the batched solver by sweeping the bare quark mass
+$m_q\in\{0.02,0.01,0.005,0.002,0.001\}$ at fixed $\alpha=0.5$ and recording the
+outer iteration count of the AMG against that of the production even-odd CGNE.
+For the AMG we report the outer V-cycle count of a single reference solve driven to
+a fixed operator residual $\norm{\Aop x-b'}/\norm{b'}=10^{-13}$; for CGNE we report
+the even-odd conjugate-gradient iteration count to physical residual
+$\sim\!10^{-12}$, consistent with the CGNE column of
+Table~\ref{tab:results}.\footnote{%
+The two counts are convergence probes measured on different operators ($\Aop$
+versus $\Ddw\dg\Ddw$) and, for the AMG, on the operator residual rather than the
+physical residual of Section~\ref{sec:target}. They are \emph{not} the
+residual-matched counts of Table~\ref{tab:results} (which drives the physical
+residual to $\sim\!10^{-12}$ for both solvers, giving AMG~$210$ vs CGNE~$\approx
+333$ at $m_q=0.005$); they are internally consistent across the sweep and used here
+only to expose the mass-scaling \emph{trend}. The CGNE figure at $m_q=0.005$
+($359$) agrees with the $\approx\!333$ of Table~\ref{tab:results} to the
+granularity of the mixed-precision refinement cycles.} The results are in
+Table~\ref{tab:massscan} and Figure~\ref{fig:massscan}.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ccc}
+\toprule
+$m_q$ & AMG outer iters & CGNE iters \\
+\midrule
+$0.020$ & $245$ & $350$ \\
+$0.010$ & $247$ & $355$ \\
+$0.005$ & $247$ & $359$ \\
+$0.002$ & $247$ & $361$ \\
+$0.001$ & $254$ & $362$ \\
+\bottomrule
+\end{tabular}
+\caption{Iteration count versus bare quark mass, $12^4$ HMC configuration,
+$\alpha=0.5$ (AMG: outer V-cycles to $\Aop$-residual $10^{-13}$; CGNE: even-odd CG
+iterations to physical residual $\sim\!10^{-12}$). Both solvers are essentially flat
+across a $20\times$ range of $m_q$.}
+\label{tab:massscan}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=11cm, height=7cm,
+    xmode=log, log basis x=10,
+    xlabel={$m_q$}, ylabel={outer iterations},
+    xmin=0.0008, xmax=0.025, ymin=0, ymax=560,
+    grid=both, grid style={gray!20},
+    legend pos=south west, legend cell align=left,
+    tick label style={font=\small}, label style={font=\small},
+]
+\addplot[only marks, mark=*, mark size=2.2pt, red] coordinates {
+  (0.020,350) (0.010,355) (0.005,359) (0.002,361) (0.001,362)
+};
+\addlegendentry{even-odd CGNE}
+\addplot[only marks, mark=square*, mark size=2.2pt, blue] coordinates {
+  (0.020,245) (0.010,247) (0.005,247) (0.002,247) (0.001,254)
+};
+\addlegendentry{PV-preconditioned AMG}
+\end{axis}
+\end{tikzpicture}
+\caption{Outer iteration count versus bare quark mass ($12^4$, $\alpha=0.5$). Across
+a $20\times$ range of $m_q$ \emph{both} solvers are nearly constant --- the AMG
+varies by $4\%$ ($245\!\to\!254$) and CGNE by $3\%$ ($350\!\to\!362$). Neither
+exhibits the textbook $m_q\to0$ growth.}
+\label{fig:massscan}
+\end{figure}
+
+\paragraph{This flatness is a finite-volume effect, not a null result.}
+On the present $12^4$ lattice the lowest eigenvalue of the Dirac operator is set by
+the volume scale ($\sim\!1/L$), not by $m_q$: the spectral gap does not close as the
+bare mass is lowered, so the conditioning of both $\Aop$ and $\Ddw\dg\Ddw$
+saturates and the iteration counts plateau. Equivalently, with $N_s=8$ the residual
+mass is large ($m_{\mathrm{res}}\approx0.38$ at $\alpha=0.5$,
+Table~\ref{tab:alpha}), so the effective quark mass $m_q+m_{\mathrm{res}}$ is
+dominated by $m_{\mathrm{res}}$ and a $20\times$ change in the bare $m_q$ moves it by
+under $5\%$. The near-zero modes that drive CGNE's growth --- and against which
+multigrid's mass-independence is the decisive advantage --- simply do not appear in
+this regime. Exhibiting the separation therefore requires reaching genuinely small
+effective mass: a larger physical volume (so the spectral gap can close) and/or a
+larger $N_s$ (so $m_{\mathrm{res}}\ll m_q$). This is the central quantitative
+motivation for moving the study to a supercomputer (Section~\ref{sec:future}). What
+the present run does establish is that, even in this benign regime, the AMG already
+runs below the production solver at every mass --- the residual-matched advantage is
+the $\approx\!1.6\times$ of Table~\ref{tab:results} --- and that neither solver has
+yet entered the regime where that gap can widen.
+
+\paragraph{Solver tuning: the V-cycle is smoother-limited and already balanced.}
+We swept the multigrid parameters at $m_q=0.005$, using the reference-solve outer
+count as the objective (Table~\ref{tab:tuning}). The single effective convergence
+lever is the number of SAP smoother sweeps: raising it from $4$ to $8$ to $16$ cuts
+the outer count from $247$ to $150$ to $97$. That reduction is sub-linear in the
+added smoother work, however, so the \emph{wall-clock} is minimised at four
+sweeps --- fewer sweeps ($2$--$3$) and more sweeps ($8$--$16$) are both slower. The
+other knobs are ineffective in this regime: adaptive setup smoothing
+($N_{\mathrm{step}}>0$) leaves the count unchanged at $247$--$249$ while the
+eigenvector-seeded near-null space is already adequate; enlarging the near-null
+space ($N_v=8\!\to\!16$) buys only $247\!\to\!238$; tightening the coarse solve
+($2\!\to\!10$ iterations) changes nothing, confirming the coarse correction is not
+the limiter; and a longer outer restart ($30\!\to\!60$) is counter-productive. The
+aggregate size is fixed at $3^4$ by the device tiling (the warp-padding requires the
+coarse time-slice volume to be a multiple of $32$, which only the $4^4$ coarse grid
+satisfies on $12^4$). The configuration of Table~\ref{tab:mg} is thus already at the
+tunable optimum; further gains require an algorithmic change (additional grid
+levels, a genuinely adapted aggregation) rather than parameter tuning --- again
+consistent with a well-conditioned, finite-volume-limited problem in which the
+coarse space has little work to do.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+parameter & sweep & outer iters \\
+\midrule
+SAP smoother sweeps      & $2,3,\mathbf{4},8,16$ & $421,399,\mathbf{247},150,97$ \\
+setup smoothing $N_{\mathrm{step}}$ & $\mathbf{0},1,2,3$    & $\mathbf{247},248,248,249$ \\
+near-null vectors $N_v$  & $\mathbf{8},12,16,24$ & $\mathbf{247},241,238,245$ \\
+coarse-solve iterations  & $\mathbf{2},5,10$     & $\mathbf{247},247,247$ \\
+outer restart length     & $\mathbf{30},60$      & $\mathbf{247},286$ \\
+\bottomrule
+\end{tabular}
+\caption{Multigrid parameter sensitivity at $m_q=0.005$, $\alpha=0.5$; boldface is
+the configuration of Table~\ref{tab:mg}. Wall-clock-minimising values, not merely
+iteration-count-minimising: four smoother sweeps is the time optimum despite $8$ and
+$16$ giving fewer iterations.}
+\label{tab:tuning}
+\end{table}
+
 \section{Future work}
 \label{sec:future}
 
@@ -595,5 +744,56 @@ batched-GEMM throughput the method is designed to exploit. The single consumer G
 used here understates the achievable gain; this step is the quantitative basis for
 a production deployment.
 \end{enumerate}
+
+\begin{thebibliography}{9}
+
+\bibitem{KCM2024}
+I.~Kanamori, W.-L.~Chen and H.~Matsufuru,
+\emph{Multigrid solver for the M\"obius domain-wall fermion with a
+Pauli--Villars preconditioned target operator},
+PoS \textbf{LATTICE2024} (2025) 414;
+I.~Kanamori, \emph{Note on a multigrid solver for the domain-wall fermion},
+unpublished design note (2023).
+
+\bibitem{BridgeMG}
+I.~Kanamori, K.-I.~Ishikawa and H.~Matsufuru,
+\emph{Object-oriented implementation of an adaptive aggregation-based algebraic
+multigrid method in Bridge++},
+in \emph{Computational Science -- ICCS}, doi:10.1007/978-3-030-86976-2\_15
+[arXiv:2111.05012].
+
+\bibitem{DDalphaAMG}
+A.~Frommer, K.~Kahl, S.~Krieg, B.~Leder and M.~Rottmann,
+\emph{Adaptive aggregation-based domain decomposition multigrid for the lattice
+Wilson--Dirac operator},
+SIAM J.\ Sci.\ Comput.\ \textbf{36} (2014) A1581 [arXiv:1303.1377].
+
+\bibitem{BrowerPV}
+R.~C.~Brower, M.~A.~Clark, D.~Howarth and E.~S.~Weinberg,
+\emph{Multigrid for chiral lattice fermions: domain wall},
+Phys.\ Rev.\ D \textbf{102} (2020) 094517 [arXiv:2004.07732].
+
+\bibitem{NeffOriginal}
+H.~Neff,
+\emph{A better conditioned domain-wall operator} (2015),
+[arXiv:1501.04950].
+
+\bibitem{ChenAlpha}
+W.-L.~Chen, I.~Kanamori, H.~Matsufuru and H.~Neff,
+\emph{Accelerating iterative linear equation solver using modified domain-wall
+fermion matrix in lattice QCD simulations},
+[arXiv:2602.14454].
+
+\bibitem{BoyleYamaguchi}
+P.~Boyle and A.~Yamaguchi,
+\emph{Comparison of domain-wall multigrid coarsening strategies},
+arXiv:2103.05034.
+
+\bibitem{BoyleMRHS}
+P.~Boyle,
+\emph{Multiple right hand side multigrid for domain wall fermions},
+arXiv:2409.03904.
+
+\end{thebibliography}
 
 \end{document}

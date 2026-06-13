@@ -1729,6 +1729,8 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
   std::vector<double> res2(s, 0.0);
   for (int c = 0; c < s; ++c) res2[c] = 1.0;
 
+  int vcy_total = 0;   // total inner V-cycles over all refinement steps (work metric)
+
   // ---- batched physical-residual refinement (all s columns together) ----
   for (int it = 0; it < max_refine; ++it) {
     for (int c = 0; c < s; ++c) {
@@ -1742,6 +1744,7 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
     }
     std::vector<double> relres; int vcy = 0;
     bsolver.solve(X, B, relres, vcy);                        // A_F X = B (batched)
+    vcy_total += vcy;
 
     double worst2 = 0.0;
     for (int c = 0; c < s; ++c) {
@@ -1761,9 +1764,13 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
       // NaN-safe: nan>worst2 is false, so guard against a NaN slipping through.
       if (!(res2[c] <= worst2)) worst2 = res2[c];
     }
+    vout.crucial("  CONV refine[%d]: inner V-cycles=%2d  worst phys ||r||/||b||=%.3e\n",
+                 it, vcy, std::sqrt(worst2));
     if (worst2 < refine_target2) break;
   }
   for (int c = 0; c < s; ++c) phys_res[c] = std::sqrt(res2[c]);
+  vout.crucial("  CONV_TOTAL: refine_steps=%d  total_inner_Vcycles=%d\n",
+               nref[0], vcy_total);
 }
 
 

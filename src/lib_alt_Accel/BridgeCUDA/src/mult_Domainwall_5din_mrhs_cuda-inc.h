@@ -544,6 +544,181 @@ __global__ void mult_dw5din_Udaginv_mrhs_dev(
   }
 }
 
+// Fused-LU buffer bound. The fused C^{-1}/C^{-dag} kernels keep the whole
+// L^{-1}w (resp. Udag^{-1}w) Ls-vector for one (site,ivc,rhs) in thread-local
+// storage between the forward and backward sweep, so the intermediate field
+// never round-trips through DRAM. Buffer sized to this bound (covers all
+// realistic Mobius Ls; our tests use Ns=8). Larger Ls falls back to the
+// original two-kernel path in the drivers below.
+#define MRHS_FUSE_LS_MAX 32
+
+// --- C^{-1} = U^{-1} L^{-1}, fused (no global intermediate, one launch) ---
+__global__ void mult_dw5din_Cinv_mrhs_dev(
+    real_t* const* __restrict__ vp_arr, real_t* const* __restrict__ wp_arr,
+    int nrhs, int Ns, int Nin5,
+    const real_t* __restrict__ e, const real_t* __restrict__ f,
+    const real_t* __restrict__ dpinv, const real_t* __restrict__ dm, int Nst_pad)
+{
+  const int ist = blockIdx.x * blockDim.x + threadIdx.x;
+  const int GridSize = blockDim.x * gridDim.x;
+  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize) {
+    int idx2 = idx / NWP, idx_in = idx % NWP, ivc = idx2 % NVC, idx_out = idx2 / NVC;
+    int site = idx_in + NWP * idx_out;
+    for (int r = 0; r < nrhs; ++r) {
+      real_t* __restrict__ vp = vp_arr[r];
+      real_t* __restrict__ wp = wp_arr[r];
+      // thread-local L^{-1}w for this (site,ivc,rhs), all Ls
+      real_t s1[MRHS_FUSE_LS_MAX], s2[MRHS_FUSE_LS_MAX];
+      real_t s3[MRHS_FUSE_LS_MAX], s4[MRHS_FUSE_LS_MAX];
+      real_t vt1, vt2, vt3, vt4, yt1, yt2, yt3, yt4, xt1, xt2, xt3, xt4;
+      // ---- forward sweep L^{-1}: w -> s (local) ----
+      vt1 = wp[IDX2(Nin5, (ID1 + ivc), site)];
+      vt2 = wp[IDX2(Nin5, (ID2 + ivc), site)];
+      vt3 = wp[IDX2(Nin5, (ID3 + ivc), site)];
+      vt4 = wp[IDX2(Nin5, (ID4 + ivc), site)];
+      s1[0] = vt1; s2[0] = vt2; s3[0] = vt3; s4[0] = vt4;
+      real_t e0 = e[0];
+      yt1 = e0 * vt1; yt2 = e0 * vt2; yt3 = e0 * vt3; yt4 = e0 * vt4;
+      for (int is = 1; is < Ns - 1; ++is) {
+        xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+        vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+        vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+        vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+        vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+        real_t a = real_t(0.5) * dm[is] * dpinv[is - 1];
+        vt1 += a * (xt1 + xt3); vt2 += a * (xt2 + xt4);
+        vt3 += a * (xt3 + xt1); vt4 += a * (xt4 + xt2);
+        s1[is] = vt1; s2[is] = vt2; s3[is] = vt3; s4[is] = vt4;
+        real_t eis = e[is];
+        yt1 += eis * vt1; yt2 += eis * vt2; yt3 += eis * vt3; yt4 += eis * vt4;
+      }
+      {
+        int is = Ns - 1;
+        xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+        vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+        vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+        vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+        vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+        real_t a = real_t(0.5) * dm[is] * dpinv[is - 1];
+        vt1 += a * (xt1 + xt3); vt2 += a * (xt2 + xt4);
+        vt3 += a * (xt3 + xt1); vt4 += a * (xt4 + xt2);
+        vt1 += -0.5 * (yt1 - yt3); vt2 += -0.5 * (yt2 - yt4);
+        vt3 += -0.5 * (yt3 - yt1); vt4 += -0.5 * (yt4 - yt2);
+        s1[is] = vt1; s2[is] = vt2; s3[is] = vt3; s4[is] = vt4;
+      }
+      // ---- backward sweep U^{-1}: s (local) -> v ----
+      int is0 = Ns - 1;
+      real_t a0 = dpinv[Ns - 1];
+      vt1 = a0 * s1[is0]; vt2 = a0 * s2[is0]; vt3 = a0 * s3[is0]; vt4 = a0 * s4[is0];
+      vp[IDX2(Nin5, (ID1 + ivc + NVCD * is0), site)] = vt1;
+      vp[IDX2(Nin5, (ID2 + ivc + NVCD * is0), site)] = vt2;
+      vp[IDX2(Nin5, (ID3 + ivc + NVCD * is0), site)] = vt3;
+      vp[IDX2(Nin5, (ID4 + ivc + NVCD * is0), site)] = vt4;
+      yt1 = 0.5 * (vt1 + vt3); yt2 = 0.5 * (vt2 + vt4);
+      yt3 = 0.5 * (vt3 + vt1); yt4 = 0.5 * (vt4 + vt2);
+      for (int is = Ns - 2; is >= 0; --is) {
+        xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+        vt1 = s1[is]; vt2 = s2[is]; vt3 = s3[is]; vt4 = s4[is];
+        real_t a = real_t(0.5) * dm[is];
+        vt1 += a * (xt1 - xt3); vt2 += a * (xt2 - xt4);
+        vt3 += a * (xt3 - xt1); vt4 += a * (xt4 - xt2);
+        real_t fis = f[is];
+        vt1 += -fis * yt1; vt2 += -fis * yt2; vt3 += -fis * yt3; vt4 += -fis * yt4;
+        real_t aa = dpinv[is];
+        vt1 *= aa; vt2 *= aa; vt3 *= aa; vt4 *= aa;
+        vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = vt1;
+        vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt2;
+        vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt3;
+        vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt4;
+      }
+    }
+  }
+}
+
+// --- C^{-dag} = Ldag^{-1} Udag^{-1}, fused (no global intermediate) ---
+__global__ void mult_dw5din_Cdaginv_mrhs_dev(
+    real_t* const* __restrict__ vp_arr, real_t* const* __restrict__ wp_arr,
+    int nrhs, int Ns, int Nin5,
+    const real_t* __restrict__ e, const real_t* __restrict__ f,
+    const real_t* __restrict__ dpinv, const real_t* __restrict__ dm, int Nst_pad)
+{
+  const int ist = blockIdx.x * blockDim.x + threadIdx.x;
+  const int GridSize = blockDim.x * gridDim.x;
+  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize) {
+    int idx2 = idx / NWP, idx_in = idx % NWP, ivc = idx2 % NVC, idx_out = idx2 / NVC;
+    int site = idx_in + NWP * idx_out;
+    for (int r = 0; r < nrhs; ++r) {
+      real_t* __restrict__ vp = vp_arr[r];
+      real_t* __restrict__ wp = wp_arr[r];
+      real_t s1[MRHS_FUSE_LS_MAX], s2[MRHS_FUSE_LS_MAX];
+      real_t s3[MRHS_FUSE_LS_MAX], s4[MRHS_FUSE_LS_MAX];
+      real_t vt1, vt2, vt3, vt4, yt1, yt2, yt3, yt4, xt1, xt2, xt3, xt4;
+      // ---- forward sweep Udag^{-1}: w -> s (local) ----
+      real_t a0 = dpinv[0];
+      vt1 = a0 * wp[IDX2(Nin5, (ID1 + ivc), site)];
+      vt2 = a0 * wp[IDX2(Nin5, (ID2 + ivc), site)];
+      vt3 = a0 * wp[IDX2(Nin5, (ID3 + ivc), site)];
+      vt4 = a0 * wp[IDX2(Nin5, (ID4 + ivc), site)];
+      s1[0] = vt1; s2[0] = vt2; s3[0] = vt3; s4[0] = vt4;
+      real_t f0 = f[0];
+      yt1 = f0 * vt1; yt2 = f0 * vt2; yt3 = f0 * vt3; yt4 = f0 * vt4;
+      for (int is = 1; is < Ns - 1; ++is) {
+        xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+        vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+        vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+        vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+        vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+        real_t a = real_t(0.5) * dm[is - 1];
+        vt1 += a * (xt1 - xt3); vt2 += a * (xt2 - xt4);
+        vt3 += a * (xt3 - xt1); vt4 += a * (xt4 - xt2);
+        real_t aa = dpinv[is];
+        vt1 *= aa; vt2 *= aa; vt3 *= aa; vt4 *= aa;
+        s1[is] = vt1; s2[is] = vt2; s3[is] = vt3; s4[is] = vt4;
+        real_t fis = f[is];
+        yt1 += fis * vt1; yt2 += fis * vt2; yt3 += fis * vt3; yt4 += fis * vt4;
+      }
+      {
+        int is = Ns - 1;
+        xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+        vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+        vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+        vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+        vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+        real_t a = real_t(0.5) * dm[Ns - 2];
+        vt1 += a * (xt1 - xt3); vt2 += a * (xt2 - xt4);
+        vt3 += a * (xt3 - xt1); vt4 += a * (xt4 - xt2);
+        vt1 += -0.5 * (yt1 + yt3); vt2 += -0.5 * (yt2 + yt4);
+        vt3 += -0.5 * (yt3 + yt1); vt4 += -0.5 * (yt4 + yt2);
+        real_t aa = dpinv[Ns - 1];
+        vt1 *= aa; vt2 *= aa; vt3 *= aa; vt4 *= aa;
+        s1[is] = vt1; s2[is] = vt2; s3[is] = vt3; s4[is] = vt4;
+      }
+      // ---- backward sweep Ldag^{-1}: s (local) -> v ----
+      int is0 = Ns - 1;
+      vt1 = s1[is0]; vt2 = s2[is0]; vt3 = s3[is0]; vt4 = s4[is0];
+      vp[IDX2(Nin5, (ID1 + ivc + NVCD * is0), site)] = vt1;
+      vp[IDX2(Nin5, (ID2 + ivc + NVCD * is0), site)] = vt2;
+      vp[IDX2(Nin5, (ID3 + ivc + NVCD * is0), site)] = vt3;
+      vp[IDX2(Nin5, (ID4 + ivc + NVCD * is0), site)] = vt4;
+      yt1 = 0.5 * (vt1 - vt3); yt2 = 0.5 * (vt2 - vt4);
+      yt3 = 0.5 * (vt3 - vt1); yt4 = 0.5 * (vt4 - vt2);
+      for (int is = Ns - 2; is >= 0; --is) {
+        xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+        vt1 = s1[is]; vt2 = s2[is]; vt3 = s3[is]; vt4 = s4[is];
+        real_t a = real_t(0.5) * dm[is + 1] * dpinv[is];
+        vt1 += a * (xt1 + xt3); vt2 += a * (xt2 + xt4);
+        vt3 += a * (xt3 + xt1); vt4 += a * (xt4 + xt2);
+        real_t eis = e[is];
+        vt1 += -eis * yt1; vt2 += -eis * yt2; vt3 += -eis * yt3; vt4 += -eis * yt4;
+        vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = vt1;
+        vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt2;
+        vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt3;
+        vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt4;
+      }
+    }
+  }
+}
+
 // scratch for the 2-stage LU solves (one Nin5*Nst_pad field per rhs)
 static real_t* g_dw_lu_buf = nullptr;
 static long    g_dw_lu_cap = 0;
@@ -591,9 +766,14 @@ void finePrec_mrhs(real_t* const* v_host, real_t* const* w_host, int nrhs, int N
   real_t* dm_dev    = (real_t*)dev_ptr(dm_host);
   int blockSize = VECTOR_LENGTH;
   int gridSize  = (Nst_pad * NVC + blockSize - 1) / blockSize;
-  // L^{-1} w -> sc ; U^{-1} sc -> v
-  mult_dw5din_Linv_mrhs_dev<<<gridSize, blockSize>>>(sc, wdev, nrhs, Ns, Nin5, e_dev, dpinv_dev, dm_dev, Nst_pad);
-  mult_dw5din_Uinv_mrhs_dev<<<gridSize, blockSize>>>(vdev, sc, nrhs, Ns, Nin5, f_dev, dpinv_dev, dm_dev, Nst_pad);
+  if (Ns <= MRHS_FUSE_LS_MAX) {
+    // fused C^{-1}: L^{-1}w kept thread-local, no global sc round-trip, one launch
+    mult_dw5din_Cinv_mrhs_dev<<<gridSize, blockSize>>>(vdev, wdev, nrhs, Ns, Nin5, e_dev, f_dev, dpinv_dev, dm_dev, Nst_pad);
+  } else {
+    // L^{-1} w -> sc ; U^{-1} sc -> v
+    mult_dw5din_Linv_mrhs_dev<<<gridSize, blockSize>>>(sc, wdev, nrhs, Ns, Nin5, e_dev, dpinv_dev, dm_dev, Nst_pad);
+    mult_dw5din_Uinv_mrhs_dev<<<gridSize, blockSize>>>(vdev, sc, nrhs, Ns, Nin5, f_dev, dpinv_dev, dm_dev, Nst_pad);
+  }
   afield_dd_kernel_sync();
 }
 
@@ -615,9 +795,14 @@ void finePrecdag_mrhs(real_t* const* v_host, real_t* const* w_host, int nrhs, in
   real_t* dm_dev    = (real_t*)dev_ptr(dm_host);
   int blockSize = VECTOR_LENGTH;
   int gridSize  = (Nst_pad * NVC + blockSize - 1) / blockSize;
-  // Udag^{-1} w -> sc ; Ldag^{-1} sc -> v
-  mult_dw5din_Udaginv_mrhs_dev<<<gridSize, blockSize>>>(sc, wdev, nrhs, Ns, Nin5, f_dev, dpinv_dev, dm_dev, Nst_pad);
-  mult_dw5din_Ldaginv_mrhs_dev<<<gridSize, blockSize>>>(vdev, sc, nrhs, Ns, Nin5, e_dev, dpinv_dev, dm_dev, Nst_pad);
+  if (Ns <= MRHS_FUSE_LS_MAX) {
+    // fused C^{-dag}: Udag^{-1}w kept thread-local, no global sc round-trip
+    mult_dw5din_Cdaginv_mrhs_dev<<<gridSize, blockSize>>>(vdev, wdev, nrhs, Ns, Nin5, e_dev, f_dev, dpinv_dev, dm_dev, Nst_pad);
+  } else {
+    // Udag^{-1} w -> sc ; Ldag^{-1} sc -> v
+    mult_dw5din_Udaginv_mrhs_dev<<<gridSize, blockSize>>>(sc, wdev, nrhs, Ns, Nin5, f_dev, dpinv_dev, dm_dev, Nst_pad);
+    mult_dw5din_Ldaginv_mrhs_dev<<<gridSize, blockSize>>>(vdev, sc, nrhs, Ns, Nin5, e_dev, dpinv_dev, dm_dev, Nst_pad);
+  }
   afield_dd_kernel_sync();
 }
 
