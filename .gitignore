@@ -57,3 +57,7 @@ sweep_launch.log
 # === Claude Code / tooling litter (keep out of source tree) ===
 .progress_count
 *.txtopttopt
+
+# microbench binaries
+test_alt_amg_dw_GEMM/cinv_bench
+test_alt_amg_dw_GEMM/cinv_bench8

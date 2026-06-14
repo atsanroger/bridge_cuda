@@ -26,8 +26,66 @@
 */
 
 #include "inline/mult_Wilson_cuda_inline-inc.h"   // MULT_GXr/i, MULT_GDXr/i
+#include <cstdlib>   // getenv (FP16_PROBE dynamic-range probe)
+#include <cstring>   // memcpy (host bit-reinterpret)
+#include <cmath>     // log10
 
 namespace {  // anonymous: lives inside the BridgeACC TU (dev_ptr/macros visible)
+
+//====================================================================
+// FP16 dynamic-range probe (gated by env FP16_PROBE).  Scans one rhs of a
+// fine field and reports max|.|, min nonzero |.|, and the decade span
+// log10(max/min).  Decision metric for FP16-vs-BF16 storage of the
+// preconditioner fields: FP16 normal range spans ~9.03 decades (65504 down to
+// 6.10e-5), so after an optimal global rescale a field is underflow-free in
+// FP16 iff its decade span < ~9; wider spans need BF16's FP32 exponent.
+// Kept here (not perf path) so the same metric is read at every fine-apply
+// boundary during a real solve.  No effect unless FP16_PROBE is set.
+//====================================================================
+__global__ void fp16_probe_kernel(const real_t* __restrict__ x, long n,
+                                  unsigned* __restrict__ out)
+{
+  // out[0]=max bits, out[1]=min bits, out[2]=#(0<|x|<fp16min), out[3]=#nonzero
+  long i = (long)blockIdx.x * blockDim.x + threadIdx.x;
+  long stride = (long)blockDim.x * gridDim.x;
+  for (; i < n; i += stride) {
+    real_t a = fabsf(x[i]);
+    if (a > 0.0f) {
+      unsigned b = __float_as_uint(a);   // monotonic for non-negative floats
+      atomicMax(&out[0], b);
+      atomicMin(&out[1], b);
+      atomicAdd(&out[3], 1u);
+      if (a < 6.103515625e-05f) atomicAdd(&out[2], 1u);
+    }
+  }
+}
+
+static void fp16_probe(const char* tag, real_t* field_host, int Nin5, int Nst_pad)
+{
+  static int en = -1;
+  static long cap = 0, seen = 0;
+  if (en < 0) { const char* e = getenv("FP16_PROBE"); en = e ? 1 : 0;
+                const char* c = getenv("FP16_PROBE_CAP"); cap = c ? atol(c) : 400; }
+  if (!en || seen >= cap) return;
+  ++seen;
+  real_t* x = (real_t*)dev_ptr(field_host);
+  long n = (long)Nin5 * Nst_pad;
+  static unsigned* d = nullptr;
+  if (!d) CHECK(cudaMalloc((void**)&d, 4 * sizeof(unsigned)));
+  unsigned init[4] = { 0u, 0xFFFFFFFFu, 0u, 0u };
+  CHECK(cudaMemcpy(d, init, 4 * sizeof(unsigned), cudaMemcpyHostToDevice));
+  int bs = 256;
+  int gs = (int)((n + bs - 1) / bs); if (gs > 1024) gs = 1024;
+  fp16_probe_kernel<<<gs, bs>>>(x, n, d);
+  unsigned h[4];
+  CHECK(cudaDeviceSynchronize());
+  CHECK(cudaMemcpy(h, d, 4 * sizeof(unsigned), cudaMemcpyDeviceToHost));
+  float mx, mn; memcpy(&mx, &h[0], 4); memcpy(&mn, &h[1], 4);
+  double dec = (h[3] && mn > 0.0f) ? log10((double)mx / (double)mn) : 0.0;
+  printf("[FP16PROBE] %-16s max=%.3e minnz=%.3e decades=%.2f  uflow=%u/%u\n",
+         tag, mx, mn, dec, h[2], h[3]);
+  fflush(stdout);
+}
 
 // Moebius b/c in this module's OWN __constant__ memory.  The production
 // const_b_float lives in libbridgecuda's device module and is NOT reachable
@@ -291,6 +349,8 @@ void fineD_mrhs(real_t* const* v_host, real_t* const* w_host, real_t* u_field_ho
     yp_lst = g_dw_yp_buf; yp_ln = nrhs; yp_li = Nin5; yp_lp = Nst_pad;
   }
 
+  fp16_probe("fineD.in", w_host[0], Nin5, Nst_pad);
+
   // 1) 5dir: v = D5 w, yp = aux  (b/c read from __constant__ memory)
   int blockSize = VECTOR_LENGTH;
   int gridSize5 = (Nst_pad * NVC + blockSize - 1) / blockSize;
@@ -307,6 +367,7 @@ void fineD_mrhs(real_t* const* v_host, real_t* const* w_host, real_t* u_field_ho
       1, Nst_pad);
 
   afield_dd_kernel_sync();
+  fp16_probe("fineD.out", v_host[0], Nin5, Nst_pad);
 }
 
 //====================================================================
@@ -553,9 +614,19 @@ __global__ void mult_dw5din_Udaginv_mrhs_dev(
 #define MRHS_FUSE_LS_MAX 32
 
 // --- C^{-1} = U^{-1} L^{-1}, fused (no global intermediate, one launch) ---
+// gm5_arr (optional): if non-null, also store gamma5*(C^{-1}w) = the spin-swapped
+// result (spin0<->2, spin1<->3). This pre-supplies the gm5(w) that fineDdag's hop
+// needs, killing the separate gm5 kernel + its full-field read (the output is
+// already in registers, so it is just an extra permuted store).
+// Templated on compile-time NS (= Ls): the Ls buffer s[NS] is then promoted to
+// REGISTERS (runtime-Ns forces it to local memory -> ~2.3x DRAM over-traffic,
+// the dominant cost; ncu: local loads use 1 of 32 bytes/sector). Dispatched per
+// Ns by the wrapper; uncommon Ns falls back to the non-fused Linv/Uinv path.
+template<int NS>
 __global__ void mult_dw5din_Cinv_mrhs_dev(
     real_t* const* __restrict__ vp_arr, real_t* const* __restrict__ wp_arr,
-    int nrhs, int Ns, int Nin5,
+    real_t* const* __restrict__ gm5_arr,
+    int nrhs, int Nin5,
     const real_t* __restrict__ e, const real_t* __restrict__ f,
     const real_t* __restrict__ dpinv, const real_t* __restrict__ dm, int Nst_pad)
 {
@@ -567,9 +638,10 @@ __global__ void mult_dw5din_Cinv_mrhs_dev(
     for (int r = 0; r < nrhs; ++r) {
       real_t* __restrict__ vp = vp_arr[r];
       real_t* __restrict__ wp = wp_arr[r];
-      // thread-local L^{-1}w for this (site,ivc,rhs), all Ls
-      real_t s1[MRHS_FUSE_LS_MAX], s2[MRHS_FUSE_LS_MAX];
-      real_t s3[MRHS_FUSE_LS_MAX], s4[MRHS_FUSE_LS_MAX];
+      real_t* __restrict__ gp = gm5_arr ? gm5_arr[r] : nullptr;  // gamma5 copy out
+      // thread-local L^{-1}w for this (site,ivc,rhs), all Ls -> registers (NS const)
+      real_t s1[NS], s2[NS];
+      real_t s3[NS], s4[NS];
       real_t vt1, vt2, vt3, vt4, yt1, yt2, yt3, yt4, xt1, xt2, xt3, xt4;
       // ---- forward sweep L^{-1}: w -> s (local) ----
       vt1 = wp[IDX2(Nin5, (ID1 + ivc), site)];
@@ -579,7 +651,8 @@ __global__ void mult_dw5din_Cinv_mrhs_dev(
       s1[0] = vt1; s2[0] = vt2; s3[0] = vt3; s4[0] = vt4;
       real_t e0 = e[0];
       yt1 = e0 * vt1; yt2 = e0 * vt2; yt3 = e0 * vt3; yt4 = e0 * vt4;
-      for (int is = 1; is < Ns - 1; ++is) {
+#pragma unroll
+      for (int is = 1; is < NS - 1; ++is) {
         xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
         vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
         vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
@@ -593,7 +666,7 @@ __global__ void mult_dw5din_Cinv_mrhs_dev(
         yt1 += eis * vt1; yt2 += eis * vt2; yt3 += eis * vt3; yt4 += eis * vt4;
       }
       {
-        int is = Ns - 1;
+        int is = NS - 1;
         xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
         vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
         vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
@@ -607,16 +680,23 @@ __global__ void mult_dw5din_Cinv_mrhs_dev(
         s1[is] = vt1; s2[is] = vt2; s3[is] = vt3; s4[is] = vt4;
       }
       // ---- backward sweep U^{-1}: s (local) -> v ----
-      int is0 = Ns - 1;
-      real_t a0 = dpinv[Ns - 1];
+      int is0 = NS - 1;
+      real_t a0 = dpinv[NS - 1];
       vt1 = a0 * s1[is0]; vt2 = a0 * s2[is0]; vt3 = a0 * s3[is0]; vt4 = a0 * s4[is0];
       vp[IDX2(Nin5, (ID1 + ivc + NVCD * is0), site)] = vt1;
       vp[IDX2(Nin5, (ID2 + ivc + NVCD * is0), site)] = vt2;
       vp[IDX2(Nin5, (ID3 + ivc + NVCD * is0), site)] = vt3;
       vp[IDX2(Nin5, (ID4 + ivc + NVCD * is0), site)] = vt4;
+      if (gp) {  // gamma5: spin0<->2, spin1<->3
+        gp[IDX2(Nin5, (ID1 + ivc + NVCD * is0), site)] = vt3;
+        gp[IDX2(Nin5, (ID2 + ivc + NVCD * is0), site)] = vt4;
+        gp[IDX2(Nin5, (ID3 + ivc + NVCD * is0), site)] = vt1;
+        gp[IDX2(Nin5, (ID4 + ivc + NVCD * is0), site)] = vt2;
+      }
       yt1 = 0.5 * (vt1 + vt3); yt2 = 0.5 * (vt2 + vt4);
       yt3 = 0.5 * (vt3 + vt1); yt4 = 0.5 * (vt4 + vt2);
-      for (int is = Ns - 2; is >= 0; --is) {
+#pragma unroll
+      for (int is = NS - 2; is >= 0; --is) {
         xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
         vt1 = s1[is]; vt2 = s2[is]; vt3 = s3[is]; vt4 = s4[is];
         real_t a = real_t(0.5) * dm[is];
@@ -636,9 +716,12 @@ __global__ void mult_dw5din_Cinv_mrhs_dev(
 }
 
 // --- C^{-dag} = Ldag^{-1} Udag^{-1}, fused (no global intermediate) ---
+// Templated on compile-time NS so the Ls buffer s[NS] lands in registers (see
+// the Cinv note above); dispatched per Ns by the wrapper.
+template<int NS>
 __global__ void mult_dw5din_Cdaginv_mrhs_dev(
     real_t* const* __restrict__ vp_arr, real_t* const* __restrict__ wp_arr,
-    int nrhs, int Ns, int Nin5,
+    int nrhs, int Nin5,
     const real_t* __restrict__ e, const real_t* __restrict__ f,
     const real_t* __restrict__ dpinv, const real_t* __restrict__ dm, int Nst_pad)
 {
@@ -650,8 +733,8 @@ __global__ void mult_dw5din_Cdaginv_mrhs_dev(
     for (int r = 0; r < nrhs; ++r) {
       real_t* __restrict__ vp = vp_arr[r];
       real_t* __restrict__ wp = wp_arr[r];
-      real_t s1[MRHS_FUSE_LS_MAX], s2[MRHS_FUSE_LS_MAX];
-      real_t s3[MRHS_FUSE_LS_MAX], s4[MRHS_FUSE_LS_MAX];
+      real_t s1[NS], s2[NS];
+      real_t s3[NS], s4[NS];
       real_t vt1, vt2, vt3, vt4, yt1, yt2, yt3, yt4, xt1, xt2, xt3, xt4;
       // ---- forward sweep Udag^{-1}: w -> s (local) ----
       real_t a0 = dpinv[0];
@@ -662,7 +745,8 @@ __global__ void mult_dw5din_Cdaginv_mrhs_dev(
       s1[0] = vt1; s2[0] = vt2; s3[0] = vt3; s4[0] = vt4;
       real_t f0 = f[0];
       yt1 = f0 * vt1; yt2 = f0 * vt2; yt3 = f0 * vt3; yt4 = f0 * vt4;
-      for (int is = 1; is < Ns - 1; ++is) {
+#pragma unroll
+      for (int is = 1; is < NS - 1; ++is) {
         xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
         vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
         vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
@@ -678,23 +762,23 @@ __global__ void mult_dw5din_Cdaginv_mrhs_dev(
         yt1 += fis * vt1; yt2 += fis * vt2; yt3 += fis * vt3; yt4 += fis * vt4;
       }
       {
-        int is = Ns - 1;
+        int is = NS - 1;
         xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
         vt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
         vt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
         vt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
         vt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
-        real_t a = real_t(0.5) * dm[Ns - 2];
+        real_t a = real_t(0.5) * dm[NS - 2];
         vt1 += a * (xt1 - xt3); vt2 += a * (xt2 - xt4);
         vt3 += a * (xt3 - xt1); vt4 += a * (xt4 - xt2);
         vt1 += -0.5 * (yt1 + yt3); vt2 += -0.5 * (yt2 + yt4);
         vt3 += -0.5 * (yt3 + yt1); vt4 += -0.5 * (yt4 + yt2);
-        real_t aa = dpinv[Ns - 1];
+        real_t aa = dpinv[NS - 1];
         vt1 *= aa; vt2 *= aa; vt3 *= aa; vt4 *= aa;
         s1[is] = vt1; s2[is] = vt2; s3[is] = vt3; s4[is] = vt4;
       }
       // ---- backward sweep Ldag^{-1}: s (local) -> v ----
-      int is0 = Ns - 1;
+      int is0 = NS - 1;
       vt1 = s1[is0]; vt2 = s2[is0]; vt3 = s3[is0]; vt4 = s4[is0];
       vp[IDX2(Nin5, (ID1 + ivc + NVCD * is0), site)] = vt1;
       vp[IDX2(Nin5, (ID2 + ivc + NVCD * is0), site)] = vt2;
@@ -702,7 +786,8 @@ __global__ void mult_dw5din_Cdaginv_mrhs_dev(
       vp[IDX2(Nin5, (ID4 + ivc + NVCD * is0), site)] = vt4;
       yt1 = 0.5 * (vt1 - vt3); yt2 = 0.5 * (vt2 - vt4);
       yt3 = 0.5 * (vt3 - vt1); yt4 = 0.5 * (vt4 - vt2);
-      for (int is = Ns - 2; is >= 0; --is) {
+#pragma unroll
+      for (int is = NS - 2; is >= 0; --is) {
         xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
         vt1 = s1[is]; vt2 = s2[is]; vt3 = s3[is]; vt4 = s4[is];
         real_t a = real_t(0.5) * dm[is + 1] * dpinv[is];
@@ -748,6 +833,14 @@ static real_t** lu_scratch(int nrhs, int Nin5, int Nst_pad)
   return g_dw_lu_ptrs;
 }
 
+// Dispatch the fused LU over compile-time NS so the s[] Ls buffer lands in
+// registers (runtime Ns -> local memory -> ~2.3x DRAM over-traffic). Common DWF
+// Ls only; any other Ns falls through to the non-fused Linv/Uinv path. The macro
+// names (vdev/wdev/.../gridSize) match the locals in both wrappers below.
+#define CINV_CASE(N)    case N: mult_dw5din_Cinv_mrhs_dev<N><<<gridSize, blockSize>>>(vdev, wdev, nullptr, nrhs, Nin5, e_dev, f_dev, dpinv_dev, dm_dev, Nst_pad); break
+#define CDAGINV_CASE(N) case N: mult_dw5din_Cdaginv_mrhs_dev<N><<<gridSize, blockSize>>>(vdev, wdev, nrhs, Nin5, e_dev, f_dev, dpinv_dev, dm_dev, Nst_pad); break
+#define FUSED_NS_LIST(CASE) CASE(8); CASE(12); CASE(16); CASE(24)
+
 // Prec = C^{-1} = U^{-1} L^{-1}  (mass operator's LU; e/f/dpinv/dm host bases).
 void finePrec_mrhs(real_t* const* v_host, real_t* const* w_host, int nrhs, int Ns,
                    real_t* e_host, real_t* f_host, real_t* dpinv_host, real_t* dm_host,
@@ -766,15 +859,18 @@ void finePrec_mrhs(real_t* const* v_host, real_t* const* w_host, int nrhs, int N
   real_t* dm_dev    = (real_t*)dev_ptr(dm_host);
   int blockSize = VECTOR_LENGTH;
   int gridSize  = (Nst_pad * NVC + blockSize - 1) / blockSize;
-  if (Ns <= MRHS_FUSE_LS_MAX) {
-    // fused C^{-1}: L^{-1}w kept thread-local, no global sc round-trip, one launch
-    mult_dw5din_Cinv_mrhs_dev<<<gridSize, blockSize>>>(vdev, wdev, nrhs, Ns, Nin5, e_dev, f_dev, dpinv_dev, dm_dev, Nst_pad);
-  } else {
-    // L^{-1} w -> sc ; U^{-1} sc -> v
-    mult_dw5din_Linv_mrhs_dev<<<gridSize, blockSize>>>(sc, wdev, nrhs, Ns, Nin5, e_dev, dpinv_dev, dm_dev, Nst_pad);
-    mult_dw5din_Uinv_mrhs_dev<<<gridSize, blockSize>>>(vdev, sc, nrhs, Ns, Nin5, f_dev, dpinv_dev, dm_dev, Nst_pad);
+  fp16_probe("finePrec.in", w_host[0], Nin5, Nst_pad);
+  switch (Ns) {
+    // fused C^{-1} with NS compile-time -> s[] in registers (gm5_arr=nullptr:
+    // finePrec doesn't need the spin-swapped gm5 copy-out)
+    FUSED_NS_LIST(CINV_CASE);
+    default:
+      // non-fused fallback (any Ns): L^{-1} w -> sc ; U^{-1} sc -> v
+      mult_dw5din_Linv_mrhs_dev<<<gridSize, blockSize>>>(sc, wdev, nrhs, Ns, Nin5, e_dev, dpinv_dev, dm_dev, Nst_pad);
+      mult_dw5din_Uinv_mrhs_dev<<<gridSize, blockSize>>>(vdev, sc, nrhs, Ns, Nin5, f_dev, dpinv_dev, dm_dev, Nst_pad);
   }
   afield_dd_kernel_sync();
+  fp16_probe("finePrec.out", v_host[0], Nin5, Nst_pad);
 }
 
 // Precdag = (C^{-1})^dag = Ldag^{-1} Udag^{-1}.
@@ -795,15 +891,17 @@ void finePrecdag_mrhs(real_t* const* v_host, real_t* const* w_host, int nrhs, in
   real_t* dm_dev    = (real_t*)dev_ptr(dm_host);
   int blockSize = VECTOR_LENGTH;
   int gridSize  = (Nst_pad * NVC + blockSize - 1) / blockSize;
-  if (Ns <= MRHS_FUSE_LS_MAX) {
-    // fused C^{-dag}: Udag^{-1}w kept thread-local, no global sc round-trip
-    mult_dw5din_Cdaginv_mrhs_dev<<<gridSize, blockSize>>>(vdev, wdev, nrhs, Ns, Nin5, e_dev, f_dev, dpinv_dev, dm_dev, Nst_pad);
-  } else {
-    // Udag^{-1} w -> sc ; Ldag^{-1} sc -> v
-    mult_dw5din_Udaginv_mrhs_dev<<<gridSize, blockSize>>>(sc, wdev, nrhs, Ns, Nin5, f_dev, dpinv_dev, dm_dev, Nst_pad);
-    mult_dw5din_Ldaginv_mrhs_dev<<<gridSize, blockSize>>>(vdev, sc, nrhs, Ns, Nin5, e_dev, dpinv_dev, dm_dev, Nst_pad);
+  fp16_probe("finePrecdag.in", w_host[0], Nin5, Nst_pad);
+  switch (Ns) {
+    // fused C^{-dag} with NS compile-time -> s[] in registers
+    FUSED_NS_LIST(CDAGINV_CASE);
+    default:
+      // non-fused fallback (any Ns): Udag^{-1} w -> sc ; Ldag^{-1} sc -> v
+      mult_dw5din_Udaginv_mrhs_dev<<<gridSize, blockSize>>>(sc, wdev, nrhs, Ns, Nin5, f_dev, dpinv_dev, dm_dev, Nst_pad);
+      mult_dw5din_Ldaginv_mrhs_dev<<<gridSize, blockSize>>>(vdev, sc, nrhs, Ns, Nin5, e_dev, dpinv_dev, dm_dev, Nst_pad);
   }
   afield_dd_kernel_sync();
+  fp16_probe("finePrecdag.out", v_host[0], Nin5, Nst_pad);
 }
 
 //====================================================================
@@ -966,6 +1064,8 @@ void fineDdag_mrhs(real_t* const* v_host, real_t* const* w_host, real_t* u_field
   int gridS = (Nst + blockSize - 1) / blockSize;
   int gridH = (Nst_pad * Ns + blockSize - 1) / blockSize;
 
+  fp16_probe("fineDdag.in", w_host[0], Nin5, Nst_pad);
+
   // t1 = gm5 w
   mult_dw5din_gm5_mrhs_dev<<<gridS, blockSize>>>(t1, wdev, nrhs, Ns, Nst);
   // t2 = U-hopb(t1)  (flag=0 -> overwrite)
@@ -978,6 +1078,7 @@ void fineDdag_mrhs(real_t* const* v_host, real_t* const* w_host, real_t* u_field
       vdev, t2, wdev, nrhs, mq, M0, Ns, alpha, Nst_pad);
 
   afield_dd_kernel_sync();
+  fp16_probe("fineDdag.out", v_host[0], Nin5, Nst_pad);
 }
 
 //====================================================================
