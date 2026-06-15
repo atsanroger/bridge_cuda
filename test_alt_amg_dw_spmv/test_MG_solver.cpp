@@ -330,6 +330,15 @@ namespace {
       const int s_mid_lo = Ns / 2 - 1;
       const int s_mid_hi = Ns / 2;
 
+      // Neff alpha correction for m_res: the alpha-form DW (Neff arXiv:2605.29377
+      // eq.31) leaves the boundary 4D propagator (sq, pion) EXACTLY alpha-invariant
+      // but gives every bulk 5d slice one 1/alpha, so the midpoint J5q ~1/alpha and
+      // raw m_res ~1/alpha^2.  Multiply each midpoint leg by alpha -> alpha-invariant
+      // physical m_res.  alpha=1 path is unchanged.
+      double alpha_mres = 1.0;
+      if (params_fopr.fetch_double("parameter_alpha", alpha_mres) != 0)
+        alpha_mres = 1.0;
+
       Field_F b(Nvol, 1), vt1(Nvol, 1), vt2(Nvol, 1);
       Field_F b5(Nvol, Ns), x5(Nvol, Ns);
 
@@ -436,7 +445,7 @@ namespace {
 #pragma omp barrier
             foprw->mult_gm5(vt2, vt1);
             axpy(sq_mid[idx], -1.0, vt2);
-            scal(sq_mid[idx], 0.5);
+            scal(sq_mid[idx], 0.5 * alpha_mres);  // *alpha: undo bulk 1/alpha (eq.31)
           }
         }
       }

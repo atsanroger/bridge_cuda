@@ -385,6 +385,14 @@ int Spectrum_Domainwall_PVprec_alt<AFIELD>::solve_2pt(std::string file_params)
   const int s_mid_lo = Ns / 2 - 1;   // lower-half top slice
   const int s_mid_hi = Ns / 2;       // upper-half bottom slice
 
+  // Neff alpha correction for m_res: bulk (midpoint) reconstruction carries one
+  // 1/alpha vs the alpha-invariant boundary (Neff arXiv:2605.29377 eq.31), so the
+  // midpoint J5q must be multiplied by alpha -> raw m_res ~1/alpha^2 becomes the
+  // physical alpha-invariant value.
+  double alpha_mres = 1.0;
+  if (params_fopr.fetch_double("parameter_alpha", alpha_mres) != 0)
+    alpha_mres = 1.0;
+
   Field_F b(Nvol, 1), vt1(Nvol, 1), vt2(Nvol, 1);
   Field_F b5(Nvol, Ns), x5(Nvol, Ns);
 
@@ -497,7 +505,7 @@ int Spectrum_Domainwall_PVprec_alt<AFIELD>::solve_2pt(std::string file_params)
 #pragma omp barrier
         foprw->mult_gm5(vt2, vt1);     // gm5 (x5[Ns/2] - x5[Ns/2-1])
         axpy(sq_mid[idx], -1.0, vt2);  // (1-gm5) x5[Ns/2] + (1+gm5) x5[Ns/2-1]
-        scal(sq_mid[idx], 0.5);
+        scal(sq_mid[idx], 0.5 * alpha_mres);  // *alpha: undo bulk 1/alpha (eq.31)
       }
     }
   }
