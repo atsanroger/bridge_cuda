@@ -73,17 +73,21 @@ void fineD_mrhs(float* const* v_host, float* const* w_host, float* u_field_host,
 
 // v[r] = C^{-1} w[r] = U^{-1} L^{-1} w[r] (Prec): 5d-local LU solve, batched,
 // one launch per stage, on-device.  e/f/dpinv/dm = operator LU coeff host bases.
+// gm5_host (optional): if non-null, also write gamma5*(C^{-1}w) there, to feed a
+// following fineDdag_mrhs(gm5_host=...) so it can skip its own gm5 kernel.
 void finePrec_mrhs(float* const* v_host, float* const* w_host, int nrhs, int Ns,
-                   float* e, float* f, float* dpinv, float* dm, int* Nsize);
+                   float* e, float* f, float* dpinv, float* dm, int* Nsize,
+                   float* const* gm5_host = nullptr);
 
 // v[r] = (C^{-1})^dag w[r] = Ldag^{-1} Udag^{-1} w[r] (Precdag).
 void finePrecdag_mrhs(float* const* v_host, float* const* w_host, int nrhs, int Ns,
                       float* e, float* f, float* dpinv, float* dm, int* Nsize);
 
 // v[r] = Ddag w[r] = 5dirdag( w, hopb( gm5 w ) ): batched fine Ddag, on-device.
+// gm5_host (optional): precomputed gamma5*w; if given, skips the internal gm5 kernel.
 void fineDdag_mrhs(float* const* v_host, float* const* w_host, float* u_field_host,
                    int nrhs, float mq, float M0, int Ns, float alpha,
-                   int* Nsize, int* bc, int* do_comm);
+                   int* Nsize, int* bc, int* do_comm, float* const* gm5_host = nullptr);
 
 // G[i,j] = <V_i|W_j> (nv x nv complex Gram), reduced over the volume.
 void block_inner(float* G_dev, float* const* V_host, float* const* W_host,

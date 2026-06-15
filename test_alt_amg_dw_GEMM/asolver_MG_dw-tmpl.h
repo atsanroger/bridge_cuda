@@ -1422,31 +1422,34 @@ void ASolver_MG_dw<AFIELD>::apply_A_block(std::vector<AFIELD_f>& out,
   }
 
   if (m_Ablk_s != s) {                        // (re)size scratch only when s changes
-    m_Ablk_sA.resize(s); m_Ablk_sB.resize(s);
+    m_Ablk_sA.resize(s); m_Ablk_sB.resize(s); m_Ablk_sG.resize(s);
     for (int c = 0; c < s; ++c) {
       m_Ablk_sA[c].reset(Nin, Nvol, Nex);
       m_Ablk_sB[c].reset(Nin, Nvol, Nex);
+      m_Ablk_sG[c].reset(Nin, Nvol, Nex);
     }
     m_Ablk_s = s;
   }
-  float* inp[256]; float* outp[256]; float* sAp[256]; float* sBp[256];  // stack
+  float* inp[256]; float* outp[256]; float* sAp[256]; float* sBp[256]; float* sGp[256];
   for (int c = 0; c < s; ++c) {
     inp[c]  = const_cast<AF&>(in[c]).ptr(0);
     outp[c] = out[c].ptr(0);
     sAp[c]  = m_Ablk_sA[c].ptr(0);
     sBp[c]  = m_Ablk_sB[c].ptr(0);
+    sGp[c]  = m_Ablk_sG[c].ptr(0);
   }
 
-  // sA = D(mq) in ; sB = C^-1(mq) sA ; sA = Ddag(PV) sB ; out = C_PV^-dag(PV) sA
+  // sA = D(mq) in ; sB = C^-1(mq) sA  [+ sG = gm5 sB] ; sA = Ddag(PV) sB [uses sG,
+  // skipping its gm5 kernel] ; out = C_PV^-dag(PV) sA
   mrhs_live::fineD_mrhs(sAp, inp, dwmq->get_U_ptr(),
                         s, dwmq->get_mq(), dwmq->get_M0(), dwmq->get_Ns(),
                         dwmq->get_alpha(), Nsize, bc, docomm);
   mrhs_live::finePrec_mrhs(sBp, sAp, s, dwmq->get_Ns(),
                            dwmq->get_e_ptr(), dwmq->get_f_ptr(),
-                           dwmq->get_dpinv_ptr(), dwmq->get_dm_ptr(), Nsize);
+                           dwmq->get_dpinv_ptr(), dwmq->get_dm_ptr(), Nsize, sGp);
   mrhs_live::fineDdag_mrhs(sAp, sBp, dwpv->get_U_ptr(),
                            s, dwpv->get_mq(), dwpv->get_M0(), dwpv->get_Ns(),
-                           dwpv->get_alpha(), Nsize, bc, docomm);
+                           dwpv->get_alpha(), Nsize, bc, docomm, sGp);
   mrhs_live::finePrecdag_mrhs(outp, sAp, s, dwpv->get_Ns(),
                               dwpv->get_e_ptr(), dwpv->get_f_ptr(),
                               dwpv->get_dpinv_ptr(), dwpv->get_dm_ptr(), Nsize);

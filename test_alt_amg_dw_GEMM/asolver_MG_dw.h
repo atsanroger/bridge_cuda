@@ -282,7 +282,7 @@ class ASolver_MG_dw : public ASolver<AFIELD>
   std::vector<AFIELD_f> m_block_basis;
 
   //! scratch + one-time-bc flag for apply_A_block (batched fine A).
-  std::vector<AFIELD_f> m_Ablk_sA, m_Ablk_sB;
+  std::vector<AFIELD_f> m_Ablk_sA, m_Ablk_sB, m_Ablk_sG;  // sG = gm5(C^-1 sA) -> Ddag
   bool m_Ablk_bc_set = false;
   int  m_Ablk_s = -1;        //!< cached column count (skip scratch reset if same)
 

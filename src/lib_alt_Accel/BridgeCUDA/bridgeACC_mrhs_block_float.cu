@@ -118,8 +118,9 @@ void mrhs_fwd_fineD(real_t* const* v, real_t* const* w, real_t* u_field_host,
 { fineD_mrhs(v, w, u_field_host, nrhs, mq, M0, Ns, alpha, Nsize, bc, do_comm); }
 
 void mrhs_fwd_finePrec(real_t* const* v, real_t* const* w, int nrhs, int Ns,
-                       real_t* e, real_t* f, real_t* dpinv, real_t* dm, int* Nsize)
-{ finePrec_mrhs(v, w, nrhs, Ns, e, f, dpinv, dm, Nsize); }
+                       real_t* e, real_t* f, real_t* dpinv, real_t* dm, int* Nsize,
+                       real_t* const* gm5)
+{ finePrec_mrhs(v, w, nrhs, Ns, e, f, dpinv, dm, Nsize, gm5); }
 
 void mrhs_fwd_finePrecdag(real_t* const* v, real_t* const* w, int nrhs, int Ns,
                           real_t* e, real_t* f, real_t* dpinv, real_t* dm, int* Nsize)
@@ -127,8 +128,8 @@ void mrhs_fwd_finePrecdag(real_t* const* v, real_t* const* w, int nrhs, int Ns,
 
 void mrhs_fwd_fineDdag(real_t* const* v, real_t* const* w, real_t* u_field_host,
                        int nrhs, real_t mq, real_t M0, int Ns, real_t alpha,
-                       int* Nsize, int* bc, int* do_comm)
-{ fineDdag_mrhs(v, w, u_field_host, nrhs, mq, M0, Ns, alpha, Nsize, bc, do_comm); }
+                       int* Nsize, int* bc, int* do_comm, real_t* const* gm5)
+{ fineDdag_mrhs(v, w, u_field_host, nrhs, mq, M0, Ns, alpha, Nsize, bc, do_comm, gm5); }
 
 // device-memory helpers (dev_ptr is in this namespace)
 float* mrhs_fwd_alloc(long n)
@@ -213,8 +214,9 @@ void fineD_mrhs(float* const* v_host, float* const* w_host, float* u_field_host,
                             Nsize, bc, do_comm); }
 
 void finePrec_mrhs(float* const* v_host, float* const* w_host, int nrhs, int Ns,
-                   float* e, float* f, float* dpinv, float* dm, int* Nsize)
-{ BridgeACC::mrhs_fwd_finePrec(v_host, w_host, nrhs, Ns, e, f, dpinv, dm, Nsize); }
+                   float* e, float* f, float* dpinv, float* dm, int* Nsize,
+                   float* const* gm5_host)
+{ BridgeACC::mrhs_fwd_finePrec(v_host, w_host, nrhs, Ns, e, f, dpinv, dm, Nsize, gm5_host); }
 
 void finePrecdag_mrhs(float* const* v_host, float* const* w_host, int nrhs, int Ns,
                       float* e, float* f, float* dpinv, float* dm, int* Nsize)
@@ -222,9 +224,9 @@ void finePrecdag_mrhs(float* const* v_host, float* const* w_host, int nrhs, int 
 
 void fineDdag_mrhs(float* const* v_host, float* const* w_host, float* u_field_host,
                    int nrhs, float mq, float M0, int Ns, float alpha,
-                   int* Nsize, int* bc, int* do_comm)
+                   int* Nsize, int* bc, int* do_comm, float* const* gm5_host)
 { BridgeACC::mrhs_fwd_fineDdag(v_host, w_host, u_field_host, nrhs, mq, M0, Ns, alpha,
-                               Nsize, bc, do_comm); }
+                               Nsize, bc, do_comm, gm5_host); }
 
 float* dev_alloc(long nfloat) { return BridgeACC::mrhs_fwd_alloc(nfloat); }
 void   dev_free(float* p) { BridgeACC::mrhs_fwd_free(p); }

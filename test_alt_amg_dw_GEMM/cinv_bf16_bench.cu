@@ -269,6 +269,44 @@ float time_ns(T* v, const T* w, long strd, int nrhs, int Nin5,
   return ms/iters;
 }
 
+// Production-style gm5 kernel: ONE thread per site (loops is, ivc inside) -- the
+// same poor parallelization (1 thread/site) as mult_dw5din_gm5_mrhs_dev. This is
+// what the gm5-fold removes from fineDdag.
+__global__ void gm5_kernel(float* vbase, const float* wbase, long strd,
+                           int nrhs, int Ns, int Nin5, int Nst)
+{
+  int site = blockIdx.x * blockDim.x + threadIdx.x;
+  if (site < Nst) {
+    for (int r = 0; r < nrhs; ++r) {
+      const float* wp = wbase + (long)r * strd; float* vp = vbase + (long)r * strd;
+      for (int is = 0; is < Ns; ++is) {
+        float wt[24];
+        for (int i = 0; i < 24; ++i) wt[i] = wp[IDX2(Nin5, (i + NVCD*is), site)];
+        for (int ivc = 0; ivc < NVC; ++ivc) {
+          vp[IDX2(Nin5, (ID1 + ivc + NVCD*is), site)] = wt[ID3 + ivc];
+          vp[IDX2(Nin5, (ID2 + ivc + NVCD*is), site)] = wt[ID4 + ivc];
+          vp[IDX2(Nin5, (ID3 + ivc + NVCD*is), site)] = wt[ID1 + ivc];
+          vp[IDX2(Nin5, (ID4 + ivc + NVCD*is), site)] = wt[ID2 + ivc];
+        }
+      }
+    }
+  }
+}
+
+static float time_gm5(float* v, const float* w, long strd, int nrhs, int Ns, int Nin5,
+                      int Nst, int iters)
+{
+  int bs = 256; int gs = (Nst + bs - 1) / bs;          // 1 thread/site (as production)
+  for (int i = 0; i < 5; i++) gm5_kernel<<<gs,bs>>>(v,w,strd,nrhs,Ns,Nin5,Nst);
+  CHECK(cudaDeviceSynchronize());
+  cudaEvent_t a,b; cudaEventCreate(&a); cudaEventCreate(&b);
+  cudaEventRecord(a);
+  for (int i = 0; i < iters; i++) gm5_kernel<<<gs,bs>>>(v,w,strd,nrhs,Ns,Nin5,Nst);
+  cudaEventRecord(b); CHECK(cudaEventSynchronize(b));
+  float ms=0; cudaEventElapsedTime(&ms,a,b); cudaEventDestroy(a); cudaEventDestroy(b);
+  return ms/iters;
+}
+
 template<typename T> __global__ void cvt_from_f(T* o, const float* in, long n)
 { for(long i=blockIdx.x*(long)blockDim.x+threadIdx.x;i<n;i+=(long)blockDim.x*gridDim.x) o[i]=T(in[i]); }
 template<typename T> __global__ void cvt_to_f(float* o, const T* in, long n)
@@ -403,6 +441,15 @@ int main(int argc, char** argv)
   float tn_b = time_ns<__nv_bfloat16>(dv_b,dw_b,strd,nrhs,Nin5,de,df,ddp,ddm,Nst_pad,iters);
   printf("BF16  : %.4f ms/apply   %.0f GB/s(useful)   BF16/FP32 x%.2f   total vs FP32-rhsloop x%.2f\n",
          tn_b, bytes_b/(tn_b*1e-3)/GB, tn_f/tn_b, t_f/tn_b);
+
+  // ============ standalone gm5 kernel cost (what the fold removes) ============
+  // fineDdag normally launches mult_dw5din_gm5_mrhs_dev (1 thread/site) before
+  // hopb.  The finePrec->fineDdag gm5-fold lets Cinv write gm5(Cinv w) directly,
+  // so this whole launch disappears (Cinv pays only ~1 extra write pass).
+  printf("\n----- standalone gm5 kernel (removed by the finePrec->fineDdag fold) -----\n");
+  float t_gm5 = time_gm5(dv_f,dw_f,strd,nrhs,Ns,Nin5,Nst_pad,iters);
+  printf("gm5   : %.4f ms/apply   gm5/Cinv(NS=8 FP32) = %.2f   (fold removes ~this much)\n",
+         t_gm5, t_gm5/tn_f);
 
   // verify rhs-parallel FP32 matches the rhs-loop reference (same math)
   { std::vector<float> vpar(n); CHECK(cudaMemcpy(vpar.data(),dv_f,n*4,cudaMemcpyDeviceToHost));

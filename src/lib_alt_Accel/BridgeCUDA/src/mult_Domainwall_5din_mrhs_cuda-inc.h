@@ -101,6 +101,37 @@ void mrhs_set_moebius_bc_dev(const real_t* b, const real_t* c, int Ns)
 }
 
 //====================================================================
+// Gated per-wrapper kernel-time accounting (env FINE_TIME).  The batched mrhs
+// kernels are invisible to nsys/ncu in this CUDA13 build, so time the four fine
+// A-apply pieces with cudaEvents to get the V-cycle breakdown in a real solve.
+// k: 0=fineD 1=fineDdag 2=finePrec 3=finePrecdag.  No effect unless FINE_TIME set.
+//====================================================================
+static double g_ft_ms[4] = {0,0,0,0};
+static long   g_ft_n [4] = {0,0,0,0};
+static cudaEvent_t g_ft_e0 = nullptr, g_ft_e1 = nullptr;
+static int fine_time_on() { static int e = -1; if (e < 0) e = getenv("FINE_TIME") ? 1 : 0; return e; }
+static void fine_time_begin() {
+  if (!fine_time_on()) return;
+  if (!g_ft_e0) { cudaEventCreate(&g_ft_e0); cudaEventCreate(&g_ft_e1); }
+  cudaEventRecord(g_ft_e0);
+}
+static void fine_time_end(int k) {
+  if (!fine_time_on()) return;
+  cudaEventRecord(g_ft_e1); cudaEventSynchronize(g_ft_e1);
+  float ms = 0; cudaEventElapsedTime(&ms, g_ft_e0, g_ft_e1);
+  g_ft_ms[k] += ms; g_ft_n[k]++;
+  long tot = g_ft_n[0] + g_ft_n[1] + g_ft_n[2] + g_ft_n[3];
+  if (tot % 4000 == 0) {
+    double s = g_ft_ms[0] + g_ft_ms[1] + g_ft_ms[2] + g_ft_ms[3];
+    printf("[FINE_TIME] fineD=%.0fms(%ld) fineDdag=%.0f(%ld) finePrec=%.0f(%ld) "
+           "finePrecdag=%.0f(%ld) | Prec share=%.0f%%\n",
+           g_ft_ms[0], g_ft_n[0], g_ft_ms[1], g_ft_n[1], g_ft_ms[2], g_ft_n[2],
+           g_ft_ms[3], g_ft_n[3], s>0 ? 100.0*(g_ft_ms[2]+g_ft_ms[3])/s : 0.0);
+    fflush(stdout);
+  }
+}
+
+//====================================================================
 // MRHS 5d-direction Dirac block.  For each rhs r:
 //   vp_r = D5 w_r   (diagonal + 5d-Wilson hop, Neff-alpha scaled)
 //   yp_r = -0.5 (b self + c hop)   (auxiliary consumed by hopb)
@@ -350,6 +381,7 @@ void fineD_mrhs(real_t* const* v_host, real_t* const* w_host, real_t* u_field_ho
   }
 
   fp16_probe("fineD.in", w_host[0], Nin5, Nst_pad);
+  fine_time_begin();
 
   // 1) 5dir: v = D5 w, yp = aux  (b/c read from __constant__ memory)
   int blockSize = VECTOR_LENGTH;
@@ -367,6 +399,7 @@ void fineD_mrhs(real_t* const* v_host, real_t* const* w_host, real_t* u_field_ho
       1, Nst_pad);
 
   afield_dd_kernel_sync();
+  fine_time_end(0);
   fp16_probe("fineD.out", v_host[0], Nin5, Nst_pad);
 }
 
@@ -710,6 +743,12 @@ __global__ void mult_dw5din_Cinv_mrhs_dev(
         vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt2;
         vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt3;
         vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt4;
+        if (gp) {  // gamma5: spin0<->2, spin1<->3 (all Ls, not just is0)
+          gp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = vt3;
+          gp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt4;
+          gp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt1;
+          gp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt2;
+        }
       }
     }
   }
@@ -837,21 +876,27 @@ static real_t** lu_scratch(int nrhs, int Nin5, int Nst_pad)
 // registers (runtime Ns -> local memory -> ~2.3x DRAM over-traffic). Common DWF
 // Ls only; any other Ns falls through to the non-fused Linv/Uinv path. The macro
 // names (vdev/wdev/.../gridSize) match the locals in both wrappers below.
-#define CINV_CASE(N)    case N: mult_dw5din_Cinv_mrhs_dev<N><<<gridSize, blockSize>>>(vdev, wdev, nullptr, nrhs, Nin5, e_dev, f_dev, dpinv_dev, dm_dev, Nst_pad); break
+#define CINV_CASE(N)    case N: mult_dw5din_Cinv_mrhs_dev<N><<<gridSize, blockSize>>>(vdev, wdev, gm5dev, nrhs, Nin5, e_dev, f_dev, dpinv_dev, dm_dev, Nst_pad); break
 #define CDAGINV_CASE(N) case N: mult_dw5din_Cdaginv_mrhs_dev<N><<<gridSize, blockSize>>>(vdev, wdev, nrhs, Nin5, e_dev, f_dev, dpinv_dev, dm_dev, Nst_pad); break
 #define FUSED_NS_LIST(CASE) CASE(8); CASE(12); CASE(16); CASE(24)
 
 // Prec = C^{-1} = U^{-1} L^{-1}  (mass operator's LU; e/f/dpinv/dm host bases).
+// gm5_host (optional): if non-null, ALSO write gamma5*(C^{-1}w) there -- the fused
+// Cinv has the result in registers, so it is one extra permuted store, and it
+// pre-supplies the gm5(w) that the following fineDdag needs (lets that call skip
+// its separate gm5 full-field kernel). Only used for Ns in the FUSED_NS_LIST set.
 void finePrec_mrhs(real_t* const* v_host, real_t* const* w_host, int nrhs, int Ns,
                    real_t* e_host, real_t* f_host, real_t* dpinv_host, real_t* dm_host,
-                   int* Nsize)
+                   int* Nsize, real_t* const* gm5_host)
 {
   int Nst = Nsize[0]*Nsize[1]*Nsize[2]*Nsize[3];
   int Nst_pad = ceil_nwp(Nst);
   int Nin5 = NVCD * Ns;
   static real_t **vd = nullptr, **wd = nullptr; static int cv = 0, cw = 0;
+  static real_t **gd = nullptr; static int cg = 0;
   real_t** vdev = map_upload(v_host, nrhs, vd, cv);
   real_t** wdev = map_upload(w_host, nrhs, wd, cw);
+  real_t** gm5dev = gm5_host ? map_upload(gm5_host, nrhs, gd, cg) : nullptr;
   real_t** sc   = lu_scratch(nrhs, Nin5, Nst_pad);
   real_t* e_dev = (real_t*)dev_ptr(e_host);
   real_t* f_dev = (real_t*)dev_ptr(f_host);
@@ -860,16 +905,22 @@ void finePrec_mrhs(real_t* const* v_host, real_t* const* w_host, int nrhs, int N
   int blockSize = VECTOR_LENGTH;
   int gridSize  = (Nst_pad * NVC + blockSize - 1) / blockSize;
   fp16_probe("finePrec.in", w_host[0], Nin5, Nst_pad);
+  fine_time_begin();
   switch (Ns) {
     // fused C^{-1} with NS compile-time -> s[] in registers (gm5_arr=nullptr:
     // finePrec doesn't need the spin-swapped gm5 copy-out)
     FUSED_NS_LIST(CINV_CASE);
     default:
-      // non-fused fallback (any Ns): L^{-1} w -> sc ; U^{-1} sc -> v
+      // non-fused fallback (any Ns): L^{-1} w -> sc ; U^{-1} sc -> v.
+      // The gm5 copy-out only exists on the fused path, so a gm5 request here
+      // would leave the buffer stale -> fail loud rather than return wrong Ddag.
+      if (gm5dev) { printf("finePrec_mrhs: gm5 fold unsupported for Ns=%d "
+                           "(add it to FUSED_NS_LIST)\n", Ns); exit(1); }
       mult_dw5din_Linv_mrhs_dev<<<gridSize, blockSize>>>(sc, wdev, nrhs, Ns, Nin5, e_dev, dpinv_dev, dm_dev, Nst_pad);
       mult_dw5din_Uinv_mrhs_dev<<<gridSize, blockSize>>>(vdev, sc, nrhs, Ns, Nin5, f_dev, dpinv_dev, dm_dev, Nst_pad);
   }
   afield_dd_kernel_sync();
+  fine_time_end(2);
   fp16_probe("finePrec.out", v_host[0], Nin5, Nst_pad);
 }
 
@@ -892,6 +943,7 @@ void finePrecdag_mrhs(real_t* const* v_host, real_t* const* w_host, int nrhs, in
   int blockSize = VECTOR_LENGTH;
   int gridSize  = (Nst_pad * NVC + blockSize - 1) / blockSize;
   fp16_probe("finePrecdag.in", w_host[0], Nin5, Nst_pad);
+  fine_time_begin();
   switch (Ns) {
     // fused C^{-dag} with NS compile-time -> s[] in registers
     FUSED_NS_LIST(CDAGINV_CASE);
@@ -901,6 +953,7 @@ void finePrecdag_mrhs(real_t* const* v_host, real_t* const* w_host, int nrhs, in
       mult_dw5din_Ldaginv_mrhs_dev<<<gridSize, blockSize>>>(vdev, sc, nrhs, Ns, Nin5, e_dev, dpinv_dev, dm_dev, Nst_pad);
   }
   afield_dd_kernel_sync();
+  fine_time_end(3);
   fp16_probe("finePrecdag.out", v_host[0], Nin5, Nst_pad);
 }
 
@@ -1045,19 +1098,25 @@ static real_t** lu_scratch2(int nrhs, int Nin5, int Nst_pad)
 
 // Ddag w = 5dirdag( w, hopb( gm5 w ) ) : single-GPU no-comm path.
 // b/c are read from __constant__ memory inside the kernels (no upload here).
+// gm5_host (optional): precomputed gamma5*w (e.g. emitted by the preceding
+// finePrec_mrhs). If supplied, use it directly as t1 and SKIP the separate gm5
+// full-field kernel. Must equal gm5(w) for the given w, else results are wrong.
 void fineDdag_mrhs(real_t* const* v_host, real_t* const* w_host, real_t* u_field_host,
                    int nrhs, real_t mq, real_t M0, int Ns, real_t alpha,
-                   int* Nsize, int* bc, int* do_comm)
+                   int* Nsize, int* bc, int* do_comm, real_t* const* gm5_host)
 {
   int Nst = Nsize[0]*Nsize[1]*Nsize[2]*Nsize[3];
   int Nst_pad = ceil_nwp(Nst);
   int Nin5 = NVCD * Ns;
   real_t* u_dev = (real_t*)dev_ptr(u_field_host);
   static real_t **vd = nullptr, **wd = nullptr; static int cv = 0, cw = 0;
+  static real_t **gd = nullptr; static int cg = 0;
   real_t** vdev = map_upload(v_host, nrhs, vd, cv);
   real_t** wdev = map_upload(w_host, nrhs, wd, cw);
-  real_t** t1 = lu_scratch (nrhs, Nin5, Nst_pad);   // gm5(w)
   real_t** t2 = lu_scratch2(nrhs, Nin5, Nst_pad);   // hopb(gm5(w))
+  // t1 = gm5(w): use the caller-supplied buffer if given, else compute it below.
+  real_t** t1 = gm5_host ? map_upload(gm5_host, nrhs, gd, cg)
+                         : lu_scratch(nrhs, Nin5, Nst_pad);
 
   int blockSize = VECTOR_LENGTH;
   int gridV = (Nst_pad * NVC + blockSize - 1) / blockSize;
@@ -1065,9 +1124,11 @@ void fineDdag_mrhs(real_t* const* v_host, real_t* const* w_host, real_t* u_field
   int gridH = (Nst_pad * Ns + blockSize - 1) / blockSize;
 
   fp16_probe("fineDdag.in", w_host[0], Nin5, Nst_pad);
+  fine_time_begin();
 
-  // t1 = gm5 w
-  mult_dw5din_gm5_mrhs_dev<<<gridS, blockSize>>>(t1, wdev, nrhs, Ns, Nst);
+  // t1 = gm5 w  (skipped when the caller pre-supplied it in gm5_host)
+  if (!gm5_host)
+    mult_dw5din_gm5_mrhs_dev<<<gridS, blockSize>>>(t1, wdev, nrhs, Ns, Nst);
   // t2 = U-hopb(t1)  (flag=0 -> overwrite)
   mult_dw5din_hopb_mrhs_dev<<<gridH, blockSize>>>(
       t2, u_dev, t1, nrhs, Ns, bc[0], bc[1], bc[2], bc[3],
@@ -1078,6 +1139,7 @@ void fineDdag_mrhs(real_t* const* v_host, real_t* const* w_host, real_t* u_field
       vdev, t2, wdev, nrhs, mq, M0, Ns, alpha, Nst_pad);
 
   afield_dd_kernel_sync();
+  fine_time_end(1);
   fp16_probe("fineDdag.out", v_host[0], Nin5, Nst_pad);
 }
 
