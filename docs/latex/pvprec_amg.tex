@@ -53,8 +53,8 @@ Pauli--Villars (PV) and site-diagonal preconditioned operator
 $\Aop=(\Dpv\,\Cpvinv)\dg\,\Cinv\,\Ddw$, whose spectrum lies in the open right
 half-plane. A left-preconditioning identity makes the solution of
 $\Aop$ return $\Ddw^{-1}b$ exactly. The outer iteration is a flexible GMRES
-(FGMRES) on $\Aop$, preconditioned by a two-grid V-cycle (a Schwarz
-alternating-procedure smoother and an $\Aop$-Galerkin coarse-grid correction
+(FGMRES) on $\Aop$, preconditioned by a two-grid V-cycle (a fixed-iteration
+GMRES-on-$\Aop$ smoother and an $\Aop$-Galerkin coarse-grid correction
 built from chirality-split, block-orthonormalised near-null vectors). We give the
 complete operator definitions,
 the algorithm, the full set of test parameters, and a \emph{residual-matched}
@@ -163,34 +163,104 @@ solvers, never the $\Aop$-residual alone.
 a parameter $\alpha$ (the better-conditioned domain-wall form of Neff
 \cite{NeffOriginal}, studied for solver acceleration in \cite{ChenAlpha}): in the
 present operator it
-multiplies the $s\!\pm\!1$ chiral shift and the wall projectors of $\Ddw$. Because
-$m_{\mathrm{res}}$ measures the residual overlap of the two chiral walls, $\alpha$
-is a direct knob on it: the four-dimensional, chiral-projected boundary-wall
-propagator is left \emph{invariant}, while $m_{\mathrm{res}}$ scans roughly as
-$1/\alpha^2$ (optimal
-$\alpha\approx0.5$ for the conditioning of $\Aop$, detailed next). We verify both
-directly on the batched solver in Section~\ref{sec:batched}
-(Table~\ref{tab:alpha}, Figure~\ref{fig:mres}).
+multiplies the $s\!\pm\!1$ chiral shift and the wall projectors of $\Ddw$. Neff
+shows \cite{NeffOriginal} that $\alpha$ leaves the four-dimensional effective
+operator --- hence the boundary-wall propagator and the pion --- \emph{exactly}
+invariant, while rescaling every \emph{bulk} fifth-dimension slice by one factor
+of $1/\alpha$. The residual mass is therefore subtle: the conventional midpoint
+estimator $m_{\mathrm{res}}=C_{J_{5q}}/C_{PP}$ is built from the bulk midpoint
+slices and so scans as $1/\alpha^2$, but this is an artifact of the
+reconstruction, \emph{not} physics --- the chiral-symmetry-breaking
+$m_{\mathrm{res}}$ resides in the $\alpha$-free overlap kernel $(S\!-\!1)/(S\!+\!1)$
+and is invariant. Restoring the compensating factor of $\alpha$ on the midpoint
+current recovers an $\alpha$-invariant $m_{\mathrm{res}}$; we verify both the raw
+$1/\alpha^2$ scan and its correction on the batched solver in
+Section~\ref{sec:batched} (Table~\ref{tab:alpha}, Figure~\ref{fig:mres}). The
+effect of $\alpha$ on the \emph{conditioning} of $\Aop$ --- which, unlike the
+physics, is ensemble-dependent --- is detailed next.
 
-\paragraph{Effect of $\alpha$ on $\Aop$.}
-The M\"obius/Neff parameter $\alpha$ enters $\Aop$
-through \emph{both} factors $\Ddw$ and $\Dpv\,\Cpvinv$: it rescales the
-$s\!\pm\!1$ chiral coupling that the site-local $C$ removes, and so it sets how
-tightly the PV factor $(\Dpv\Cpvinv)\dg$ cancels the bulk modes of $C^{-1}\Ddw$.
-Geometrically, $\alpha$ controls the radius of the disk in which the spectrum of
-$\Aop$ sits: increasing $\alpha$ spreads the eigenvalues (a wider spectral range,
-harder for both the smoother and the coarse solve), while decreasing it
-compresses them toward a point but at the cost of a near-degenerate, ill-balanced
-operator. The conditioning is optimised at an intermediate value
-$\alpha\approx0.5$, consistent with the $\alpha$-form analysis of \cite{ChenAlpha}
-and with the broader observation of Boyle and Yamaguchi \cite{BoyleYamaguchi} that
-the effective spectral window $[m_q, M_0]$ of the domain-wall operator limits the
-reach of a PV-preconditioned multigrid. Because $\alpha$ flows into the Galerkin
-coarse operator $\Aop_c=R\,\Aop\,P$ unchanged, it is also a knob on the coarse
-spectrum; we verify in Section~\ref{sec:batched} (Figure~\ref{fig:mres}) that the
-four-dimensional pion is left invariant while $m_{\mathrm{res}}\sim1/\alpha^2$,
-the signature that $\alpha$ is propagated correctly through every factor of
-$\Aop$.
+\paragraph{Effect of $\alpha$ on $\Aop$ (measured).}
+We measure the eigenspectrum of the single-precision $\Aop$ directly, by
+implicitly-restarted Arnoldi (abs-ascending and abs-descending) on the $12^4$ test
+configuration (Table~\ref{tab:spectrum}). Decreasing $\alpha$ \emph{spreads} the
+spectrum: $\lambda_{\max}$ grows from $4.66$ at $\alpha\!=\!1$ to $23.8$ at
+$\alpha\!=\!0.4$, $\lambda_{\min}$ rises only mildly ($3.16\to4.86\times10^{-3}$),
+and $\kappa(\Aop)\equiv\lambda_{\max}/\lambda_{\min}$ rises monotonically from
+$1.5\times10^3$ to $4.9\times10^3$. Both solvers track this: GMRES-on-$\Aop$ from
+$391$ to $691$ iterations and the two-grid AMG from $210$ to $339$ as $\alpha$ is
+lowered. The AMG offers no separate $\alpha$-acceleration; at fixed $\alpha$ it is
+${\sim}2\times$ cheaper than bare GMRES ($210$ vs.\ $391$ at $\alpha=1$) and
+inherits the conditioning of $\Aop$ through the Galerkin coarse operator
+$\Aop_c=R\,\Aop\,P$.
+
+\paragraph{$\alpha>1$.} We also measured $\alpha>1$. The four-dimensional physics
+stays invariant: on the CGNE propagator the pseudoscalar correlator and the
+corrected $m_{\mathrm{res}}$ agree with their $\alpha=1$ values to $10$--$12$
+significant digits up to $\alpha=3$ (Table~\ref{tab:alpha_gt1}, left). The
+conditioning degrades monotonically: bare GMRES-on-$\Aop$ is U-shaped with a flat
+floor at $\alpha\!\approx\!0.8$--$1.0$ and rises to $571,\,751,\,1201$ iterations at
+$\alpha=1.5,\,2.0,\,3.0$ (Table~\ref{tab:alpha_gt1}, right). No value of $\alpha$
+improves on $\alpha=1$ for $\Aop$ on this configuration; \textbf{the present study
+therefore fixes $\alpha=1$ throughout.}
+
+The conditioning payoff of $\alpha$ is ensemble-dependent: on a thermalised $16^4$
+configuration an $\alpha\!\approx\!0.5\text{--}0.8$ window lowers the bare
+GMRES-on-$\Aop$ count by ${\sim}12\%$ \cite{ChenAlpha}, whereas the present cold
+$12^4$ test gauge shows no such window and $\alpha=1$ is optimal for every solver.
+The ensemble-independent statement is that $\alpha$ is a \emph{physical} knob
+(Section~\ref{sec:batched}: the pion is invariant, and the residual mass is
+invariant once the midpoint current carries its compensating factor of $\alpha$).
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ccccc}
+\toprule
+$\alpha$ & $\lambda_{\min}$ & $\lambda_{\max}$ & $\kappa(\Aop)$ & GMRES\,/\,AMG iters \\
+\midrule
+$1.0$ & $3.16\times10^{-3}$ & $4.66$ & $1.5\times10^3$ & $391\,/\,210$ \\
+$0.8$ & $3.82\times10^{-3}$ & $6.07$ & $1.6\times10^3$ & $391\,/\,229$ \\
+$0.6$ & $4.43\times10^{-3}$ & $10.6$ & $2.4\times10^3$ & $481\,/\,266$ \\
+$0.5$ & $4.67\times10^{-3}$ & $15.2$ & $3.3\times10^3$ & $541\,/\,247$ \\
+$0.4$ & $4.86\times10^{-3}$ & $23.8$ & $4.9\times10^3$ & $691\,/\,339$ \\
+\bottomrule
+\end{tabular}
+\caption{Measured spectrum of the single-precision target operator $\Aop$ versus
+the Neff $\alpha$, with the resulting iteration counts, all on the \emph{same}
+$12^4$ $\beta=5.7$ cold configuration, $m_q=0.005$, $N_s=8$.
+$\lambda_{\min},\lambda_{\max}$ are the extreme converged eigenvalues from
+implicitly-restarted Arnoldi; $\kappa(\Aop)=\lambda_{\max}/\lambda_{\min}$. As
+$\alpha$ decreases the spectrum spreads and $\kappa$ grows, and both
+unpreconditioned GMRES-on-$\Aop$ and the two-grid AMG track it monotonically:
+$\alpha=1$ is optimal for both on this ensemble. The AMG is uniformly ${\sim}2\times$
+cheaper than bare GMRES at fixed $\alpha$.}
+\label{tab:spectrum}
+\end{table}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{cc@{\qquad}cc}
+\toprule
+\multicolumn{2}{c}{\emph{physics (CGNE, invariant)}} & \multicolumn{2}{c}{\emph{conditioning (GMRES-on-$\Aop$)}}\\
+\cmidrule(r){1-2}\cmidrule(l){3-4}
+$\alpha$ & pion / $m_{\mathrm{res}}$ agree & $\alpha$ & GMRES iters \\
+\midrule
+$1.0$ & --- (reference)        & $0.6$ & $481$ \\
+$1.5$ & $12$ / $10$ digits     & $0.8$ & $391$ \\
+$2.0$ & $12$ / $10$ digits     & $1.0$ & $391$ \\
+$3.0$ & $12$ / $10$ digits     & $1.5$ & $571$ \\
+      &                        & $2.0$ & $751$ \\
+      &                        & $3.0$ & $1201$ \\
+\bottomrule
+\end{tabular}
+\caption{The $\alpha\!>\!1$ measurements, same $12^4$/$m_q\!=\!0.005$/$N_s\!=\!8$.
+\emph{Left:} the four-dimensional physics is invariant past $\alpha=1$ --- the
+pseudoscalar correlator and the $\alpha$-corrected residual mass, measured on the
+CGNE propagator, agree with the $\alpha=1$ values to $10$--$12$ significant digits
+up to $\alpha=3$. \emph{Right:} the bare GMRES-on-$\Aop$ count is U-shaped, with a
+flat floor at $\alpha\approx0.8$--$1.0$ and rising ${\sim}3\times$ by $\alpha=3$.
+The study fixes $\alpha=1$.}
+\label{tab:alpha_gt1}
+\end{table}
 
 \paragraph{Inheritance and lineage.} The construction of this section --- the
 Pauli--Villars target operator $\Aop$, the exact site-local $\Cinv$ via the
@@ -242,6 +312,39 @@ orthogonality established by the first pass. The single batched CGS pass
 reproduces the modified-Gram--Schmidt result to working precision at $O(1)$ kernel
 launches per target vector.
 
+\begin{algorithm}[H]
+\caption{Setup: near-null space and transfer operators (run once, before the solve).}
+\label{alg:setup}
+\begin{algorithmic}[1]
+\State draw $N_v$ random fine vectors $\{w_k\}$
+\For{$k=1,\dots,N_v$} \Comment{drive each towards the near-null space of $\Aop$}
+  \State $w_k \gets \mathrm{GMRES}_4(\Aop,\,w_k)$ \Comment{the smoother, Alg.~\ref{alg:gmres}}
+\EndFor
+\For{$n=1,\dots,N_{\mathrm{step}}$} \Comment{adaptive enrichment; $N_{\mathrm{step}}=0$ here, so skipped}
+  \State $w_k \gets M^{-1}\Aop\,w_k$ for all $k$;\quad rebuild $P,R,\Aop_c$ below
+\EndFor
+\State $(P,R) \gets \textsc{BuildTransfer}(\{w_k\})$ \Comment{Alg.~\ref{alg:transfer}}
+\State $\Aop_c \gets R\,\Aop\,P$ \Comment{Galerkin coarse operator (nearest-neighbour truncated)}
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{\textsc{BuildTransfer}: chirality split and block orthonormalisation
+$\Rightarrow P,R$.}
+\label{alg:transfer}
+\begin{algorithmic}[1]
+\State $\Gamma_5 \gets \mathcal{R}\,\gamma_5$ \Comment{$\mathcal{R}$ = reflection in the fifth dimension}
+\For{$k=1,\dots,N_v$} \Comment{chirality split: $N_v \to 2N_v$ candidates}
+  \State $w_k^{+}\gets\tfrac12(1+\Gamma_5)\,w_k$;\quad $w_k^{-}\gets\tfrac12(1-\Gamma_5)\,w_k$
+\EndFor
+\For{each aggregate (block) $\Omega_b$ of size $3^4\times N_s$}
+  \State restrict the $2N_v$ candidates to $\Omega_b$
+  \State batched classical Gram--Schmidt (single pass) $\Rightarrow$ orthonormal block basis $\{b_{b,1},\dots,b_{b,2N_v}\}$
+\EndFor
+\State $P:$ coarse dof $(b,\ell)\mapsto b_{b,\ell}$ supported on $\Omega_b$ (piecewise span);\quad $R\gets P\dg$
+\end{algorithmic}
+\end{algorithm}
+
 \paragraph{Coarse operator and its stencil locality.}
 The coarse-grid operator is the Galerkin projection of $\Aop$,
 $\Aop_{c} = R\,\Aop\,P = P\dg\,\Aop\,P$, assembled explicitly so the coarse solve
@@ -272,15 +375,38 @@ comparison of these domain-wall multigrid coarsening strategies is given by Boyl
 and Yamaguchi \cite{BoyleYamaguchi}.
 
 \subsection{Smoother}
-The smoother is a Schwarz alternating procedure (SAP) on the same $3^4$ blocks: a
-domain-decomposed block solve of $\Aop$ that damps the high-frequency error the
-coarse grid cannot represent. This is the fixed-iteration SAP of the design note
-(its Algorithm~4), with each block solved by a fixed-iteration minimal-residual
-sweep; we use $\nu=4$ outer SAP sweeps with the block solve run to $10^{-3}$. (A
-CGNR-on-$\Ddw$ smoother diverges at small $m_q$ with $M_0=1$, the near-critical
-regime the PV preconditioning is designed to avoid; the SAP smoother on $\Aop$ is
-robust there.) The smoother strength is the dominant convergence lever of the
-V-cycle, as quantified in Section~\ref{sec:scaling}.
+The smoother is a fixed-iteration GMRES on the single-precision operator $\Aop$:
+one GMRES($m$) cycle with $m=4$ Arnoldi vectors and a zero initial guess, applied
+to the V-cycle residual to damp the high-frequency error the coarse grid cannot
+represent (stopping criterion $10^{-3}$). Because $\Aop$ is non-Hermitian
+--- its spectrum fills the right half-plane rather than a real interval --- a
+Krylov smoother is the natural choice: GMRES builds the optimal residual polynomial
+over the actual (complex) spectrum at each application, with no eigenvalue estimate
+or relaxation parameter to tune, unlike a Chebyshev or damped-Jacobi sweep that
+presupposes a real spectral interval. (A CGNR-on-$\Ddw$ smoother diverges at small
+$m_q$ with $M_0=1$, the near-critical regime the PV preconditioning is designed to
+avoid; GMRES-on-$\Aop$ is robust there.) The smoother strength --- here the GMRES
+depth $m$ --- is the dominant convergence lever of the V-cycle, as quantified in
+Section~\ref{sec:scaling}.
+
+\begin{algorithm}[H]
+\caption{$\mathrm{GMRES}_m(\Aop,b)$: $m$ Arnoldi steps with a zero initial guess,
+returning $x\approx\Aop^{-1}b$. The smoother is one cycle with $m=4$; the coarse
+solver restarts the same routine with $m\le2$ to tolerance $10^{-2}$.}
+\label{alg:gmres}
+\begin{algorithmic}[1]
+\State $\beta \gets \norm{b}$,\quad $v_1 \gets b/\beta$
+\For{$j=1,\dots,m$}
+  \State $w \gets \Aop\,v_j$
+  \For{$i=1,\dots,j$} \Comment{Arnoldi (modified Gram--Schmidt)}
+    \State $h_{ij}\gets(v_i,w)$;\quad $w \gets w - h_{ij}\,v_i$
+  \EndFor
+  \State $h_{j+1,j}\gets\norm{w}$;\quad $v_{j+1}\gets w/h_{j+1,j}$
+\EndFor
+\State $y \gets \arg\min_{y}\,\norm{\beta\,e_1 - \bar H\,y}$ \Comment{$(m{+}1)\times m$ least squares, Givens}
+\State \Return $x \gets V_m\,y$, \quad $V_m=[v_1,\dots,v_m]$
+\end{algorithmic}
+\end{algorithm}
 
 \subsection{The V-cycle and the outer iteration}
 One application of the preconditioner $M^{-1}\approx\Aop^{-1}$ is a two-grid
@@ -288,12 +414,13 @@ V-cycle:
 
 \begin{algorithm}[H]
 \caption{Two-grid V-cycle $M^{-1}$ applied to a vector $r$ (returns $z$)}
+\label{alg:vcycle}
 \begin{algorithmic}[1]
-\State $z \gets \text{SAP}(\Aop, r)$ \Comment{pre-smoothing, 4 sweeps}
+\State $z \gets \text{GMRES}_4(\Aop, r)$ \Comment{pre-smoothing, GMRES depth $4$}
 \State $r_c \gets R\,(r - \Aop\,z)$ \Comment{restrict the fine residual}
 \State $e_c \gets \Aop_c^{-1} r_c$ \Comment{coarse solve (loose GMRES)}
 \State $z \gets z + P\,e_c$ \Comment{prolongate the coarse correction}
-\State $z \gets z + \text{SAP}(\Aop,\, r - \Aop\,z)$ \Comment{post-smoothing, 4 sweeps}
+\State $z \gets z + \text{GMRES}_4(\Aop,\, r - \Aop\,z)$ \Comment{post-smoothing, GMRES depth $4$}
 \end{algorithmic}
 \end{algorithm}
 
@@ -309,6 +436,26 @@ V-cycle:
        $M^{-1}$ as preconditioner, driving the \emph{physical} residual
        $\norm{b-\Ddw x}/\norm{b}$ to the target tolerance.
 \State \Return $x = \Ddw^{-1}b$ \Comment{exact by the left-prec identity}
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{$\mathrm{FGMRES}(\Aop,b,M^{-1})$ with restart length $N_M=30$: flexible
+GMRES whose preconditioner $M^{-1}$ is the two-grid V-cycle (Alg.~\ref{alg:vcycle})
+and is allowed to vary between steps. Returns $x\approx\Aop^{-1}b=\Ddw^{-1}b$.}
+\label{alg:fgmres}
+\begin{algorithmic}[1]
+\State $x \gets 0$;\quad $r \gets b-\Aop x$;\quad $\beta\gets\norm{r}$;\quad $v_1\gets r/\beta$
+\For{$j=1,\dots,N_M$}
+  \State $z_j \gets M^{-1} v_j$ \Comment{apply the V-cycle; \emph{store} the preconditioned vector}
+  \State $w \gets \Aop\,z_j$
+  \For{$i=1,\dots,j$} \Comment{Arnoldi}
+    \State $h_{ij}\gets(v_i,w)$;\quad $w\gets w-h_{ij}\,v_i$
+  \EndFor
+  \State $h_{j+1,j}\gets\norm{w}$;\quad $v_{j+1}\gets w/h_{j+1,j}$
+\EndFor
+\State $y\gets\arg\min_{y}\,\norm{\beta\,e_1-\bar H\,y}$;\quad $x\gets x + Z_{N_M}\,y$ \Comment{$Z=[z_1,\dots,z_{N_M}]$, \emph{not} $V$ --- the ``flexible'' step}
+\State restart from the current $x$ until $\norm{b-\Ddw x}/\norm{b}<\text{tol}$
 \end{algorithmic}
 \end{algorithm}
 
@@ -343,7 +490,7 @@ near-null vectors & $N_v$                        & $8$ \\
 coarse dof / site & $2N_v$ (chirality split)     & $16$ \\
 setup smoothing   & $N_{\mathrm{step}}$          & $0$ (unoptimised) \\
 block orthog.     &                              & batched CGS, single pass \\
-smoother          &                              & SAP, 4 sweeps, tol $10^{-3}$ \\
+smoother          &                              & GMRES-on-$\Aop$, depth $4$, tol $10^{-3}$ \\
 coarse solver     &                              & GMRES, $\le2$ iter, tol $10^{-2}$ \\
 outer solver      &                              & FGMRES, restart $N_M=30$ \\
 grid transfer / coarse prec. &                   & single (\texttt{float}) \\
@@ -405,7 +552,7 @@ Three caveats frame Table~\ref{tab:results}.
 operator, same right-hand side, same physical tolerance, differing only by the
 V-cycle ($5.7\times$). The CGNE column is the practical reference on a different
 operator ($\Ddw\dg\Ddw$).
-(ii) An outer AMG iteration (one V-cycle: SAP sweeps $+$ coarse solve) is much
+(ii) An outer AMG iteration (one V-cycle: GMRES smoothing $+$ coarse solve) is much
 more expensive than a CGNE iteration, so the $1.6\times$ iteration advantage over
 CGNE does \emph{not} translate into a wall-clock advantage on this small, coarse
 problem --- and is not claimed to.
@@ -518,69 +665,6 @@ solve, well below any physical scale. This upgrades the qualitative
 ``$C_{PP}$ coincide to solver tolerance'' of Table~\ref{tab:results} to a
 quantitative, fully-batched, FP32 check.
 
-\paragraph{The \texorpdfstring{$\alpha$}{alpha}-invariance check.}
-Carrying the Neff $\alpha$-form through the \emph{physical} operator (and hence,
-by the Galerkin construction, through the coarse operator) should leave the
-four-dimensional pion invariant while shifting the residual mass roughly as
-$1/\alpha^2$. We solve the batched propagator at
-$\alpha\in\{0.38,0.5,0.76,1.0,1.25\}$ on the same solver (Table~\ref{tab:alpha},
-Figure~\ref{fig:mres}). Both expectations hold: the pseudoscalar correlator is
-invariant across the whole range to $\sim5\times10^{-4}$ (the FP32 inner-solve
-floor), while $m_{\mathrm{res}}$ varies by $\approx7\times$, tracking $1/\alpha^2$
-closely for $\alpha\gtrsim0.5$ and departing below it at $\alpha=0.38$ (where the
-operator is most ill-conditioned and the loose, single-precision inner solve is
-least converged). This validates the $\alpha$-form physics and, crucially,
-confirms that $\alpha$ propagates correctly into the Galerkin coarse operator ---
-the prerequisite for later using $\alpha$ as the coarse-space spectral knob.
-
-\begin{table}[h]
-\centering
-\begin{tabular}{ccc}
-\toprule
-$\alpha$ & $C_{PP}$ & $m_{\mathrm{res}}$ \\
-\midrule
-$0.38$ & $1.56801\times10^{-1}$ & $4.667\times10^{-1}$ \\
-$0.50$ & $1.56779\times10^{-1}$ & $3.500\times10^{-1}$ \\
-$0.76$ & $1.56751\times10^{-1}$ & $1.682\times10^{-1}$ \\
-$1.00$ & $1.56750\times10^{-1}$ & $9.658\times10^{-2}$ \\
-$1.25$ & $1.56758\times10^{-1}$ & $6.340\times10^{-2}$ \\
-\bottomrule
-\end{tabular}
-\caption{$\alpha$-scan on the batched AMG solver, $12^4$, $\beta=5.7$,
-$m_q=0.005$, single precision. The pion $C_{PP}$ is invariant to the FP32 floor
-across the whole range; the residual mass $m_{\mathrm{res}}$ scans by $7\times$.}
-\label{tab:alpha}
-\end{table}
-
-\begin{figure}[h]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=11cm, height=7cm,
-    xlabel={$\alpha$}, ylabel={$m_{\mathrm{res}}$},
-    xmin=0.3, xmax=1.35, ymin=0.03, ymax=0.55,
-    grid=both, grid style={gray!20},
-    legend pos=north east, legend cell align=left,
-    tick label style={font=\small}, label style={font=\small},
-]
-% 1/alpha^2 reference, normalised at alpha=1 (m_res=0.09658)
-\addplot[domain=0.35:1.3, samples=80, dashed, thick, gray] {0.09658/(x*x)};
-\addlegendentry{$1/\alpha^2$ (normalised at $\alpha{=}1$)}
-% measured points
-\addplot[only marks, mark=*, mark size=2pt, blue] coordinates {
-  (0.38, 0.46669) (0.50, 0.35001) (0.76, 0.16817) (1.00, 0.09658) (1.25, 0.06340)
-};
-\addlegendentry{batched AMG (measured)}
-\end{axis}
-\end{tikzpicture}
-\caption{Residual mass $m_{\mathrm{res}}$ versus the M\"obius $\alpha$ on the
-batched AMG solver ($12^4$, $m_q=0.005$, single precision). The dashed curve is
-$1/\alpha^2$ normalised at $\alpha=1$. The pion correlator (Table~\ref{tab:alpha})
-is $\alpha$-invariant; $m_{\mathrm{res}}$ follows $1/\alpha^2$ for
-$\alpha\gtrsim0.5$ and falls below it at the most ill-conditioned point
-$\alpha=0.38$.}
-\label{fig:mres}
-\end{figure}
 
 \section{Quark-mass scaling and solver tuning}
 \label{sec:scaling}
@@ -659,11 +743,7 @@ exhibits the textbook $m_q\to0$ growth.}
 On the present $12^4$ lattice the lowest eigenvalue of the Dirac operator is set by
 the volume scale ($\sim\!1/L$), not by $m_q$: the spectral gap does not close as the
 bare mass is lowered, so the conditioning of both $\Aop$ and $\Ddw\dg\Ddw$
-saturates and the iteration counts plateau. Equivalently, with $N_s=8$ the residual
-mass is large ($m_{\mathrm{res}}\approx0.38$ at $\alpha=0.5$,
-Table~\ref{tab:alpha}), so the effective quark mass $m_q+m_{\mathrm{res}}$ is
-dominated by $m_{\mathrm{res}}$ and a $20\times$ change in the bare $m_q$ moves it by
-under $5\%$. The near-zero modes that drive CGNE's growth --- and against which
+saturates and the iteration counts plateau. The near-zero modes that drive CGNE's growth --- and against which
 multigrid's mass-independence is the decisive advantage --- simply do not appear in
 this regime. Exhibiting the separation therefore requires reaching genuinely small
 effective mass: a larger physical volume (so the spectral gap can close) and/or a
@@ -677,8 +757,8 @@ yet entered the regime where that gap can widen.
 \paragraph{Solver tuning: the V-cycle is smoother-limited and already balanced.}
 We swept the multigrid parameters at $m_q=0.005$, using the reference-solve outer
 count as the objective (Table~\ref{tab:tuning}). The single effective convergence
-lever is the number of SAP smoother sweeps: raising it from $4$ to $8$ to $16$ cuts
-the outer count from $247$ to $150$ to $97$. That reduction is sub-linear in the
+lever is the GMRES smoother depth: raising it from $4$ to $8$ to $16$ Arnoldi
+vectors cuts the outer count from $247$ to $150$ to $97$. That reduction is sub-linear in the
 added smoother work, however, so the \emph{wall-clock} is minimised at four
 sweeps --- fewer sweeps ($2$--$3$) and more sweeps ($8$--$16$) are both slower. The
 other knobs are ineffective in this regime: adaptive setup smoothing
@@ -701,7 +781,7 @@ coarse space has little work to do.
 \toprule
 parameter & sweep & outer iters \\
 \midrule
-SAP smoother sweeps      & $2,3,\mathbf{4},8,16$ & $421,399,\mathbf{247},150,97$ \\
+GMRES smoother depth $m$ & $2,3,\mathbf{4},8,16$ & $421,399,\mathbf{247},150,97$ \\
 setup smoothing $N_{\mathrm{step}}$ & $\mathbf{0},1,2,3$    & $\mathbf{247},248,248,249$ \\
 near-null vectors $N_v$  & $\mathbf{8},12,16,24$ & $\mathbf{247},241,238,245$ \\
 coarse-solve iterations  & $\mathbf{2},5,10$     & $\mathbf{247},247,247$ \\
@@ -744,6 +824,96 @@ batched-GEMM throughput the method is designed to exploit. The single consumer G
 used here understates the achievable gain; this step is the quantitative basis for
 a production deployment.
 \end{enumerate}
+
+
+\appendix
+\section{Backup material}
+\label{sec:backup}
+The $\alpha$-scan table and figure below are retained for reference only; the body of the note fixes $\alpha=1$ (Section~\ref{sec:target}, Tables~\ref{tab:spectrum}--\ref{tab:alpha_gt1}).
+
+\paragraph{The \texorpdfstring{$\alpha$}{alpha}-invariance check.}
+Carrying the Neff $\alpha$-form through the \emph{physical} operator (and hence,
+by the Galerkin construction, through the coarse operator) must leave the
+four-dimensional pion exactly invariant. We solve the batched propagator at
+$\alpha\in\{0.38,0.5,0.76,1.0,1.25\}$ on the same solver (Table~\ref{tab:alpha},
+Figure~\ref{fig:mres}). The pseudoscalar correlator is invariant across the whole
+range to $\sim5\times10^{-4}$ (the FP32 inner-solve floor), confirming that
+$\alpha$ propagates correctly into every factor of $\Aop$ and into the Galerkin
+coarse operator. The \emph{raw} midpoint residual mass varies by $\approx7\times$,
+tracking the reconstruction's $1/\alpha^2$ closely for $\alpha\gtrsim0.5$; but, as
+explained in Section~\ref{sec:target}, this is the bulk-slice $1/\alpha$ of the
+midpoint current squared, an artifact of the estimator and not a physical shift.
+Restoring the compensating factor of $\alpha$ on the midpoint density (last column
+of Table~\ref{tab:alpha}, flat series in Figure~\ref{fig:mres}) collapses the scan:
+the \emph{corrected} $m_{\mathrm{res}}$ is invariant to ${\sim}3\%$ for
+$\alpha\gtrsim0.76$, with the residual droop at $\alpha\le0.5$ reflecting the loose
+single-precision solve at the most ill-conditioned points (largest $\kappa$,
+Table~\ref{tab:spectrum}) --- a numerical, not physical, effect: a tighter-converged
+check at $\alpha=0.5$ recovers $m_{\mathrm{res}}$ to within $0.13\%$ of its
+$\alpha=1$ value. The physically correct statement is thus that $\alpha$ leaves
+both the pion \emph{and} the residual mass invariant, as a four-dimensional
+observable must.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{cccc}
+\toprule
+$\alpha$ & $C_{PP}$ & $m_{\mathrm{res}}^{\mathrm{raw}}$ & $\alpha^2 m_{\mathrm{res}}^{\mathrm{raw}}$ \\
+\midrule
+$0.38$ & $1.56801\times10^{-1}$ & $4.667\times10^{-1}$ & $6.74\times10^{-2}$ \\
+$0.50$ & $1.56779\times10^{-1}$ & $3.500\times10^{-1}$ & $8.75\times10^{-2}$ \\
+$0.76$ & $1.56751\times10^{-1}$ & $1.682\times10^{-1}$ & $9.71\times10^{-2}$ \\
+$1.00$ & $1.56750\times10^{-1}$ & $9.658\times10^{-2}$ & $9.66\times10^{-2}$ \\
+$1.25$ & $1.56758\times10^{-1}$ & $6.340\times10^{-2}$ & $9.91\times10^{-2}$ \\
+\bottomrule
+\end{tabular}
+\caption{$\alpha$-scan on the batched AMG solver, $12^4$, $\beta=5.7$,
+$m_q=0.005$, single precision. The pion $C_{PP}$ is invariant to the FP32 floor
+across the whole range. The \emph{raw} midpoint residual mass
+$m_{\mathrm{res}}^{\mathrm{raw}}$ scans by $7\times$ (the $1/\alpha^2$ artifact of
+the bulk-slice reconstruction); the corrected, physical residual mass
+$\alpha^2 m_{\mathrm{res}}^{\mathrm{raw}}$ is invariant to ${\sim}3\%$ for
+$\alpha\gtrsim0.76$, drooping at smaller $\alpha$ only because the FP32 inner
+solve is least converged where $\kappa(\Aop)$ is largest.}
+\label{tab:alpha}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=11cm, height=7cm,
+    xlabel={$\alpha$}, ylabel={$m_{\mathrm{res}}$},
+    xmin=0.3, xmax=1.35, ymin=0.03, ymax=0.55,
+    grid=both, grid style={gray!20},
+    legend pos=north east, legend cell align=left,
+    tick label style={font=\small}, label style={font=\small},
+]
+% 1/alpha^2 reference, normalised at alpha=1 (m_res=0.09658)
+\addplot[domain=0.35:1.3, samples=80, dashed, thick, gray] {0.09658/(x*x)};
+\addlegendentry{$1/\alpha^2$ (normalised at $\alpha{=}1$)}
+% raw measured points
+\addplot[only marks, mark=*, mark size=2pt, blue] coordinates {
+  (0.38, 0.46669) (0.50, 0.35001) (0.76, 0.16817) (1.00, 0.09658) (1.25, 0.06340)
+};
+\addlegendentry{raw $m_{\mathrm{res}}$ (estimator)}
+% corrected, alpha-invariant: alpha^2 * raw
+\addplot[only marks, mark=square*, mark size=2pt, red] coordinates {
+  (0.38, 0.06740) (0.50, 0.08750) (0.76, 0.09710) (1.00, 0.09658) (1.25, 0.09910)
+};
+\addlegendentry{corrected $\alpha^2 m_{\mathrm{res}}$ (physical)}
+\end{axis}
+\end{tikzpicture}
+\caption{Residual mass versus the M\"obius $\alpha$ on the batched AMG solver
+($12^4$, $m_q=0.005$, single precision). The dashed curve is $1/\alpha^2$
+normalised at $\alpha=1$; the blue circles are the \emph{raw} midpoint estimator,
+which follows it (an artifact of the $1/\alpha$ bulk-slice reconstruction). The
+red squares are the \emph{corrected}, physical residual mass
+$\alpha^2 m_{\mathrm{res}}$, which is $\alpha$-invariant up to the FP32 inner-solve
+floor at the most ill-conditioned (small-$\alpha$) points; the pion correlator
+(Table~\ref{tab:alpha}) is invariant throughout.}
+\label{fig:mres}
+\end{figure}
 
 \begin{thebibliography}{9}
 
