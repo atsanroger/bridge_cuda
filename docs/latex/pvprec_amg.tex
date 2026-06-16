@@ -519,60 +519,7 @@ $\Aop\,\delta=\PL\,r_{\mathrm{phys}}$, $x\!+\!=\!\delta$,
 $r_{\mathrm{phys}}=b-\Ddw x$), so both reach the same physical tolerance.
 \end{itemize}
 
-\section{Numerical results}
-\label{sec:results}
-
-\paragraph{Setup.} Parameters of Tables~\ref{tab:params} and \ref{tab:mg}; single
-NVIDIA RTX~3080. The two operator-$\Aop$ solvers (AMG, GMRES-on-$\Aop$) use the
-\emph{identical} left-preconditioned right-hand side. All three solvers are driven
-to a comparable \emph{physical} residual $\norm{b-\Ddw x}/\norm{b}\sim10^{-12}$,
-so the iteration counts in Table~\ref{tab:results} are residual-matched.
-
-\begin{table}[h]
-\centering
-\begin{tabular}{lccc}
-\toprule
-Solver & operator & outer iterations & $\norm{b-\Ddw x}/\norm{b}$ \\
-\midrule
-\textbf{AMG} (FGMRES + V-cycle) & $\Aop$ & \textbf{210} & $1.3\times10^{-12}$ \\
-GMRES on $\Aop$ (no preconditioner) & $\Aop$ & $1202$ & $7.0\times10^{-13}$ \\
-Even-odd CGNE (production) & $\Ddw\dg\Ddw$ & $\approx 333$ & $2.4\times10^{-12}$ \\
-\bottomrule
-\end{tabular}
-\caption{Residual-matched iteration counts, $12^4$ $\beta=5.7$, $m_q=0.005$, all
-at physical residual $\sim10^{-12}$. Against the identical-operator,
-identical-right-hand-side GMRES baseline the V-cycle reduces the outer iteration
-count by $\approx5.7\times$; against the production even-odd CGNE by
-$\approx1.6\times$. The pseudoscalar correlators agree: the $\Aop$-based and CGNE
-$C_{PP}(t)$ coincide to solver tolerance.}
-\label{tab:results}
-\end{table}
-
-\paragraph{Reading the numbers honestly.}
-Three caveats frame Table~\ref{tab:results}.
-(i) The clean comparison is AMG versus unpreconditioned GMRES on $\Aop$: same
-operator, same right-hand side, same physical tolerance, differing only by the
-V-cycle ($5.7\times$). The CGNE column is the practical reference on a different
-operator ($\Ddw\dg\Ddw$).
-(ii) An outer AMG iteration (one V-cycle: GMRES smoothing $+$ coarse solve) is much
-more expensive than a CGNE iteration, so the $1.6\times$ iteration advantage over
-CGNE does \emph{not} translate into a wall-clock advantage on this small, coarse
-problem --- and is not claimed to.
-(iii) Most importantly, the near-null setup is unoptimised ($N_{\mathrm{step}}=0$,
-$N_v=8$, two grid levels, single consumer GPU). A tuned setup is expected to
-lower the AMG count substantially.
-
-\paragraph{Where the value is.}
-The textbook value of multigrid is that the outer iteration count is essentially
-independent of the quark mass and the volume, whereas CGNE grows as $m_q\to0$ and
-with the volume. Quantifying that scaling --- with an optimised near-null setup,
-on larger volumes and smaller $m_q$, on hardware with the memory and throughput to
-support it --- is the natural next step, and is the case for moving the study to a
-supercomputer. The present run establishes correctness (matching $C_{PP}$ and
-$m_{\mathrm{res}}$ across all three solvers) and a residual-matched baseline on a
-single RTX~3080.
-
-\subsection{Batched, single-precision propagator through \texorpdfstring{$\Aop$}{A}}
+\section{Batched, single-precision propagator through \texorpdfstring{$\Aop$}{A}}
 \label{sec:batched}
 
 The twelve colour--spin columns of the point-source propagator are solved through
@@ -663,10 +610,62 @@ The resulting pseudoscalar correlator reproduces the production even-odd CGNE,
   C_{PP}^{\mathrm{CGNE}} = 1.56754\times10^{-1},
 \]
 agreeing to $2.4\times10^{-4}$ --- the FP32 floor of the single-precision inner
-solve, well below any physical scale. This upgrades the qualitative
-``$C_{PP}$ coincide to solver tolerance'' of Table~\ref{tab:results} to a
-quantitative, fully-batched, FP32 check.
+solve, well below any physical scale: a quantitative, fully-batched check that
+the batched $\Aop$ solve and the production CGNE return the same propagator.
 
+
+\section{Numerical results}
+\label{sec:results}
+
+\paragraph{Setup.} Parameters of Tables~\ref{tab:params} and \ref{tab:mg}; single
+NVIDIA RTX~3080. The two operator-$\Aop$ solvers (AMG, GMRES-on-$\Aop$) use the
+\emph{identical} left-preconditioned right-hand side. All three solvers are driven
+to a comparable \emph{physical} residual $\norm{b-\Ddw x}/\norm{b}\sim10^{-12}$,
+so the iteration counts in Table~\ref{tab:results} are residual-matched.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Solver & operator & outer iterations & $\norm{b-\Ddw x}/\norm{b}$ \\
+\midrule
+\textbf{AMG} (FGMRES + V-cycle) & $\Aop$ & \textbf{210} & $1.3\times10^{-12}$ \\
+GMRES on $\Aop$ (no preconditioner) & $\Aop$ & $1202$ & $7.0\times10^{-13}$ \\
+Even-odd CGNE (production) & $\Ddw\dg\Ddw$ & $\approx 333$ & $2.4\times10^{-12}$ \\
+\bottomrule
+\end{tabular}
+\caption{Residual-matched iteration counts, $12^4$ $\beta=5.7$, $m_q=0.005$, all
+at physical residual $\sim10^{-12}$. Against the identical-operator,
+identical-right-hand-side GMRES baseline the V-cycle reduces the outer iteration
+count by $\approx5.7\times$; against the production even-odd CGNE by
+$\approx1.6\times$. The pseudoscalar correlators agree: the $\Aop$-based and CGNE
+$C_{PP}(t)$ coincide to solver tolerance.}
+\label{tab:results}
+\end{table}
+
+\paragraph{Reading the numbers honestly.}
+Three caveats frame Table~\ref{tab:results}.
+(i) The clean comparison is AMG versus unpreconditioned GMRES on $\Aop$: same
+operator, same right-hand side, same physical tolerance, differing only by the
+V-cycle ($5.7\times$). The CGNE column is the practical reference on a different
+operator ($\Ddw\dg\Ddw$).
+(ii) An outer AMG iteration (one V-cycle: GMRES smoothing $+$ coarse solve) is much
+more expensive than a CGNE iteration, so the $1.6\times$ iteration advantage over
+CGNE does \emph{not} translate into a wall-clock advantage on this small, coarse
+problem --- and is not claimed to.
+(iii) Most importantly, the near-null setup is unoptimised ($N_{\mathrm{step}}=0$,
+$N_v=8$, two grid levels, single consumer GPU). A tuned setup is expected to
+lower the AMG count substantially.
+
+\paragraph{Where the value is.}
+The textbook value of multigrid is that the outer iteration count is essentially
+independent of the quark mass and the volume, whereas CGNE grows as $m_q\to0$ and
+with the volume. Quantifying that scaling --- with an optimised near-null setup,
+on larger volumes and smaller $m_q$, on hardware with the memory and throughput to
+support it --- is the natural next step, and is the case for moving the study to a
+supercomputer. The present run establishes correctness (matching $C_{PP}$ and
+$m_{\mathrm{res}}$ across all three solvers) and a residual-matched baseline on a
+single RTX~3080.
 
 \section{Quark-mass scaling and solver tuning}
 \label{sec:scaling}
