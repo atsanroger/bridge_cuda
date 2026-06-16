@@ -554,6 +554,44 @@ problem --- and is not claimed to.
 $N_v=8$, two grid levels, single consumer GPU). A tuned setup is expected to
 lower the AMG count substantially.
 
+\paragraph{Where the V-cycle spends its time.}
+Table~\ref{tab:vctime} breaks one V-cycle into its steps, accumulated over the
+whole solve. (Absolute times on this WSL2/RTX~3080 host are unreliable --- the GPU
+clock is not lockable --- but the \emph{proportions}, taken within a single
+process and summed over ${\sim}200$ V-cycles, are robust.) The smoother dominates
+at ${\sim}65\%$: it is two sweeps of $\mathrm{GMRES}_4$ on the full fine operator
+$\Aop$, each application of which is itself the most expensive kernel in the cycle.
+The coarse solve is $13\%$ and the two grid transfers together $18\%$; the
+fine-grid residual and linear algebra are the remaining $4\%$. This quantifies
+caveat~(ii): the V-cycle is \emph{smoother-limited}, so the convergence lever is
+the smoother strength (Section~\ref{sec:scaling}), and the inter-grid transfers ---
+cast as batched GEMMs in the production path (Section~\ref{sec:batched}), which is
+relatively cheaper than the single-right-hand-side reference measured here --- are
+not the bottleneck.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\toprule
+V-cycle step & time (s) & fraction \\
+\midrule
+smoother (two $\mathrm{GMRES}_4$ sweeps on $\Aop$) & $7.12$ & $\mathbf{65\%}$ \\
+coarse solver                                       & $1.39$ & $13\%$ \\
+restriction $R$                                     & $1.23$ & $11\%$ \\
+prolongation $P$                                    & $0.81$ & $7\%$ \\
+fine residual $+$ linear algebra                    & $0.44$ & $4\%$ \\
+\midrule
+V-cycle total                                       & $10.99$ & $100\%$ \\
+\bottomrule
+\end{tabular}
+\caption{Per-step cost of one two-grid V-cycle, accumulated over the reference
+solve ($12^4$, $m_q=0.005$, $\alpha=1$, single-RHS reference path). The smoother
+(GMRES$_4$ on the fine $\Aop$, pre- and post-) is ${\sim}65\%$ of the cycle; the
+coarse solve and the two transfers are the rest. Proportions, not absolute times,
+are the meaningful quantity on this clock-unlocked host.}
+\label{tab:vctime}
+\end{table}
+
 \paragraph{Where the value is.}
 The textbook value of multigrid is that the outer iteration count is essentially
 independent of the quark mass and the volume, whereas CGNE grows as $m_q\to0$ and
