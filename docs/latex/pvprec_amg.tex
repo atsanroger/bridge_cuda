@@ -560,8 +560,14 @@ whole solve. (Absolute times on this WSL2/RTX~3080 host are unreliable --- the G
 clock is not lockable --- but the \emph{proportions}, taken within a single
 process and summed over ${\sim}200$ V-cycles, are robust.) The smoother dominates
 at ${\sim}65\%$: it is two sweeps of $\mathrm{GMRES}_4$ on the full fine operator
-$\Aop$, each application of which is itself the most expensive kernel in the cycle.
-The coarse solve is $13\%$ and the two grid transfers together $18\%$; the
+$\Aop$. Counting operator applications, one V-cycle is ${\approx}9$ fine-$\Aop$
+applies --- eight inside the two $\mathrm{GMRES}_4$ sweeps (four Arnoldi steps each)
+and one in the residual --- so the smoother line is, almost entirely, fine-operator
+time: ``smoother-limited'' means ``fine-$\Aop$-apply-limited''. The single
+highest-leverage kernel is therefore the fine-operator application ($C^{-1}\Ddw$ and
+the PV factor $\Dpv\Cpvinv$), which is exactly what the register-resident $C^{-1}$,
+the fused $LU$ inverse, the $\gamma_5$-fold and the SU(3) third-row reconstruction
+target. The coarse solve is $13\%$ and the two grid transfers together $18\%$; the
 fine-grid residual and linear algebra are the remaining $4\%$. This quantifies
 caveat~(ii): the V-cycle is \emph{smoother-limited}, so the convergence lever is
 the smoother strength (Section~\ref{sec:scaling}), and the inter-grid transfers ---
