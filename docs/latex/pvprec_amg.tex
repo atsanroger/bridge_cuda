@@ -159,109 +159,6 @@ a small physical residual $\norm{b-\Ddw x}$.} We therefore always drive and repo
 the \emph{physical} relative residual $\norm{b-\Ddw x}/\norm{b}$ when comparing
 solvers, never the $\Aop$-residual alone.
 
-\paragraph{The M\"obius/Neff $\alpha$-form.} The fifth-dimension structure carries
-a parameter $\alpha$ (the better-conditioned domain-wall form of Neff
-\cite{NeffOriginal}, studied for solver acceleration in \cite{ChenAlpha}): in the
-present operator it
-multiplies the $s\!\pm\!1$ chiral shift and the wall projectors of $\Ddw$. Neff
-shows \cite{NeffOriginal} that $\alpha$ leaves the four-dimensional effective
-operator --- hence the boundary-wall propagator and the pion --- \emph{exactly}
-invariant, while rescaling every \emph{bulk} fifth-dimension slice by one factor
-of $1/\alpha$. The residual mass is therefore subtle: the conventional midpoint
-estimator $m_{\mathrm{res}}=C_{J_{5q}}/C_{PP}$ is built from the bulk midpoint
-slices and so scans as $1/\alpha^2$, but this is an artifact of the
-reconstruction, \emph{not} physics --- the chiral-symmetry-breaking
-$m_{\mathrm{res}}$ resides in the $\alpha$-free overlap kernel $(S\!-\!1)/(S\!+\!1)$
-and is invariant. Restoring the compensating factor of $\alpha$ on the midpoint
-current recovers an $\alpha$-invariant $m_{\mathrm{res}}$; we verify both the raw
-$1/\alpha^2$ scan and its correction on the batched solver in
-Section~\ref{sec:batched} (Table~\ref{tab:alpha}, Figure~\ref{fig:mres}). The
-effect of $\alpha$ on the \emph{conditioning} of $\Aop$ --- which, unlike the
-physics, is ensemble-dependent --- is detailed next.
-
-\paragraph{Effect of $\alpha$ on $\Aop$ (measured).}
-We measure the eigenspectrum of the single-precision $\Aop$ directly, by
-implicitly-restarted Arnoldi (abs-ascending and abs-descending) on the $12^4$ test
-configuration (Table~\ref{tab:spectrum}). Decreasing $\alpha$ \emph{spreads} the
-spectrum: $\lambda_{\max}$ grows from $4.66$ at $\alpha\!=\!1$ to $23.8$ at
-$\alpha\!=\!0.4$, $\lambda_{\min}$ rises only mildly ($3.16\to4.86\times10^{-3}$),
-and $\kappa(\Aop)\equiv\lambda_{\max}/\lambda_{\min}$ rises monotonically from
-$1.5\times10^3$ to $4.9\times10^3$. Both solvers track this: GMRES-on-$\Aop$ from
-$391$ to $691$ iterations and the two-grid AMG from $210$ to $339$ as $\alpha$ is
-lowered. The AMG offers no separate $\alpha$-acceleration; at fixed $\alpha$ it is
-${\sim}2\times$ cheaper than bare GMRES ($210$ vs.\ $391$ at $\alpha=1$) and
-inherits the conditioning of $\Aop$ through the Galerkin coarse operator
-$\Aop_c=R\,\Aop\,P$.
-
-\paragraph{$\alpha>1$.} We also measured $\alpha>1$. The four-dimensional physics
-stays invariant: on the CGNE propagator the pseudoscalar correlator and the
-corrected $m_{\mathrm{res}}$ agree with their $\alpha=1$ values to $10$--$12$
-significant digits up to $\alpha=3$ (Table~\ref{tab:alpha_gt1}, left). The
-conditioning degrades monotonically: bare GMRES-on-$\Aop$ is U-shaped with a flat
-floor at $\alpha\!\approx\!0.8$--$1.0$ and rises to $571,\,751,\,1201$ iterations at
-$\alpha=1.5,\,2.0,\,3.0$ (Table~\ref{tab:alpha_gt1}, right). No value of $\alpha$
-improves on $\alpha=1$ for $\Aop$ on this configuration; \textbf{the present study
-therefore fixes $\alpha=1$ throughout.}
-
-The conditioning payoff of $\alpha$ is ensemble-dependent: on a thermalised $16^4$
-configuration an $\alpha\!\approx\!0.5\text{--}0.8$ window lowers the bare
-GMRES-on-$\Aop$ count by ${\sim}12\%$ \cite{ChenAlpha}, whereas the present cold
-$12^4$ test gauge shows no such window and $\alpha=1$ is optimal for every solver.
-The ensemble-independent statement is that $\alpha$ is a \emph{physical} knob
-(Section~\ref{sec:batched}: the pion is invariant, and the residual mass is
-invariant once the midpoint current carries its compensating factor of $\alpha$).
-
-\begin{table}[h]
-\centering
-\begin{tabular}{ccccc}
-\toprule
-$\alpha$ & $\lambda_{\min}$ & $\lambda_{\max}$ & $\kappa(\Aop)$ & GMRES\,/\,AMG iters \\
-\midrule
-$1.0$ & $3.16\times10^{-3}$ & $4.66$ & $1.5\times10^3$ & $391\,/\,210$ \\
-$0.8$ & $3.82\times10^{-3}$ & $6.07$ & $1.6\times10^3$ & $391\,/\,229$ \\
-$0.6$ & $4.43\times10^{-3}$ & $10.6$ & $2.4\times10^3$ & $481\,/\,266$ \\
-$0.5$ & $4.67\times10^{-3}$ & $15.2$ & $3.3\times10^3$ & $541\,/\,247$ \\
-$0.4$ & $4.86\times10^{-3}$ & $23.8$ & $4.9\times10^3$ & $691\,/\,339$ \\
-\bottomrule
-\end{tabular}
-\caption{Measured spectrum of the single-precision target operator $\Aop$ versus
-the Neff $\alpha$, with the resulting iteration counts, all on the \emph{same}
-$12^4$ $\beta=5.7$ cold configuration, $m_q=0.005$, $N_s=8$.
-$\lambda_{\min},\lambda_{\max}$ are the extreme converged eigenvalues from
-implicitly-restarted Arnoldi; $\kappa(\Aop)=\lambda_{\max}/\lambda_{\min}$. As
-$\alpha$ decreases the spectrum spreads and $\kappa$ grows, and both
-unpreconditioned GMRES-on-$\Aop$ and the two-grid AMG track it monotonically:
-$\alpha=1$ is optimal for both on this ensemble. The AMG is uniformly ${\sim}2\times$
-cheaper than bare GMRES at fixed $\alpha$.}
-\label{tab:spectrum}
-\end{table}
-
-\begin{table}[h]
-\centering
-\begin{tabular}{cc@{\qquad}cc}
-\toprule
-\multicolumn{2}{c}{\emph{physics (CGNE, invariant)}} & \multicolumn{2}{c}{\emph{conditioning (GMRES-on-$\Aop$)}}\\
-\cmidrule(r){1-2}\cmidrule(l){3-4}
-$\alpha$ & pion / $m_{\mathrm{res}}$ agree & $\alpha$ & GMRES iters \\
-\midrule
-$1.0$ & --- (reference)        & $0.6$ & $481$ \\
-$1.5$ & $12$ / $10$ digits     & $0.8$ & $391$ \\
-$2.0$ & $12$ / $10$ digits     & $1.0$ & $391$ \\
-$3.0$ & $12$ / $10$ digits     & $1.5$ & $571$ \\
-      &                        & $2.0$ & $751$ \\
-      &                        & $3.0$ & $1201$ \\
-\bottomrule
-\end{tabular}
-\caption{The $\alpha\!>\!1$ measurements, same $12^4$/$m_q\!=\!0.005$/$N_s\!=\!8$.
-\emph{Left:} the four-dimensional physics is invariant past $\alpha=1$ --- the
-pseudoscalar correlator and the $\alpha$-corrected residual mass, measured on the
-CGNE propagator, agree with the $\alpha=1$ values to $10$--$12$ significant digits
-up to $\alpha=3$. \emph{Right:} the bare GMRES-on-$\Aop$ count is U-shaped, with a
-flat floor at $\alpha\approx0.8$--$1.0$ and rising ${\sim}3\times$ by $\alpha=3$.
-The study fixes $\alpha=1$.}
-\label{tab:alpha_gt1}
-\end{table}
-
 \paragraph{Inheritance and lineage.} The construction of this section --- the
 Pauli--Villars target operator $\Aop$, the exact site-local $\Cinv$ via the
 $\texttt{Prec}$ ($L^{-1}U^{-1}$) mode, the left-preconditioning identity, and the
@@ -830,7 +727,110 @@ a production deployment.
 \appendix
 \section{Backup material}
 \label{sec:backup}
-The $\alpha$-scan table and figure below are retained for reference only; the body of the note fixes $\alpha=1$ (Section~\ref{sec:target}, Tables~\ref{tab:spectrum}--\ref{tab:alpha_gt1}).
+This appendix collects the full treatment of the Neff $\alpha$ parameter --- the operator definition, the measured spectrum and conditioning, the $\alpha>1$ scan, and the $\alpha$-invariance check. It is logically independent of the multigrid construction, which fixes $\alpha=1$ throughout (Section~\ref{sec:target}), and is intended to be split off into a standalone note.
+
+\paragraph{The M\"obius/Neff $\alpha$-form.} The fifth-dimension structure carries
+a parameter $\alpha$ (the better-conditioned domain-wall form of Neff
+\cite{NeffOriginal}, studied for solver acceleration in \cite{ChenAlpha}): in the
+present operator it
+multiplies the $s\!\pm\!1$ chiral shift and the wall projectors of $\Ddw$. Neff
+shows \cite{NeffOriginal} that $\alpha$ leaves the four-dimensional effective
+operator --- hence the boundary-wall propagator and the pion --- \emph{exactly}
+invariant, while rescaling every \emph{bulk} fifth-dimension slice by one factor
+of $1/\alpha$. The residual mass is therefore subtle: the conventional midpoint
+estimator $m_{\mathrm{res}}=C_{J_{5q}}/C_{PP}$ is built from the bulk midpoint
+slices and so scans as $1/\alpha^2$, but this is an artifact of the
+reconstruction, \emph{not} physics --- the chiral-symmetry-breaking
+$m_{\mathrm{res}}$ resides in the $\alpha$-free overlap kernel $(S\!-\!1)/(S\!+\!1)$
+and is invariant. Restoring the compensating factor of $\alpha$ on the midpoint
+current recovers an $\alpha$-invariant $m_{\mathrm{res}}$; we verify both the raw
+$1/\alpha^2$ scan and its correction on the batched solver in
+Section~\ref{sec:batched} (Table~\ref{tab:alpha}, Figure~\ref{fig:mres}). The
+effect of $\alpha$ on the \emph{conditioning} of $\Aop$ --- which, unlike the
+physics, is ensemble-dependent --- is detailed next.
+
+\paragraph{Effect of $\alpha$ on $\Aop$ (measured).}
+We measure the eigenspectrum of the single-precision $\Aop$ directly, by
+implicitly-restarted Arnoldi (abs-ascending and abs-descending) on the $12^4$ test
+configuration (Table~\ref{tab:spectrum}). Decreasing $\alpha$ \emph{spreads} the
+spectrum: $\lambda_{\max}$ grows from $4.66$ at $\alpha\!=\!1$ to $23.8$ at
+$\alpha\!=\!0.4$, $\lambda_{\min}$ rises only mildly ($3.16\to4.86\times10^{-3}$),
+and $\kappa(\Aop)\equiv\lambda_{\max}/\lambda_{\min}$ rises monotonically from
+$1.5\times10^3$ to $4.9\times10^3$. Both solvers track this: GMRES-on-$\Aop$ from
+$391$ to $691$ iterations and the two-grid AMG from $210$ to $339$ as $\alpha$ is
+lowered. The AMG offers no separate $\alpha$-acceleration; at fixed $\alpha$ it is
+${\sim}2\times$ cheaper than bare GMRES ($210$ vs.\ $391$ at $\alpha=1$) and
+inherits the conditioning of $\Aop$ through the Galerkin coarse operator
+$\Aop_c=R\,\Aop\,P$.
+
+\paragraph{$\alpha>1$.} We also measured $\alpha>1$. The four-dimensional physics
+stays invariant: on the CGNE propagator the pseudoscalar correlator and the
+corrected $m_{\mathrm{res}}$ agree with their $\alpha=1$ values to $10$--$12$
+significant digits up to $\alpha=3$ (Table~\ref{tab:alpha_gt1}, left). The
+conditioning degrades monotonically: bare GMRES-on-$\Aop$ is U-shaped with a flat
+floor at $\alpha\!\approx\!0.8$--$1.0$ and rises to $571,\,751,\,1201$ iterations at
+$\alpha=1.5,\,2.0,\,3.0$ (Table~\ref{tab:alpha_gt1}, right). No value of $\alpha$
+improves on $\alpha=1$ for $\Aop$ on this configuration; \textbf{the present study
+therefore fixes $\alpha=1$ throughout.}
+
+The conditioning payoff of $\alpha$ is ensemble-dependent: on a thermalised $16^4$
+configuration an $\alpha\!\approx\!0.5\text{--}0.8$ window lowers the bare
+GMRES-on-$\Aop$ count by ${\sim}12\%$ \cite{ChenAlpha}, whereas the present cold
+$12^4$ test gauge shows no such window and $\alpha=1$ is optimal for every solver.
+The ensemble-independent statement is that $\alpha$ is a \emph{physical} knob
+(Section~\ref{sec:batched}: the pion is invariant, and the residual mass is
+invariant once the midpoint current carries its compensating factor of $\alpha$).
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ccccc}
+\toprule
+$\alpha$ & $\lambda_{\min}$ & $\lambda_{\max}$ & $\kappa(\Aop)$ & GMRES\,/\,AMG iters \\
+\midrule
+$1.0$ & $3.16\times10^{-3}$ & $4.66$ & $1.5\times10^3$ & $391\,/\,210$ \\
+$0.8$ & $3.82\times10^{-3}$ & $6.07$ & $1.6\times10^3$ & $391\,/\,229$ \\
+$0.6$ & $4.43\times10^{-3}$ & $10.6$ & $2.4\times10^3$ & $481\,/\,266$ \\
+$0.5$ & $4.67\times10^{-3}$ & $15.2$ & $3.3\times10^3$ & $541\,/\,247$ \\
+$0.4$ & $4.86\times10^{-3}$ & $23.8$ & $4.9\times10^3$ & $691\,/\,339$ \\
+\bottomrule
+\end{tabular}
+\caption{Measured spectrum of the single-precision target operator $\Aop$ versus
+the Neff $\alpha$, with the resulting iteration counts, all on the \emph{same}
+$12^4$ $\beta=5.7$ cold configuration, $m_q=0.005$, $N_s=8$.
+$\lambda_{\min},\lambda_{\max}$ are the extreme converged eigenvalues from
+implicitly-restarted Arnoldi; $\kappa(\Aop)=\lambda_{\max}/\lambda_{\min}$. As
+$\alpha$ decreases the spectrum spreads and $\kappa$ grows, and both
+unpreconditioned GMRES-on-$\Aop$ and the two-grid AMG track it monotonically:
+$\alpha=1$ is optimal for both on this ensemble. The AMG is uniformly ${\sim}2\times$
+cheaper than bare GMRES at fixed $\alpha$.}
+\label{tab:spectrum}
+\end{table}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{cc@{\qquad}cc}
+\toprule
+\multicolumn{2}{c}{\emph{physics (CGNE, invariant)}} & \multicolumn{2}{c}{\emph{conditioning (GMRES-on-$\Aop$)}}\\
+\cmidrule(r){1-2}\cmidrule(l){3-4}
+$\alpha$ & pion / $m_{\mathrm{res}}$ agree & $\alpha$ & GMRES iters \\
+\midrule
+$1.0$ & --- (reference)        & $0.6$ & $481$ \\
+$1.5$ & $12$ / $10$ digits     & $0.8$ & $391$ \\
+$2.0$ & $12$ / $10$ digits     & $1.0$ & $391$ \\
+$3.0$ & $12$ / $10$ digits     & $1.5$ & $571$ \\
+      &                        & $2.0$ & $751$ \\
+      &                        & $3.0$ & $1201$ \\
+\bottomrule
+\end{tabular}
+\caption{The $\alpha\!>\!1$ measurements, same $12^4$/$m_q\!=\!0.005$/$N_s\!=\!8$.
+\emph{Left:} the four-dimensional physics is invariant past $\alpha=1$ --- the
+pseudoscalar correlator and the $\alpha$-corrected residual mass, measured on the
+CGNE propagator, agree with the $\alpha=1$ values to $10$--$12$ significant digits
+up to $\alpha=3$. \emph{Right:} the bare GMRES-on-$\Aop$ count is U-shaped, with a
+flat floor at $\alpha\approx0.8$--$1.0$ and rising ${\sim}3\times$ by $\alpha=3$.
+The study fixes $\alpha=1$.}
+\label{tab:alpha_gt1}
+\end{table}
 
 \paragraph{The \texorpdfstring{$\alpha$}{alpha}-invariance check.}
 Carrying the Neff $\alpha$-form through the \emph{physical} operator (and hence,
