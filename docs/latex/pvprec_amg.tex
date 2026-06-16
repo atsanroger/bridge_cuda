@@ -317,11 +317,12 @@ launches per target vector.
 \label{alg:setup}
 \begin{algorithmic}[1]
 \State draw $N_v$ random fine vectors $\{w_k\}$
-\For{$k=1,\dots,N_v$} \Comment{drive each towards the near-null space of $\Aop$}
-  \State $w_k \gets \mathrm{GMRES}_4(\Aop,\,w_k)$ \Comment{the smoother, Alg.~\ref{alg:gmres}}
+\For{$k=1,\dots,N_v$}
+  \State $u \gets \mathrm{GMRES}_4(\Aop,\,w_k)$ \Comment{smoother: $u\approx\Aop^{-1}w_k$ (Alg.~\ref{alg:gmres})}
+  \State $w_k \gets \Dpv\,u$ \Comment{map through the Pauli--Villars operator (mode ``D'')}
 \EndFor
 \For{$n=1,\dots,N_{\mathrm{step}}$} \Comment{adaptive enrichment; $N_{\mathrm{step}}=0$ here, so skipped}
-  \State $w_k \gets M^{-1}\Aop\,w_k$ for all $k$;\quad rebuild $P,R,\Aop_c$ below
+  \State $w_k \gets \Dpv\,M^{-1}w_k$ for all $k$;\quad rebuild $P,R,\Aop_c$ below
 \EndFor
 \State $(P,R) \gets \textsc{BuildTransfer}(\{w_k\})$ \Comment{Alg.~\ref{alg:transfer}}
 \State $\Aop_c \gets R\,\Aop\,P$ \Comment{Galerkin coarse operator (nearest-neighbour truncated)}
@@ -392,7 +393,8 @@ Section~\ref{sec:scaling}.
 \begin{algorithm}[H]
 \caption{$\mathrm{GMRES}_m(\Aop,b)$: $m$ Arnoldi steps with a zero initial guess,
 returning $x\approx\Aop^{-1}b$. The smoother is one cycle with $m=4$; the coarse
-solver restarts the same routine with $m\le2$ to tolerance $10^{-2}$.}
+solver runs the same routine with $m=5$ for at most two restart cycles, to
+tolerance $10^{-2}$.}
 \label{alg:gmres}
 \begin{algorithmic}[1]
 \State $\beta \gets \norm{b}$,\quad $v_1 \gets b/\beta$
@@ -491,7 +493,7 @@ coarse dof / site & $2N_v$ (chirality split)     & $16$ \\
 setup smoothing   & $N_{\mathrm{step}}$          & $0$ (unoptimised) \\
 block orthog.     &                              & batched CGS, single pass \\
 smoother          &                              & GMRES-on-$\Aop$, depth $4$, tol $10^{-3}$ \\
-coarse solver     &                              & GMRES, $\le2$ iter, tol $10^{-2}$ \\
+coarse solver     &                              & GMRES, depth $5$, $\le2$ cycles, tol $10^{-2}$ \\
 outer solver      &                              & FGMRES, restart $N_M=30$ \\
 grid transfer / coarse prec. &                   & single (\texttt{float}) \\
 \bottomrule
