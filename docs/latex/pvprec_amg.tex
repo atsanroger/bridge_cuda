@@ -765,6 +765,21 @@ smaller quark masses, on data-centre GPUs (A100/H100) whose memory and
 batched-GEMM throughput the method is designed to exploit. The single consumer GPU
 used here understates the achievable gain; this step is the quantitative basis for
 a production deployment.
+
+\item \textbf{BF16-storage smoother.} The smoother is ${\sim}65\%$ of the V-cycle
+and is dominated by fine-$\Aop$ applications (Table~\ref{tab:vctime}), whose cost is
+bandwidth-bound; storing the smoother's fermion field (and gauge) in
+\texttt{bfloat16} with FP32 register accumulation therefore offers up to ${\sim}2\times$
+on that kernel. Because the smoother is only a \emph{preconditioner}, the reduced
+precision is corrected by the outer FGMRES and the FP32 residual refinement, so the
+physics is untouched: an A/B test on the present setup, emulating bfloat16 rounding
+of the smoother's fine-$\Aop$ output, leaves the pseudoscalar 2-point function
+invariant to $5\times10^{-9}$ and the residual mass to $6\times10^{-8}$ (far below
+the solver floor), with the outer V-cycle count unchanged. The optimisation is thus
+\emph{de-risked}; what remains is the production kernel port (templating the fused
+$C^{-1}$ and hop kernels on the storage type, confined to the smoother instance).
+Like the levers above its payoff is largest at production volume, where the
+fine-operator bandwidth dominates.
 \end{enumerate}
 
 
