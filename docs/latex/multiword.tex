@@ -1142,12 +1142,17 @@ the 5th-dimension coupling in $D_s$ is absorbed into the diagonal blocks
 $D_{ee/oo}^{(5D)}$.
 The Schur complement is formed analogously to~\eqref{eq:schur}.
 
-\begin{tcolorbox}[keybox={Even-Odd and Multi-Word Arithmetic}]
-The spinor fields $\psi_e$ in the reduced system~\eqref{eq:reduced} are the
-natural target for QDW/QTW promotion.
-With even-odd preconditioning, the extended spinor arrays have size $V/2$
-rather than $V$, \textbf{halving the memory overhead} of QDW ($2\times$ memory)
-and QTW ($3\times$ memory) relative to the full-lattice case.
+\begin{tcolorbox}[warnbox={Even-Odd Does Not Reduce the Multi-Word Overhead}]
+The reduced-system spinor fields carry the multiword limbs, but even-odd
+preconditioning gives the multiword scheme \textbf{no} memory advantage over
+FP64. The QDW and QTW overhead factors ($2\times$ and $3\times$ memory) are
+per-element multipliers fixed by the number of words; they are independent of
+the vector length. Even-odd halves the \emph{absolute} array length
+($V \to V/2$) for the multiword field and the FP64 baseline \emph{alike}, so the
+\emph{relative} overhead stays exactly $2\times$ / $3\times$---there is no
+``halving of the overhead.'' (For DWF the reduced field has $\tfrac{V}{2}\,L_s$
+sites, and per Section~\ref{sec:precision_assignment} the gauge links, $m_f$,
+$b$, $c$, and $M_0$---not the spinor alone---must also be promoted.)
 \end{tcolorbox}
 
 % ----------------------------------------------------------
@@ -1259,23 +1264,27 @@ the spinor vectors and scalar quantities within the solver.
 \caption{CGNE with QDW/QTW precision (Lattice QCD, DWF)}
 \begin{algorithmic}[1]
 \State $r \leftarrow b - D\,x_0$;\quad
-       $p \leftarrow D^\dagger r$;\quad
-       $\rho \leftarrow \mathrm{QDWdot}(r, r)$
+       $s \leftarrow D^\dagger r$;\quad
+       $p \leftarrow s$;\quad
+       $\rho \leftarrow \mathrm{QDWdot}(s, s)$
+    \Comment{$s=D^\dagger r$ is the normal-equation residual}
 \For{$k = 1, 2, \ldots$}
   \State $q \leftarrow \mathrm{QDW\text{-}SpMV}(D,\; p)$
     \Comment{Apply $D_{\mathrm{DW}}$ (dominant cost)}
   \State $\alpha \leftarrow \rho \;/\; \mathrm{QDWdot}(q, q)$
+    \Comment{$\alpha = \|D^\dagger r\|^2 / \|Dp\|^2$}
   \State $x \leftarrow x + \alpha\, p$
     \Comment{AXPY}
   \State $r \leftarrow r - \alpha\, q$
     \Comment{AXPY}
   \State $\boxed{r \leftarrow \mathrm{Normalize}(r)}$
     \Comment{{\color{red}Key: one normalization per iteration (Section~\ref{sec:drift})}}
-  \State $\rho' \leftarrow \mathrm{QDWdot}(r, r)$
+  \State $s \leftarrow D^\dagger r$
+    \Comment{Apply $D^\dagger_{\mathrm{DW}}$ (second SpMV per iteration)}
+  \State $\rho' \leftarrow \mathrm{QDWdot}(s, s)$
   \If{converged} \textbf{break} \EndIf
   \State $\beta \leftarrow \rho' / \rho$
-  \State $p \leftarrow D^\dagger r + \beta\, p$
-    \Comment{Apply $D^\dagger_{\mathrm{DW}}$ (second SpMV per iteration)}
+  \State $p \leftarrow s + \beta\, p$
   \State $\rho \leftarrow \rho'$
 \EndFor
 \end{algorithmic}
