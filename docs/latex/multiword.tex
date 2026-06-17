@@ -162,23 +162,19 @@ ensures the words tile the bit-line without gap or overlap.}
 \label{fig:multiword_concept}
 \end{figure}
 
-\begin{tcolorbox}[keybox={The Fundamental Limitation of FP64}]
+\paragraph{The fundamental limitation of FP64.}
 An FP64 significand has 52 explicit bits (53 with the implicit leading 1).
 The exact product $a \times b$ may require up to \textbf{106 bits} to represent,
-but FP64 truncates this to 53 bits.
-The core idea of multi-word arithmetic is to \textbf{recover the discarded bits}
-by storing them in additional floating-point words.
-
-\medskip
-Precision levels achievable with standard FP64 arithmetic:
+but FP64 truncates this to 53 bits. The core idea of multi-word arithmetic is to
+\textbf{recover the discarded bits} by storing them in additional floating-point
+words. The precision levels reachable with standard FP64 arithmetic are
 \[
   \underbrace{\text{FP64} \times 1}_{\approx 16\;\text{digits}}
   \;\longrightarrow\;
   \underbrace{\text{DW/QDW} \times 2}_{\approx 31\;\text{digits}}
   \;\longrightarrow\;
-  \underbrace{\text{TW/QTW} \times 3}_{\approx 47\;\text{digits}}
+  \underbrace{\text{TW/QTW} \times 3}_{\approx 47\;\text{digits}}.
 \]
-\end{tcolorbox}
 
 % ----------------------------------------------------------
 \subsection{Floating-Point Notation and Prerequisites}
@@ -293,7 +289,7 @@ which is exactly representable in FP64 (Sterbenz-like argument).
 Hence $\fl(ab - p) = ab - p$, giving $p + e = ab$ exactly. \qquad $\checkmark$
 \end{proof}
 
-\begin{tcolorbox}[warnbox={Without FMA: Dekker Splitting}]
+\paragraph{Without FMA: Dekker splitting.}
 When FMA is unavailable, use Dekker splitting with $\sigma = 2^{27} + 1$
 to split $a = a_h + a_l$ (each 26 bits):
 \[
@@ -304,7 +300,6 @@ to split $a = a_h + a_l$ (each 26 bits):
 and similarly for $b$.
 This requires \textbf{17 flops} versus \textbf{2} with FMA.
 On modern CPUs and NVIDIA GPUs, always prefer the FMA-based TwoProd.
-\end{tcolorbox}
 
 % ----------------------------------------------------------
 \subsection{Double-Word (DW) Arithmetic}
@@ -578,23 +573,17 @@ If left unchecked, $z_l$ eventually invades the precision domain of $z_h$,
 causing significant accuracy loss and---in the case of iterative solvers---
 complete failure to converge~\cite{Mukunoki2025}.
 
-\begin{tcolorbox}[keybox={Repair via Normalization}]
+\paragraph{Repair via normalization.}
 Applying one normalization (TwoSum / Renormalize) per iteration
-\emph{resets} the drift to zero.
-The drift bound becomes a \emph{constant}:
+\emph{resets} the drift to zero, so the drift bound becomes a \emph{constant}:
 \begin{equation}
   \Delta \leq C\uu\,|x| \quad \text{(no accumulation across iterations)}.
 \end{equation}
 The cost is $O(n)$ TwoSum operations per iteration, negligible compared
-to SpMV at $O(\mathrm{nnz})$.
-
-\medskip
-\textbf{Parallel with FP16 rescaling~\cite{Kanamori2026}:}
-The normalization step in QDW/QTW is structurally analogous to the
-rescaling step in FP16 mixed-precision solvers: both are per-iteration
-repair operations that restore numerical validity without changing the
-mathematical convergence target.
-\end{tcolorbox}
+to SpMV at $O(\mathrm{nnz})$. This normalization step is structurally analogous
+to the rescaling step in FP16 mixed-precision solvers~\cite{Kanamori2026}: both
+are per-iteration repair operations that restore numerical validity without
+changing the mathematical convergence target.
 
 % ----------------------------------------------------------
 \subsection{Numerical Performance: Mukunoki \& Ozaki (2025)}
@@ -650,13 +639,12 @@ In other words, if QTW requires fewer than 54\% of QDW's iterations, QTW wins on
 total wall time. The paper confirmed this for several ill-conditioned matrices
 where QDW stagnated.
 
-\begin{tcolorbox}[keybox={Core Finding of Mukunoki \& Ozaki (2025)~\cite{Mukunoki2025}}]
+\paragraph{Core finding of Mukunoki \& Ozaki (2025)~\cite{Mukunoki2025}.}
 Quasi triple-word arithmetic can yield more accurate solutions without
 significantly increasing execution time relative to double-word arithmetic.
 For certain problems, a reduction in iteration count contributes additional
-speedup.
-Thus, QTW is a compelling alternative to DW/QDW in sparse iterative solvers.
-\end{tcolorbox}
+speedup. Thus, QTW is a compelling alternative to DW/QDW in sparse iterative
+solvers.
 
 \subsubsection{Arithmetic Mode Summary}
 
@@ -1001,20 +989,26 @@ This squaring is the central numerical difficulty: near the chiral limit,
 $\kappa(D_{\mathrm{DW}}) \sim 10^6$--$10^{12}$, so
 $\kappa(A) \sim 10^{12}$--$10^{24}$---far beyond what FP64 can handle.
 
-\begin{tcolorbox}[warnbox={Why DWF Is Harder Than Wilson}]
+\paragraph{Why DWF is harder than Wilson.}
+Table~\ref{tab:dwf_vs_wilson} contrasts the two settings. Both the squared
+condition number and the $L_s$-fold operator cost make DWF$+$CGNE the primary
+target for QDW/QTW arithmetic.
+
+\begin{table}[H]
+\centering
+\caption{Numerical cost contrast between Wilson and DWF.}
+\label{tab:dwf_vs_wilson}
 \begin{tabular}{lll}
+\toprule
  & \textbf{Wilson + BiCGStab} & \textbf{DWF + CGNE} \\
-\hline
+\midrule
 Matrix condition & $\kappa(D_W)$ & $\kappa(D_W)^2$ \\
 SpMV per iter   & 2 ($D_W$ only) & 2 ($D_{\mathrm{DW}}$ and $D_{\mathrm{DW}}^\dagger$) \\
 Slab cost       & $V$ sites      & $L_s \cdot V$ sites \\
 Total overhead  & $1\times$ (baseline) & $\sim L_s \times \kappa$-amplified \\
+\bottomrule
 \end{tabular}
-
-\medskip
-Both the squared condition number and the $L_s$-fold operator cost make
-DWF+CGNE the primary target for QDW/QTW arithmetic.
-\end{tcolorbox}
+\end{table}
 
 \subsubsection{M\"{o}bius Domain-Wall Fermions}
 
@@ -1300,7 +1294,7 @@ operand error in the SpMV}:
   \label{eq:operand_floor}
 \end{equation}
 
-\begin{tcolorbox}[keybox={Every operand must be promoted}]
+\paragraph{Every operand must be promoted.}
 Promoting only the spinor while leaving the gauge field, $m_f$, $b$, $c$, or
 $M_0$ in FP64 \emph{pins the floor at that operand's $O(\uu)$ level}: the
 high-precision limbs of $\psi$ do no useful work because the matrix they
@@ -1310,7 +1304,6 @@ kernel constants are stubbed to double-double---TW then caps at the DW floor
 \textbf{every operand entering the SpMV---spinor, gauge links and their SU(3)
 reconstruction, $m_f$, $b$, $c$, and $M_0$---must be stored and combined in DW
 (resp.\ TW)}. There is no ``free'' FP64 operand.
-\end{tcolorbox}
 
 The mechanism is visible at the level of a single SpMV element. If the matrix
 operand is left in FP64 it dominates and caps the element precision of $q$ at
@@ -1408,19 +1401,21 @@ keep every word coalesced---$32 \times 32\,\text{B} = 1024\,\text{B}$ per warp
 for the QDW \texttt{double4}, and $32 \times 16\,\text{B} = 512\,\text{B}$ per
 buffer for each QTW \texttt{double2}---and a single packed 48-byte QTW struct is
 avoided because $48\,\text{B} = 1.5 \times 32$-byte transactions break
-alignment. We stress, however, that these layout choices are made for
-\emph{correctness and simplicity, not for throughput}: the multiword SpMV
-kernels are \textbf{register/ILP-bound, not memory-bound}, so the coalescing
-quantization that distinguishes these layouts does not materially move
-performance. Measured per-iteration overhead tracks the register and
-instruction pressure of the multiword arithmetic (DW $\approx 3.6\times$, TW
-$\approx 4.6\times$ over FP32; Section~\ref{sec:results}), not DRAM bandwidth---
-which is also why packing the words differently, or carrying the gauge field in
-extra limbs, costs far less in time than the operand count would suggest in a
-bandwidth-bound model. Per the corrected precision assignment of
-Section~\ref{sec:precision_assignment}, the gauge links, $m_f$, $b$, $c$, and
-$M_0$ are promoted to the same multiword type as the spinor; the registers
-absorb the extra limbs. The production kernels in
+alignment. These layout choices are made for \emph{correctness and simplicity},
+and the precise packing does not change performance because the candidate
+layouts all move the same coalesced bytes and carry the same number of register
+limbs. The multiword SpMV is \textbf{co-limited by register pressure and memory
+bandwidth simultaneously}---register occupancy falls as the limb count rises,
+and the spinor traffic grows $2\times$/$3\times$ with the words---while
+instruction-level parallelism is \emph{not} the binding constraint. The measured
+per-iteration overhead (DW $\approx 3.6\times$, TW $\approx 4.6\times$ over FP32;
+Section~\ref{sec:results}) \emph{exceeds} the $2\times$/$3\times$ byte ratio of a
+pure-bandwidth model, which is the signature of the added register/occupancy
+cost stacking on top of the bandwidth cost rather than either acting alone. Per
+the corrected precision assignment of Section~\ref{sec:precision_assignment}, the
+gauge links, $m_f$, $b$, $c$, and $M_0$ are promoted to the same multiword type
+as the spinor; this adds both register limbs and operand traffic, consistent
+with the dual bound. The production kernels in
 \texttt{src/lib\_alt\_Accel/BridgeCUDA/} additionally template over the base
 type (\texttt{float}/\texttt{double}) and apply the deferred-normalization and
 sloppy-accumulate optimizations discussed in Section~\ref{sec:drift}.
@@ -1535,23 +1530,17 @@ the solver never entered the stagnation regime. What the precision hierarchy
 delivered instead was \emph{attainable-accuracy reach}---a lower residual
 floor at fixed iteration count---documented next.
 
-\begin{tcolorbox}[warnbox={Status and Implementation Order}]
-\begin{enumerate}
-  \item \textbf{QDW and QTW are now implemented} in Bridge++ CUDA for the
-        eo-preconditioned DWF operator (\texttt{double4} layout for QDW,
-        SoA$\times3$ for QTW; Section~\ref{sec:layout}), in both FP32-base and
-        FP64-base variants.
-  \item In the tested regime ($\kappa \sim 10^{3}$) the benefit is
-        \emph{reach}, not iteration savings (Section~\ref{sec:results}): all
-        precisions descend at the same rate and differ only in the final
-        floor.
-  \item The threshold $\kappa^{**}$ at which QDW stagnates and QTW cuts the
-        iteration count remains \textbf{empirical} and is reached only by
-        pushing into the large-$\kappa$ regime (small mass $+$ large volume,
-        or weaker preconditioning / larger $\alpha$); this is the principal
-        open question.
-\end{enumerate}
-\end{tcolorbox}
+\paragraph{Status and implementation order.}
+Three points summarise the current state. First, QDW and QTW are now implemented
+in Bridge++ CUDA for the eo-preconditioned DWF operator (\texttt{double4} layout
+for QDW, SoA$\times3$ for QTW; Section~\ref{sec:layout}), in both FP32-base and
+FP64-base variants. Second, in the tested regime ($\kappa \sim 10^{3}$) the
+benefit is \emph{reach}, not iteration savings (Section~\ref{sec:results}): all
+precisions descend at the same rate and differ only in the final floor. Third,
+the threshold $\kappa^{**}$ at which QDW stagnates and QTW cuts the iteration
+count remains empirical and is reached only by pushing into the large-$\kappa$
+regime (small mass $+$ large volume, or weaker preconditioning / larger
+$\alpha$); this is the principal open question.
 
 % ----------------------------------------------------------
 \subsection{Empirical Results: QDW/QTW in the Bridge++ DWF Solver}
@@ -1567,25 +1556,54 @@ $\|b-Ax\|$ recomputed from the iterate in the field's own multiword precision;
 the recursive CG residual is shown only where it is needed to make the
 reach-versus-rate distinction.
 
-\subsubsection{FP32-base: beyond FP64 without FP64 hardware}
+\subsubsection{FP32-base doublet/triplet: FP64-class accuracy on FP64-poor hardware}
+
+\paragraph{The value proposition.}
+The most consequential result is the FP32-\emph{base} path: every word is a
+\texttt{float} and no FP64 instruction is issued anywhere in the solver, yet the
+multiword doublet (DW) and triplet (TW) reach FP64-class and beyond-FP64
+accuracy. This matters directly for the hardware most lattice and AI groups
+actually run on. Consumer NVIDIA RTX cards and the AI-/inference-oriented
+datacenter parts deliver FP64 at only $1\!:\!32$ to $1\!:\!64$ of their FP32
+rate (the RTX~3080 used here is $1\!:\!64$), so a native-FP64 solve on them is
+crippled. The FP32-base multiword solver sidesteps FP64 silicon altogether: it
+spends the abundant FP32 throughput to synthesise FP64-level---or, with the
+third limb, sub-FP64---accuracy. It is a way to get a double-precision-grade
+DWF solve out of a card that has almost no double-precision hardware.
 
 On the standard $32\times8\times8\times12$ test problem the three FP32-base
-modes separate exactly as the error-order analysis predicts:
-\begin{itemize}
-  \item \textbf{DW} reaches a true-residual floor $\approx 5\times10^{-29}$ and
-        a converged observable accurate to $\approx 5.7\times10^{-15}$---i.e.\
-        \emph{FP64-class accuracy at $\approx$\,FP64 wall time}, using only
-        FP32 arithmetic.
-  \item \textbf{TW} reaches a true-residual floor $\approx 3.1\times10^{-32}$
-        and an observable error of $\mathbf{5.6\times10^{-17}}$, \emph{below}
-        native FP64's $3.9\times10^{-16}$---genuine beyond-double accuracy with
-        no FP64 hardware---at a cost of $\approx 1.66\times$ the FP64 wall time.
-\end{itemize}
+modes separate exactly as the error-order analysis predicts
+(Table~\ref{tab:fp32base}): DW lands at FP64-class accuracy at roughly FP64 wall
+time, and TW goes \emph{below} native FP64's observable error at $\approx
+1.66\times$ that wall time---all in FP32 arithmetic.
+
+\begin{table}[H]
+\centering
+\caption{FP32-base multiword on the $32\times8\times8\times12$ problem
+         (RTX~3080, FP64 throughput $1\!:\!64$). The doublet matches native FP64;
+         the triplet beats it---using no FP64 hardware. Observable error is the
+         converged 2-point quantity; wall time is normalised to a native-FP64
+         solve.}
+\label{tab:fp32base}
+\begin{tabular}{lccc}
+\toprule
+Mode & true-residual floor & observable error & wall time (vs native FP64) \\
+\midrule
+FP32-base DW & $\approx 5\times10^{-29}$ & $\approx 5.7\times10^{-15}$ (FP64-class) & $\approx 1\times$ \\
+FP32-base TW & $\approx 3.1\times10^{-32}$ & $\mathbf{5.6\times10^{-17}}$ (below FP64) & $\approx 1.66\times$ \\
+\midrule
+native FP64 (reference) & --- & $3.9\times10^{-16}$ & $1\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 The per-iteration overhead of the same-base GPU kernels (DW $\approx 3.6\times$,
 TW $\approx 4.6\times$ relative to FP32) is larger than the CPU figures of
 Mukunoki \& Ozaki (Table in Section~\ref{sec:mukunoki}: $1.3\times$/$2.4\times$),
-reflecting the register/ILP pressure of multiword arithmetic on the GPU. The
-FP32-base value proposition is therefore \emph{precision reach}, not speed.
+and also larger than the $2\times$/$3\times$ a pure-bandwidth model would
+predict: the GPU multiword SpMV is co-limited by register pressure (falling
+occupancy as limb count grows) and the $2\times$/$3\times$ spinor bandwidth, not
+by instruction throughput. The FP32-base value proposition is therefore
+\emph{precision reach}, not speed.
 
 \subsubsection{FP64-base: a triple-double precision ladder}
 
@@ -1788,7 +1806,7 @@ final residual $\|r\|/\|b\|$, and GPU memory footprint.
 The crossing points $\kappa^*$ (FP64 stagnates) and $\kappa^{**}$
 (QDW stagnates / QTW becomes faster) are the primary observables.
 
-\begin{tcolorbox}[keybox={Why This Benchmark Matters}]
+\paragraph{Why this benchmark matters.}
 The DWF$+$CGNE half of this programme is, to our knowledge, the first
 demonstration of genuine quasi multi-word arithmetic (FP32-base and FP64-base,
 QDW and QTW) in a GPU-accelerated Lattice QCD solver, reaching tens of orders
@@ -1801,7 +1819,6 @@ outstanding large-$\kappa$ speedup tests.
 The Bridge++ codebase~\cite{Chen2025} provides a unified framework making
 the full controlled $2\times3$ comparison---once the Wilson column is added---
 feasible.
-\end{tcolorbox}
 
 
 % ##########################################################
