@@ -33,6 +33,8 @@
 
 #include "mrhs_block_live.h"
 
+#include <cuda_bf16.h>
+
 using namespace std;
 
 typedef float real_t;
@@ -96,6 +98,25 @@ void mrhs_fwd_scal(real_t* const* y, real_t a, int s, long nflt)
 { mrhs_scal(y, a, s, nflt); }
 void mrhs_fwd_norm2(double* out, real_t* const* x, int s, long nflt)
 { mrhs_norm2(out, x, s, nflt); }
+
+// BF16-storage EMULATION: round each element to bfloat16 precision (round-to-
+// nearest), FP32 storage/compute unchanged.  Used to measure the accuracy impact
+// of a BF16 smoother on the 2pt BEFORE committing to a real BF16 kernel port.
+__global__ void k_round_bf16(real_t* p, long n)
+{
+  long i = (long)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) p[i] = __bfloat162float(__float2bfloat16(p[i]));
+}
+void mrhs_fwd_round_bf16(real_t* const* y_host, int s, long nflt)
+{
+  // y_host[c] are AField host base ptrs -- map each to its device buffer first.
+  const int bs = 256;
+  for (int c = 0; c < s; ++c) {
+    real_t* yd = (real_t*)dev_ptr(y_host[c]);
+    k_round_bf16<<<(unsigned)((nflt + bs - 1) / bs), bs>>>(yd, nflt);
+  }
+  afield_dd_kernel_sync();
+}
 
 void mrhs_fwd_set_moebius_bc(const real_t* b, const real_t* c, int Ns)
 { mrhs_set_moebius_bc_dev(b, c, Ns); }
@@ -192,6 +213,8 @@ void block_scal(float* const* y, float a, int s, long nflt)
 { BridgeACC::mrhs_fwd_scal(y, a, s, nflt); }
 void block_norm2(double* out_host, float* const* x, int s, long nflt)
 { BridgeACC::mrhs_fwd_norm2(out_host, x, s, nflt); }
+void round_bf16(float* const* y, int s, long nflt)
+{ BridgeACC::mrhs_fwd_round_bf16(y, s, nflt); }
 
 void set_moebius_bc(const float* b, const float* c, int Ns)
 { BridgeACC::mrhs_fwd_set_moebius_bc(b, c, Ns); }

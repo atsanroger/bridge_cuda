@@ -110,6 +110,7 @@ void block_copy (float* const* y, float* const* x, int s, long nflt);  // y[c]=x
 void block_axpy (float* const* y, float* const* x, float a, int s, long nflt); // y[c]+=a*x[c]
 void block_scal (float* const* y, float a, int s, long nflt);          // y[c]*=a
 void block_norm2(double* out_host, float* const* x, int s, long nflt); // out[c]=||x[c]||^2
+void round_bf16 (float* const* y, int s, long nflt);  // y[c] <- bf16-rounded (emulation)
 
 // ---- small device-memory helpers (keep all CUDA calls inside the .cu) ------
 float* dev_alloc(long nfloat);                 // cudaMalloc nfloat*sizeof(float)

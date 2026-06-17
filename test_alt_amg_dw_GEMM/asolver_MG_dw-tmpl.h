@@ -1471,12 +1471,30 @@ void ASolver_MG_dw<AFIELD>::block_smooth(std::vector<AFIELD_f>& x,
                    CommonParameters::Nz(), CommonParameters::Nt() };
   ASolver_MG_dw<AFIELD> *self = this;
   if (!m_block_smoother) {                     // construct once; reuse buffers
+    // BF16-storage EMULATION (gate: env BF16_SMOOTHER_EMU): round the smoother's
+    // fine-A OUTPUT to bfloat16 precision, so bf16 error propagates through the
+    // smoother Krylov space ONLY.  The outer A and the V-cycle residual (direct
+    // apply_A_block calls, not this lambda) stay FP32.  Lets us A/B the 2pt to
+    // prove bf16 in the smoother does not move the physics before a kernel port.
+    const bool bf16 = (std::getenv("BF16_SMOOTHER_EMU") != nullptr);
+    if (bf16) vout.general("%s: BF16_SMOOTHER_EMU on -- smoother fine-A output rounded to bfloat16\n",
+                           class_name.c_str());
+    const int cNin = Nin, cNex = Nex;
     m_block_smoother.reset(new BlockFGMRES_dw<AF>(Nin, Nvol, Nex, Nsize));
     m_block_smoother->set_ops(
       [self](AF& y, const AF& xx) { self->m_afopr_A_F->mult(y, xx); },
       [](AF& o, const AF& i)      { copy(o, i); });             // M = identity
     m_block_smoother->set_block_A(
-      [self](std::vector<AF>& y, const std::vector<AF>& xx) { self->apply_A_block(y, xx); });
+      [self, bf16, cNin, cNex](std::vector<AF>& y, const std::vector<AF>& xx) {
+        self->apply_A_block(y, xx);
+        if (bf16) {
+          const int s = (int)y.size();
+          const long nflt = (long)cNin * y[0].nvol_pad() * cNex;
+          std::vector<float*> yp(s);
+          for (int c = 0; c < s; ++c) yp[c] = y[c].ptr(0);
+          mrhs_live::round_bf16(yp.data(), s, nflt);
+        }
+      });
     m_block_smoother->set_parameters(m_smoother_niter, 1, (double)m_smoother_stop_cond);
   }
   int vc = 0;
