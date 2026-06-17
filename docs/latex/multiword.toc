@@ -1,74 +1,81 @@
 \babel@toc {english}{}\relax 
-\contentsline {section}{\numberline {1}Multi-Word Floating-Point Arithmetic}{4}{section.1}%
-\contentsline {subsection}{\numberline {1.1}Motivation and Historical Background}{4}{subsection.1.1}%
-\contentsline {subsection}{\numberline {1.2}Floating-Point Notation and Prerequisites}{5}{subsection.1.2}%
-\contentsline {subsection}{\numberline {1.3}Basic Building Blocks: TwoSum and TwoProd}{5}{subsection.1.3}%
-\contentsline {subsubsection}{\numberline {1.3.1}TwoSum: Error-Free Addition}{5}{subsubsection.1.3.1}%
-\contentsline {subsubsection}{\numberline {1.3.2}TwoProd: Error-Free Multiplication}{6}{subsubsection.1.3.2}%
-\contentsline {subsection}{\numberline {1.4}Double-Word (DW) Arithmetic}{6}{subsection.1.4}%
-\contentsline {subsubsection}{\numberline {1.4.1}Definition}{6}{subsubsection.1.4.1}%
-\contentsline {subsubsection}{\numberline {1.4.2}DW Addition}{7}{subsubsection.1.4.2}%
-\contentsline {subsubsection}{\numberline {1.4.3}Quasi DW Addition (QDWadd)}{7}{subsubsection.1.4.3}%
-\contentsline {subsubsection}{\numberline {1.4.4}DW Multiplication}{7}{subsubsection.1.4.4}%
-\contentsline {subsection}{\numberline {1.5}Triple-Word (TW) Arithmetic}{8}{subsection.1.5}%
-\contentsline {subsubsection}{\numberline {1.5.1}Definition}{8}{subsubsection.1.5.1}%
-\contentsline {subsubsection}{\numberline {1.5.2}The Renormalize Subroutine}{8}{subsubsection.1.5.2}%
-\contentsline {subsubsection}{\numberline {1.5.3}TW Addition}{9}{subsubsection.1.5.3}%
-\contentsline {subsubsection}{\numberline {1.5.4}TW Multiplication}{9}{subsubsection.1.5.4}%
-\contentsline {subsubsection}{\numberline {1.5.5}Quasi TW (QTW)}{9}{subsubsection.1.5.5}%
-\contentsline {subsection}{\numberline {1.6}Quasi Algorithms: Drift and Normalization}{10}{subsection.1.6}%
-\contentsline {subsubsection}{\numberline {1.6.1}Mathematical Structure of Drift}{10}{subsubsection.1.6.1}%
-\contentsline {subsection}{\numberline {1.7}Numerical Performance: Mukunoki \& Ozaki (2025)}{10}{subsection.1.7}%
-\contentsline {subsubsection}{\numberline {1.7.1}Per-Iteration Overhead}{10}{subsubsection.1.7.1}%
-\contentsline {subsubsection}{\numberline {1.7.2}Total Time to Solution: When QTW Beats QDW}{11}{subsubsection.1.7.2}%
-\contentsline {subsubsection}{\numberline {1.7.3}Arithmetic Mode Summary}{11}{subsubsection.1.7.3}%
-\contentsline {section}{\numberline {2}Lattice QCD: Background and Related Work}{11}{section.2}%
-\contentsline {subsection}{\numberline {2.1}The Quark Propagator Problem}{11}{subsection.2.1}%
-\contentsline {subsection}{\numberline {2.2}Wilson Fermion Operator}{12}{subsection.2.2}%
-\contentsline {subsubsection}{\numberline {2.2.1}Lattice Discretization and the Doubling Problem}{12}{subsubsection.2.2.1}%
-\contentsline {subsubsection}{\numberline {2.2.2}Operator Structure}{12}{subsubsection.2.2.2}%
-\contentsline {subsubsection}{\numberline {2.2.3}Geometrical Structure: Nearest-Neighbour Hopping}{13}{subsubsection.2.2.3}%
-\contentsline {subsubsection}{\numberline {2.2.4}Hopping Parameter and Critical Mass}{13}{subsubsection.2.2.4}%
-\contentsline {subsubsection}{\numberline {2.2.5}Non-Hermiticity and Solver Choice}{13}{subsubsection.2.2.5}%
-\contentsline {subsubsection}{\numberline {2.2.6}Clover (Sheikholeslami--Wohlert) Improvement}{13}{subsubsection.2.2.6}%
-\contentsline {subsection}{\numberline {2.3}Domain-Wall Fermion Operator}{14}{subsection.2.3}%
-\contentsline {subsubsection}{\numberline {2.3.1}Motivation: Preserving Chiral Symmetry}{14}{subsubsection.2.3.1}%
-\contentsline {subsubsection}{\numberline {2.3.2}The 5D Operator: Shamir Variant}{14}{subsubsection.2.3.2}%
-\contentsline {subsubsection}{\numberline {2.3.3}Physical Solution Extraction}{15}{subsubsection.2.3.3}%
-\contentsline {subsubsection}{\numberline {2.3.4}Solver: CGNE and the Squared Condition Number}{15}{subsubsection.2.3.4}%
-\contentsline {subsubsection}{\numberline {2.3.5}M\"{o}bius Domain-Wall Fermions}{15}{subsubsection.2.3.5}%
-\contentsline {subsection}{\numberline {2.4}Even-Odd (Checkerboard) Preconditioning}{16}{subsection.2.4}%
-\contentsline {subsubsection}{\numberline {2.4.1}Site Decomposition}{16}{subsubsection.2.4.1}%
-\contentsline {subsubsection}{\numberline {2.4.2}Schur Complement}{16}{subsubsection.2.4.2}%
-\contentsline {subsubsection}{\numberline {2.4.3}Reduced System}{16}{subsubsection.2.4.3}%
-\contentsline {subsubsection}{\numberline {2.4.4}Computational Benefit and DWF Extension}{17}{subsubsection.2.4.4}%
-\contentsline {subsection}{\numberline {2.5}The Bridge++ Code Set}{17}{subsection.2.5}%
-\contentsline {subsubsection}{\numberline {2.5.1}Design and GPU Backends}{17}{subsubsection.2.5.1}%
-\contentsline {subsubsection}{\numberline {2.5.2}Data Layout: AoSoA with Packing Width NWP}{17}{subsubsection.2.5.2}%
-\contentsline {subsubsection}{\numberline {2.5.3}Available Solvers}{18}{subsubsection.2.5.3}%
-\contentsline {subsubsection}{\numberline {2.5.4}Related Precision Work on Bridge++}{18}{subsubsection.2.5.4}%
-\contentsline {section}{\numberline {3}Multi-Word Arithmetic in Lattice QCD Solvers}{18}{section.3}%
-\contentsline {subsection}{\numberline {3.1}CGNE Solver with QDW/QTW Precision}{18}{subsection.3.1}%
-\contentsline {subsection}{\numberline {3.2}Precision Assignment: Which Quantities Need DW?}{19}{subsection.3.2}%
-\contentsline {subsubsection}{\numberline {3.2.1}Two Sources of Rounding Error in SpMV}{19}{subsubsection.3.2.1}%
-\contentsline {subsubsection}{\numberline {3.2.2}SU(3) Reconstruction: FP64 Is Sufficient}{19}{subsubsection.3.2.2}%
-\contentsline {subsubsection}{\numberline {3.2.3}Precision Assignment Table}{20}{subsubsection.3.2.3}%
-\contentsline {subsubsection}{\numberline {3.2.4}Error Flow Through SpMV}{20}{subsubsection.3.2.4}%
-\contentsline {subsection}{\numberline {3.3}Memory Layout for GPU Implementation}{20}{subsection.3.3}%
-\contentsline {subsubsection}{\numberline {3.3.1}Existing Spinor Layout (AoSoA)}{20}{subsubsection.3.3.1}%
-\contentsline {subsubsection}{\numberline {3.3.2}Implemented Layout}{20}{subsubsection.3.3.2}%
-\contentsline {subsection}{\numberline {3.4}Condition Number Analysis}{21}{subsection.3.4}%
-\contentsline {subsubsection}{\numberline {3.4.1}Why Lattice QCD Differs from General SpMV}{21}{subsubsection.3.4.1}%
-\contentsline {subsubsection}{\numberline {3.4.2}Effective Precision Thresholds}{22}{subsubsection.3.4.2}%
-\contentsline {paragraph}{Grounding the thresholds in measured $\kappa $.}{22}{section*.2}%
-\contentsline {subsection}{\numberline {3.5}Empirical Results: QDW/QTW in the Bridge++ DWF Solver}{23}{subsection.3.5}%
-\contentsline {subsubsection}{\numberline {3.5.1}FP32-base: beyond FP64 without FP64 hardware}{23}{subsubsection.3.5.1}%
-\contentsline {subsubsection}{\numberline {3.5.2}FP64-base: a triple-double precision ladder}{24}{subsubsection.3.5.2}%
-\contentsline {subsubsection}{\numberline {3.5.3}Reach, not rate: recursive versus true residual}{25}{subsubsection.3.5.3}%
-\contentsline {subsubsection}{\numberline {3.5.4}Caveats}{27}{subsubsection.3.5.4}%
-\contentsline {subsection}{\numberline {3.6}Future Research: Systematic Wilson vs DWF Benchmark}{28}{subsection.3.6}%
-\contentsline {subsubsection}{\numberline {3.6.1}The $2 \times 3$ Benchmark Matrix}{28}{subsubsection.3.6.1}%
-\contentsline {subsubsection}{\numberline {3.6.2}Hypotheses Revisited in Light of the Measurements}{28}{subsubsection.3.6.2}%
-\contentsline {subsubsection}{\numberline {3.6.3}Implementation Plan}{29}{subsubsection.3.6.3}%
-\contentsline {subsubsection}{\numberline {3.6.4}Metrics and Analysis}{29}{subsubsection.3.6.4}%
-\contentsline {section}{References}{29}{section*.3}%
+\contentsline {section}{\numberline {1}Lattice QCD: Background and Related Work}{3}{section.1}%
+\contentsline {subsection}{\numberline {1.1}The Quark Propagator Problem}{3}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Wilson Fermion Operator}{3}{subsection.1.2}%
+\contentsline {subsubsection}{\numberline {1.2.1}Lattice Discretization and the Doubling Problem}{3}{subsubsection.1.2.1}%
+\contentsline {subsubsection}{\numberline {1.2.2}Operator Structure}{3}{subsubsection.1.2.2}%
+\contentsline {subsubsection}{\numberline {1.2.3}Geometrical Structure: Nearest-Neighbour Hopping}{4}{subsubsection.1.2.3}%
+\contentsline {subsubsection}{\numberline {1.2.4}Hopping Parameter and Critical Mass}{4}{subsubsection.1.2.4}%
+\contentsline {subsubsection}{\numberline {1.2.5}Non-Hermiticity and Solver Choice}{4}{subsubsection.1.2.5}%
+\contentsline {subsubsection}{\numberline {1.2.6}Clover (Sheikholeslami--Wohlert) Improvement}{5}{subsubsection.1.2.6}%
+\contentsline {subsection}{\numberline {1.3}Domain-Wall Fermion Operator}{5}{subsection.1.3}%
+\contentsline {subsubsection}{\numberline {1.3.1}Motivation: Preserving Chiral Symmetry}{5}{subsubsection.1.3.1}%
+\contentsline {subsubsection}{\numberline {1.3.2}The 5D Operator: Shamir Variant}{5}{subsubsection.1.3.2}%
+\contentsline {subsubsection}{\numberline {1.3.3}Physical Solution Extraction}{6}{subsubsection.1.3.3}%
+\contentsline {subsubsection}{\numberline {1.3.4}Solver: CGNE and the Squared Condition Number}{6}{subsubsection.1.3.4}%
+\contentsline {paragraph}{Why DWF is harder than Wilson.}{6}{section*.2}%
+\contentsline {subsubsection}{\numberline {1.3.5}M\"{o}bius Domain-Wall Fermions}{7}{subsubsection.1.3.5}%
+\contentsline {subsection}{\numberline {1.4}Even-Odd (Checkerboard) Preconditioning}{7}{subsection.1.4}%
+\contentsline {subsubsection}{\numberline {1.4.1}Site Decomposition}{7}{subsubsection.1.4.1}%
+\contentsline {subsubsection}{\numberline {1.4.2}Schur Complement}{8}{subsubsection.1.4.2}%
+\contentsline {subsubsection}{\numberline {1.4.3}Reduced System}{8}{subsubsection.1.4.3}%
+\contentsline {subsection}{\numberline {1.5}The Bridge++ Code Set}{8}{subsection.1.5}%
+\contentsline {subsubsection}{\numberline {1.5.1}Design and GPU Backends}{8}{subsubsection.1.5.1}%
+\contentsline {subsubsection}{\numberline {1.5.2}Data Layout: AoSoA with Packing Width NWP}{8}{subsubsection.1.5.2}%
+\contentsline {subsubsection}{\numberline {1.5.3}Available Solvers}{9}{subsubsection.1.5.3}%
+\contentsline {subsubsection}{\numberline {1.5.4}Related Precision Work on Bridge++}{9}{subsubsection.1.5.4}%
+\contentsline {section}{\numberline {2}Multi-Word Floating-Point Arithmetic}{9}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Motivation and Historical Background}{9}{subsection.2.1}%
+\contentsline {paragraph}{The fundamental limitation of FP64.}{10}{section*.3}%
+\contentsline {subsection}{\numberline {2.2}Floating-Point Notation and Prerequisites}{10}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Basic Building Blocks: TwoSum and TwoProd}{11}{subsection.2.3}%
+\contentsline {subsubsection}{\numberline {2.3.1}TwoSum: Error-Free Addition}{11}{subsubsection.2.3.1}%
+\contentsline {subsubsection}{\numberline {2.3.2}TwoProd: Error-Free Multiplication}{11}{subsubsection.2.3.2}%
+\contentsline {paragraph}{Without FMA: Dekker splitting.}{11}{section*.4}%
+\contentsline {subsection}{\numberline {2.4}Double-Word (DW) Arithmetic}{12}{subsection.2.4}%
+\contentsline {subsubsection}{\numberline {2.4.1}Definition}{12}{subsubsection.2.4.1}%
+\contentsline {subsubsection}{\numberline {2.4.2}DW Addition}{12}{subsubsection.2.4.2}%
+\contentsline {subsubsection}{\numberline {2.4.3}Quasi DW Addition (QDWadd)}{12}{subsubsection.2.4.3}%
+\contentsline {subsubsection}{\numberline {2.4.4}DW Multiplication}{13}{subsubsection.2.4.4}%
+\contentsline {subsection}{\numberline {2.5}Triple-Word (TW) Arithmetic}{13}{subsection.2.5}%
+\contentsline {subsubsection}{\numberline {2.5.1}Definition}{13}{subsubsection.2.5.1}%
+\contentsline {subsubsection}{\numberline {2.5.2}The Renormalize Subroutine}{14}{subsubsection.2.5.2}%
+\contentsline {subsubsection}{\numberline {2.5.3}TW Addition}{14}{subsubsection.2.5.3}%
+\contentsline {subsubsection}{\numberline {2.5.4}TW Multiplication}{14}{subsubsection.2.5.4}%
+\contentsline {subsubsection}{\numberline {2.5.5}Quasi TW (QTW)}{15}{subsubsection.2.5.5}%
+\contentsline {subsection}{\numberline {2.6}Quasi Algorithms: Drift and Normalization}{15}{subsection.2.6}%
+\contentsline {subsubsection}{\numberline {2.6.1}Mathematical Structure of Drift}{15}{subsubsection.2.6.1}%
+\contentsline {paragraph}{Repair via normalization.}{15}{section*.5}%
+\contentsline {subsection}{\numberline {2.7}Numerical Performance: Mukunoki \& Ozaki (2025)}{15}{subsection.2.7}%
+\contentsline {subsubsection}{\numberline {2.7.1}Per-Iteration Overhead}{15}{subsubsection.2.7.1}%
+\contentsline {subsubsection}{\numberline {2.7.2}Total Time to Solution: When QTW Beats QDW}{16}{subsubsection.2.7.2}%
+\contentsline {paragraph}{Core finding of Mukunoki \& Ozaki (2025)~\cite {Mukunoki2025}.}{16}{section*.6}%
+\contentsline {subsubsection}{\numberline {2.7.3}Arithmetic Mode Summary}{16}{subsubsection.2.7.3}%
+\contentsline {section}{\numberline {3}Multi-Word Arithmetic in Lattice QCD Solvers}{16}{section.3}%
+\contentsline {subsection}{\numberline {3.1}CGNE Solver with QDW/QTW Precision}{17}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Precision Assignment: Which Quantities Need DW?}{17}{subsection.3.2}%
+\contentsline {subsubsection}{\numberline {3.2.1}The Residual Floor Is Set by the Least-Precise Operand}{17}{subsubsection.3.2.1}%
+\contentsline {paragraph}{Every operand must be promoted.}{18}{section*.7}%
+\contentsline {subsubsection}{\numberline {3.2.2}SU(3) Reconstruction Must Match the Target Precision}{18}{subsubsection.3.2.2}%
+\contentsline {subsubsection}{\numberline {3.2.3}Precision Assignment Table}{19}{subsubsection.3.2.3}%
+\contentsline {subsection}{\numberline {3.3}Memory Layout for GPU Implementation}{19}{subsection.3.3}%
+\contentsline {subsubsection}{\numberline {3.3.1}Existing Spinor Layout (AoSoA)}{19}{subsubsection.3.3.1}%
+\contentsline {subsubsection}{\numberline {3.3.2}Implemented Layout}{19}{subsubsection.3.3.2}%
+\contentsline {subsection}{\numberline {3.4}Condition Number Analysis}{20}{subsection.3.4}%
+\contentsline {subsubsection}{\numberline {3.4.1}Why Lattice QCD Differs from General SpMV}{20}{subsubsection.3.4.1}%
+\contentsline {subsubsection}{\numberline {3.4.2}Effective Precision Thresholds}{21}{subsubsection.3.4.2}%
+\contentsline {paragraph}{Grounding the thresholds in measured $\kappa $.}{21}{section*.8}%
+\contentsline {paragraph}{Status and implementation order.}{21}{section*.9}%
+\contentsline {subsection}{\numberline {3.5}Empirical Results: QDW/QTW in the Bridge++ DWF Solver}{22}{subsection.3.5}%
+\contentsline {subsubsection}{\numberline {3.5.1}FP32-base doublet/triplet: FP64-class accuracy on FP64-poor hardware}{22}{subsubsection.3.5.1}%
+\contentsline {paragraph}{The value proposition.}{22}{section*.10}%
+\contentsline {subsubsection}{\numberline {3.5.2}FP64-base: a triple-double precision ladder}{23}{subsubsection.3.5.2}%
+\contentsline {subsubsection}{\numberline {3.5.3}Reach, not rate: recursive versus true residual}{24}{subsubsection.3.5.3}%
+\contentsline {subsubsection}{\numberline {3.5.4}Caveats}{26}{subsubsection.3.5.4}%
+\contentsline {subsection}{\numberline {3.6}Future Research: Systematic Wilson vs DWF Benchmark}{27}{subsection.3.6}%
+\contentsline {subsubsection}{\numberline {3.6.1}The $2 \times 3$ Benchmark Matrix}{27}{subsubsection.3.6.1}%
+\contentsline {subsubsection}{\numberline {3.6.2}Hypotheses Revisited in Light of the Measurements}{27}{subsubsection.3.6.2}%
+\contentsline {subsubsection}{\numberline {3.6.3}Implementation Plan}{28}{subsubsection.3.6.3}%
+\contentsline {subsubsection}{\numberline {3.6.4}Metrics and Analysis}{28}{subsubsection.3.6.4}%
+\contentsline {paragraph}{Why this benchmark matters.}{28}{section*.11}%
+\contentsline {section}{References}{28}{section*.12}%

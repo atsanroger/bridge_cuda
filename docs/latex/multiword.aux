@@ -19,191 +19,202 @@
 \providecommand\babel@aux[2]{}
 \@nameuse{bbl@beforestart}
 \babel@aux{english}{}
-\citation{Moller1965}
-\citation{Dekker1971}
-\citation{Knuth1969}
-\citation{Joldes2017}
-\citation{Fabiano2019}
-\citation{Mukunoki2025}
-\@writefile{toc}{\contentsline {section}{\numberline {1}Multi-Word Floating-Point Arithmetic}{4}{section.1}\protected@file@percent }
-\newlabel{sec:multiword}{{1}{4}{Multi-Word Floating-Point Arithmetic}{section.1}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Motivation and Historical Background}{4}{subsection.1.1}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Conceptual layout of multi-word numbers. Each box is one FP64 word (53 bits). DW/QDW doubles effective precision by retaining the discarded bits in $x_l$. TW/QTW adds a third word $x_m$. The non-overlapping condition $|x_l|\leq \mathbf  {u}|x_h|$ ensures the words tile the bit-line without gap or overlap.}}{4}{figure.1}\protected@file@percent }
-\newlabel{fig:multiword_concept}{{1}{4}{Conceptual layout of multi-word numbers. Each box is one FP64 word (53 bits). DW/QDW doubles effective precision by retaining the discarded bits in $x_l$. TW/QTW adds a third word $x_m$. The non-overlapping condition $|x_l|\leq \mathbf {u}|x_h|$ ensures the words tile the bit-line without gap or overlap}{figure.1}{}}
-\citation{Knuth1969}
-\citation{Moller1965}
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Floating-Point Notation and Prerequisites}{5}{subsection.1.2}\protected@file@percent }
-\newlabel{sec:notation}{{1.2}{5}{Floating-Point Notation and Prerequisites}{subsection.1.2}{}}
-\newlabel{eq:rounding_model}{{1}{5}{IEEE 754 Rounding Model}{equation.1.1}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Basic Building Blocks: TwoSum and TwoProd}{5}{subsection.1.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.3.1}TwoSum: Error-Free Addition}{5}{subsubsection.1.3.1}\protected@file@percent }
-\newlabel{thm:twosum}{{1.3}{5}{TwoSum~\cite {Knuth1969,Moller1965}}{theorem.1.3}{}}
-\newlabel{eq:twosum_exact}{{4}{5}{TwoSum~\cite {Knuth1969,Moller1965}}{equation.1.4}{}}
-\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces $\mathrm  {TwoSum}(a, b) \to (s,\, e)$}}{5}{algorithm.1}\protected@file@percent }
-\citation{Dekker1971}
-\citation{Joldes2017}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.3.2}TwoProd: Error-Free Multiplication}{6}{subsubsection.1.3.2}\protected@file@percent }
-\newlabel{thm:twoprod}{{1.5}{6}{TwoProd via FMA~\cite {Dekker1971}}{theorem.1.5}{}}
-\newlabel{eq:twoprod_exact}{{10}{6}{TwoProd via FMA~\cite {Dekker1971}}{equation.1.10}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.4}Double-Word (DW) Arithmetic}{6}{subsection.1.4}\protected@file@percent }
-\newlabel{sec:dw}{{1.4}{6}{Double-Word (DW) Arithmetic}{subsection.1.4}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.4.1}Definition}{6}{subsubsection.1.4.1}\protected@file@percent }
-\newlabel{eq:nonoverlap_dw}{{11}{6}{Double-Word Number}{equation.1.11}{}}
-\citation{Joldes2017}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.4.2}DW Addition}{7}{subsubsection.1.4.2}\protected@file@percent }
-\@writefile{loa}{\contentsline {algorithm}{\numberline {2}{\ignorespaces $\mathrm  {DWadd}(x_h, x_l,\tmspace  +\thickmuskip {.2777em} y_h, y_l) \to (z_h,\, z_l)$}}{7}{algorithm.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.4.3}Quasi DW Addition (QDWadd)}{7}{subsubsection.1.4.3}\protected@file@percent }
-\@writefile{loa}{\contentsline {algorithm}{\numberline {3}{\ignorespaces $\mathrm  {QDWadd}(x_h, x_l,\tmspace  +\thickmuskip {.2777em} y_h, y_l) \to (z_h,\, z_l)$}}{7}{algorithm.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.4.4}DW Multiplication}{7}{subsubsection.1.4.4}\protected@file@percent }
-\citation{Fabiano2019}
-\citation{Fabiano2019}
-\@writefile{loa}{\contentsline {algorithm}{\numberline {4}{\ignorespaces $\mathrm  {DWmul}(x_h, x_l,\tmspace  +\thickmuskip {.2777em} y_h, y_l) \to (z_h,\, z_l)$}}{8}{algorithm.4}\protected@file@percent }
-\@writefile{loa}{\contentsline {algorithm}{\numberline {5}{\ignorespaces $\mathrm  {QDWmul}(x_h, x_l,\tmspace  +\thickmuskip {.2777em} y_h, y_l) \to (z_h,\, z_l)$}}{8}{algorithm.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.5}Triple-Word (TW) Arithmetic}{8}{subsection.1.5}\protected@file@percent }
-\newlabel{sec:tw}{{1.5}{8}{Triple-Word (TW) Arithmetic}{subsection.1.5}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.1}Definition}{8}{subsubsection.1.5.1}\protected@file@percent }
-\newlabel{eq:nonoverlap_tw}{{13}{8}{Triple-Word Number~\cite {Fabiano2019}}{equation.1.13}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.2}The Renormalize Subroutine}{8}{subsubsection.1.5.2}\protected@file@percent }
-\@writefile{loa}{\contentsline {algorithm}{\numberline {6}{\ignorespaces $\mathrm  {Renormalize}(a, b, c) \to (z_h,\, z_m,\, z_l)$}}{8}{algorithm.6}\protected@file@percent }
-\citation{Fabiano2019}
-\citation{Mukunoki2025}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.3}TW Addition}{9}{subsubsection.1.5.3}\protected@file@percent }
-\@writefile{loa}{\contentsline {algorithm}{\numberline {7}{\ignorespaces $\mathrm  {TWadd}(x_h,x_m,x_l,\tmspace  +\thickmuskip {.2777em} y_h,y_m,y_l) \to (z_h,z_m,z_l)$}}{9}{algorithm.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.4}TW Multiplication}{9}{subsubsection.1.5.4}\protected@file@percent }
-\@writefile{loa}{\contentsline {algorithm}{\numberline {8}{\ignorespaces $\mathrm  {TWmul}(x_h,x_m,x_l,\tmspace  +\thickmuskip {.2777em} y_h,y_m,y_l) \to (z_h,z_m,z_l)$}}{9}{algorithm.8}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.5}Quasi TW (QTW)}{9}{subsubsection.1.5.5}\protected@file@percent }
-\citation{Mukunoki2025}
-\citation{Kanamori2026}
-\citation{Mukunoki2025}
-\citation{Mukunoki2025}
-\citation{Mukunoki2025}
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.6}Quasi Algorithms: Drift and Normalization}{10}{subsection.1.6}\protected@file@percent }
-\newlabel{sec:drift}{{1.6}{10}{Quasi Algorithms: Drift and Normalization}{subsection.1.6}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.6.1}Mathematical Structure of Drift}{10}{subsubsection.1.6.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.7}Numerical Performance: Mukunoki \& Ozaki (2025)}{10}{subsection.1.7}\protected@file@percent }
-\newlabel{sec:mukunoki}{{1.7}{10}{Numerical Performance: Mukunoki \& Ozaki (2025)}{subsection.1.7}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.7.1}Per-Iteration Overhead}{10}{subsubsection.1.7.1}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Relative execution time per 100 CG iterations (normalized to FP64). Measured on Intel Xeon Gold 6230 with AVX-512. Source: Mukunoki \& Ozaki, arXiv:2510.13536~\cite  {Mukunoki2025}.}}{10}{table.1}\protected@file@percent }
-\citation{Mukunoki2025}
 \citation{Wilson1974}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.7.2}Total Time to Solution: When QTW Beats QDW}{11}{subsubsection.1.7.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.7.3}Arithmetic Mode Summary}{11}{subsubsection.1.7.3}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Summary of all arithmetic modes discussed in this chapter.}}{11}{table.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {2}Lattice QCD: Background and Related Work}{11}{section.2}\protected@file@percent }
-\newlabel{sec:lqcd}{{2}{11}{Lattice QCD: Background and Related Work}{section.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}The Quark Propagator Problem}{11}{subsection.2.1}\protected@file@percent }
-\newlabel{sec:quark}{{2.1}{11}{The Quark Propagator Problem}{subsection.2.1}{}}
-\newlabel{eq:quark_eq}{{18}{11}{The Quark Propagator Problem}{equation.2.18}{}}
 \citation{Wilson1974}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Lattice QCD: Background and Related Work}{3}{section.1}\protected@file@percent }
+\newlabel{sec:lqcd}{{1}{3}{Lattice QCD: Background and Related Work}{section.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}The Quark Propagator Problem}{3}{subsection.1.1}\protected@file@percent }
+\newlabel{sec:quark}{{1.1}{3}{The Quark Propagator Problem}{subsection.1.1}{}}
+\newlabel{eq:quark_eq}{{1}{3}{The Quark Propagator Problem}{equation.1.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Wilson Fermion Operator}{3}{subsection.1.2}\protected@file@percent }
+\newlabel{sec:wilson}{{1.2}{3}{Wilson Fermion Operator}{subsection.1.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.1}Lattice Discretization and the Doubling Problem}{3}{subsubsection.1.2.1}\protected@file@percent }
+\newlabel{eq:wilson_op}{{2}{3}{Lattice Discretization and the Doubling Problem}{equation.1.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.2}Operator Structure}{3}{subsubsection.1.2.2}\protected@file@percent }
 \citation{Akahoshi2022}
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Wilson Fermion Operator}{12}{subsection.2.2}\protected@file@percent }
-\newlabel{sec:wilson}{{2.2}{12}{Wilson Fermion Operator}{subsection.2.2}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.2.1}Lattice Discretization and the Doubling Problem}{12}{subsubsection.2.2.1}\protected@file@percent }
-\newlabel{eq:wilson_op}{{19}{12}{Lattice Discretization and the Doubling Problem}{equation.2.19}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.2.2}Operator Structure}{12}{subsubsection.2.2.2}\protected@file@percent }
-\newlabel{eq:projectors}{{20}{12}{Operator Structure}{equation.2.20}{}}
+\newlabel{eq:projectors}{{3}{4}{Operator Structure}{equation.1.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.3}Geometrical Structure: Nearest-Neighbour Hopping}{4}{subsubsection.1.2.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Nearest-neighbour hopping of the Wilson operator on a 2D slice of the 4D lattice. Site $x$ (blue) is connected to its 8 neighbours via forward gauge links $U_\mu (x)$ (red) and backward links $U_\mu ^\dagger (x-\hat  \mu )$ (orange). The forward hop carries the projector $(1-\gamma _\mu )$; the backward hop carries $(1+\gamma _\mu )$.}}{4}{figure.1}\protected@file@percent }
+\newlabel{fig:wilson_hopping}{{1}{4}{Nearest-neighbour hopping of the Wilson operator on a 2D slice of the 4D lattice. Site $x$ (blue) is connected to its 8 neighbours via forward gauge links $U_\mu (x)$ (red) and backward links $U_\mu ^\dagger (x-\hat \mu )$ (orange). The forward hop carries the projector $(1-\gamma _\mu )$; the backward hop carries $(1+\gamma _\mu )$}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.4}Hopping Parameter and Critical Mass}{4}{subsubsection.1.2.4}\protected@file@percent }
+\newlabel{eq:wilson_condition}{{5}{4}{Hopping Parameter and Critical Mass}{equation.1.5}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.5}Non-Hermiticity and Solver Choice}{4}{subsubsection.1.2.5}\protected@file@percent }
 \citation{Akahoshi2022}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.2.3}Geometrical Structure: Nearest-Neighbour Hopping}{13}{subsubsection.2.2.3}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Nearest-neighbour hopping of the Wilson operator on a 2D slice of the 4D lattice. Site $x$ (blue) is connected to its 8 neighbours via forward gauge links $U_\mu (x)$ (red) and backward links $U_\mu ^\dagger (x-\hat  \mu )$ (orange). The forward hop carries the projector $(1-\gamma _\mu )$; the backward hop carries $(1+\gamma _\mu )$.}}{13}{figure.2}\protected@file@percent }
-\newlabel{fig:wilson_hopping}{{2}{13}{Nearest-neighbour hopping of the Wilson operator on a 2D slice of the 4D lattice. Site $x$ (blue) is connected to its 8 neighbours via forward gauge links $U_\mu (x)$ (red) and backward links $U_\mu ^\dagger (x-\hat \mu )$ (orange). The forward hop carries the projector $(1-\gamma _\mu )$; the backward hop carries $(1+\gamma _\mu )$}{figure.2}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.2.4}Hopping Parameter and Critical Mass}{13}{subsubsection.2.2.4}\protected@file@percent }
-\newlabel{eq:wilson_condition}{{22}{13}{Hopping Parameter and Critical Mass}{equation.2.22}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.2.5}Non-Hermiticity and Solver Choice}{13}{subsubsection.2.2.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.2.6}Clover (Sheikholeslami--Wohlert) Improvement}{13}{subsubsection.2.2.6}\protected@file@percent }
-\newlabel{eq:clover}{{23}{13}{Clover (Sheikholeslami--Wohlert) Improvement}{equation.2.23}{}}
 \citation{Kaplan1992}
 \citation{Shamir1993}
 \citation{Shamir1993}
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Domain-Wall Fermion Operator}{14}{subsection.2.3}\protected@file@percent }
-\newlabel{sec:dwf}{{2.3}{14}{Domain-Wall Fermion Operator}{subsection.2.3}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.3.1}Motivation: Preserving Chiral Symmetry}{14}{subsubsection.2.3.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.3.2}The 5D Operator: Shamir Variant}{14}{subsubsection.2.3.2}\protected@file@percent }
-\newlabel{eq:dwf_op}{{24}{14}{The 5D Operator: Shamir Variant}{equation.2.24}{}}
-\newlabel{eq:ds_matrix}{{25}{14}{The 5D Operator: Shamir Variant}{equation.2.25}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Domain-Wall Fermion structure. The 4D lattice is extended to $L_s$ slices in the 5th direction. Right-handed modes ($P_-$, red arrows) propagate toward $s=0$; left-handed modes ($P_+$, green arrows) propagate toward $s=L_s-1$. They are exponentially localised on opposite walls with amplitude $\sim e^{-\alpha s}$ (left wall) and $\sim e^{-\alpha (L_s-1-s)}$ (right wall). The physical 4D quark propagator is obtained by projecting the solution onto the boundary walls.}}{14}{figure.3}\protected@file@percent }
-\newlabel{fig:dwf_structure}{{3}{14}{Domain-Wall Fermion structure. The 4D lattice is extended to $L_s$ slices in the 5th direction. Right-handed modes ($P_-$, red arrows) propagate toward $s=0$; left-handed modes ($P_+$, green arrows) propagate toward $s=L_s-1$. They are exponentially localised on opposite walls with amplitude $\sim e^{-\alpha s}$ (left wall) and $\sim e^{-\alpha (L_s-1-s)}$ (right wall). The physical 4D quark propagator is obtained by projecting the solution onto the boundary walls}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.6}Clover (Sheikholeslami--Wohlert) Improvement}{5}{subsubsection.1.2.6}\protected@file@percent }
+\newlabel{eq:clover}{{6}{5}{Clover (Sheikholeslami--Wohlert) Improvement}{equation.1.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Domain-Wall Fermion Operator}{5}{subsection.1.3}\protected@file@percent }
+\newlabel{sec:dwf}{{1.3}{5}{Domain-Wall Fermion Operator}{subsection.1.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.3.1}Motivation: Preserving Chiral Symmetry}{5}{subsubsection.1.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.3.2}The 5D Operator: Shamir Variant}{5}{subsubsection.1.3.2}\protected@file@percent }
+\newlabel{eq:dwf_op}{{7}{5}{The 5D Operator: Shamir Variant}{equation.1.7}{}}
+\newlabel{eq:ds_matrix}{{8}{5}{The 5D Operator: Shamir Variant}{equation.1.8}{}}
 \citation{Brower2012}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Domain-Wall Fermion structure. The 4D lattice is extended to $L_s$ slices in the 5th direction. Right-handed modes ($P_-$, red arrows) propagate toward $s=0$; left-handed modes ($P_+$, green arrows) propagate toward $s=L_s-1$. They are exponentially localised on opposite walls with amplitude $\sim e^{-\alpha s}$ (left wall) and $\sim e^{-\alpha (L_s-1-s)}$ (right wall). The physical 4D quark propagator is obtained by projecting the solution onto the boundary walls.}}{6}{figure.2}\protected@file@percent }
+\newlabel{fig:dwf_structure}{{2}{6}{Domain-Wall Fermion structure. The 4D lattice is extended to $L_s$ slices in the 5th direction. Right-handed modes ($P_-$, red arrows) propagate toward $s=0$; left-handed modes ($P_+$, green arrows) propagate toward $s=L_s-1$. They are exponentially localised on opposite walls with amplitude $\sim e^{-\alpha s}$ (left wall) and $\sim e^{-\alpha (L_s-1-s)}$ (right wall). The physical 4D quark propagator is obtained by projecting the solution onto the boundary walls}{figure.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.3.3}Physical Solution Extraction}{6}{subsubsection.1.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.3.4}Solver: CGNE and the Squared Condition Number}{6}{subsubsection.1.3.4}\protected@file@percent }
+\newlabel{eq:normal_eq}{{11}{6}{Solver: CGNE and the Squared Condition Number}{equation.1.11}{}}
+\newlabel{eq:kappa_squared}{{12}{6}{Solver: CGNE and the Squared Condition Number}{equation.1.12}{}}
+\@writefile{toc}{\contentsline {paragraph}{Why DWF is harder than Wilson.}{6}{section*.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Numerical cost contrast between Wilson and DWF.}}{6}{table.1}\protected@file@percent }
+\newlabel{tab:dwf_vs_wilson}{{1}{6}{Numerical cost contrast between Wilson and DWF}{table.1}{}}
 \citation{Chen2026}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.3.3}Physical Solution Extraction}{15}{subsubsection.2.3.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.3.4}Solver: CGNE and the Squared Condition Number}{15}{subsubsection.2.3.4}\protected@file@percent }
-\newlabel{eq:normal_eq}{{28}{15}{Solver: CGNE and the Squared Condition Number}{equation.2.28}{}}
-\newlabel{eq:kappa_squared}{{29}{15}{Solver: CGNE and the Squared Condition Number}{equation.2.29}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.3.5}M\"{o}bius Domain-Wall Fermions}{15}{subsubsection.2.3.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Even-Odd (Checkerboard) Preconditioning}{16}{subsection.2.4}\protected@file@percent }
-\newlabel{sec:evenodd}{{2.4}{16}{Even-Odd (Checkerboard) Preconditioning}{subsection.2.4}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.4.1}Site Decomposition}{16}{subsubsection.2.4.1}\protected@file@percent }
-\newlabel{eq:block_D}{{32}{16}{Site Decomposition}{equation.2.32}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Even-odd (checkerboard) decomposition of the lattice. Blue sites (even: $\DOTSB \sum@ \slimits@ _\mu x_\mu $ even) and orange sites (odd) form two sublattices. Nearest-neighbour hopping only connects even $\leftrightarrow $ odd sites, giving the block off-diagonal structure~\textup  {\hbox {\mathsurround \z@ \normalfont  (\ignorespaces \ref  {eq:block_D}\unskip \@@italiccorr )}}. Each sublattice contains $V/2$ sites, and the Schur-complement system~\textup  {\hbox {\mathsurround \z@ \normalfont  (\ignorespaces \ref  {eq:schur}\unskip \@@italiccorr )}} acts only on the even sublattice.}}{16}{figure.4}\protected@file@percent }
-\newlabel{fig:checkerboard}{{4}{16}{Even-odd (checkerboard) decomposition of the lattice. Blue sites (even: $\sum _\mu x_\mu $ even) and orange sites (odd) form two sublattices. Nearest-neighbour hopping only connects even $\leftrightarrow $ odd sites, giving the block off-diagonal structure~\eqref {eq:block_D}. Each sublattice contains $V/2$ sites, and the Schur-complement system~\eqref {eq:schur} acts only on the even sublattice}{figure.4}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.4.2}Schur Complement}{16}{subsubsection.2.4.2}\protected@file@percent }
-\newlabel{eq:schur}{{33}{16}{Schur Complement}{equation.2.33}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.4.3}Reduced System}{16}{subsubsection.2.4.3}\protected@file@percent }
-\newlabel{eq:reduced}{{34}{16}{Reduced System}{equation.2.34}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.3.5}M\"{o}bius Domain-Wall Fermions}{7}{subsubsection.1.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.4}Even-Odd (Checkerboard) Preconditioning}{7}{subsection.1.4}\protected@file@percent }
+\newlabel{sec:evenodd}{{1.4}{7}{Even-Odd (Checkerboard) Preconditioning}{subsection.1.4}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.4.1}Site Decomposition}{7}{subsubsection.1.4.1}\protected@file@percent }
+\newlabel{eq:block_D}{{15}{7}{Site Decomposition}{equation.1.15}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Even-odd (checkerboard) decomposition of the lattice. Blue sites (even: $\DOTSB \sum@ \slimits@ _\mu x_\mu $ even) and orange sites (odd) form two sublattices. Nearest-neighbour hopping only connects even $\leftrightarrow $ odd sites, giving the block off-diagonal structure~\textup  {\hbox {\mathsurround \z@ \normalfont  (\ignorespaces \ref  {eq:block_D}\unskip \@@italiccorr )}}. Each sublattice contains $V/2$ sites, and the Schur-complement system~\textup  {\hbox {\mathsurround \z@ \normalfont  (\ignorespaces \ref  {eq:schur}\unskip \@@italiccorr )}} acts only on the even sublattice.}}{7}{figure.3}\protected@file@percent }
+\newlabel{fig:checkerboard}{{3}{7}{Even-odd (checkerboard) decomposition of the lattice. Blue sites (even: $\sum _\mu x_\mu $ even) and orange sites (odd) form two sublattices. Nearest-neighbour hopping only connects even $\leftrightarrow $ odd sites, giving the block off-diagonal structure~\eqref {eq:block_D}. Each sublattice contains $V/2$ sites, and the Schur-complement system~\eqref {eq:schur} acts only on the even sublattice}{figure.3}{}}
 \citation{Bridge}
 \citation{Akahoshi2022}
 \citation{Akahoshi2022}
 \citation{Chen2025}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.4.4}Computational Benefit and DWF Extension}{17}{subsubsection.2.4.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.5}The Bridge++ Code Set}{17}{subsection.2.5}\protected@file@percent }
-\newlabel{sec:bridgepp}{{2.5}{17}{The Bridge++ Code Set}{subsection.2.5}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.5.1}Design and GPU Backends}{17}{subsubsection.2.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.5.2}Data Layout: AoSoA with Packing Width NWP}{17}{subsubsection.2.5.2}\protected@file@percent }
-\newlabel{eq:bridge_index}{{36}{17}{Data Layout: AoSoA with Packing Width NWP}{equation.2.36}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.4.2}Schur Complement}{8}{subsubsection.1.4.2}\protected@file@percent }
+\newlabel{eq:schur}{{16}{8}{Schur Complement}{equation.1.16}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.4.3}Reduced System}{8}{subsubsection.1.4.3}\protected@file@percent }
+\newlabel{eq:reduced}{{17}{8}{Reduced System}{equation.1.17}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.5}The Bridge++ Code Set}{8}{subsection.1.5}\protected@file@percent }
+\newlabel{sec:bridgepp}{{1.5}{8}{The Bridge++ Code Set}{subsection.1.5}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.1}Design and GPU Backends}{8}{subsubsection.1.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.2}Data Layout: AoSoA with Packing Width NWP}{8}{subsubsection.1.5.2}\protected@file@percent }
+\newlabel{eq:bridge_index}{{19}{8}{Data Layout: AoSoA with Packing Width NWP}{equation.1.19}{}}
 \citation{Kanamori2026}
 \citation{Chen2026}
 \citation{Neff2015}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.5.3}Available Solvers}{18}{subsubsection.2.5.3}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Iterative solvers in Bridge++ relevant to this work.}}{18}{table.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.5.4}Related Precision Work on Bridge++}{18}{subsubsection.2.5.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3}Multi-Word Arithmetic in Lattice QCD Solvers}{18}{section.3}\protected@file@percent }
-\newlabel{sec:application}{{3}{18}{Multi-Word Arithmetic in Lattice QCD Solvers}{section.3}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}CGNE Solver with QDW/QTW Precision}{18}{subsection.3.1}\protected@file@percent }
-\newlabel{sec:cgne}{{3.1}{18}{CGNE Solver with QDW/QTW Precision}{subsection.3.1}{}}
-\@writefile{loa}{\contentsline {algorithm}{\numberline {9}{\ignorespaces CGNE with QDW/QTW precision (Lattice QCD, DWF)}}{19}{algorithm.9}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Precision Assignment: Which Quantities Need DW?}{19}{subsection.3.2}\protected@file@percent }
-\newlabel{sec:precision_assignment}{{3.2}{19}{Precision Assignment: Which Quantities Need DW?}{subsection.3.2}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}Two Sources of Rounding Error in SpMV}{19}{subsubsection.3.2.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}SU(3) Reconstruction: FP64 Is Sufficient}{19}{subsubsection.3.2.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.3}Precision Assignment Table}{20}{subsubsection.3.2.3}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Recommended precision for each quantity in the CGNE solver.}}{20}{table.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.4}Error Flow Through SpMV}{20}{subsubsection.3.2.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Memory Layout for GPU Implementation}{20}{subsection.3.3}\protected@file@percent }
-\newlabel{sec:layout}{{3.3}{20}{Memory Layout for GPU Implementation}{subsection.3.3}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.1}Existing Spinor Layout (AoSoA)}{20}{subsubsection.3.3.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.2}Implemented Layout}{20}{subsubsection.3.3.2}\protected@file@percent }
-\newlabel{eq:d4_index}{{43}{20}{Implemented Layout}{equation.3.43}{}}
+\citation{Moller1965}
+\citation{Dekker1971}
+\citation{Knuth1969}
+\citation{Joldes2017}
+\citation{Fabiano2019}
+\citation{Mukunoki2025}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.3}Available Solvers}{9}{subsubsection.1.5.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Iterative solvers in Bridge++ relevant to this work.}}{9}{table.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.4}Related Precision Work on Bridge++}{9}{subsubsection.1.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Multi-Word Floating-Point Arithmetic}{9}{section.2}\protected@file@percent }
+\newlabel{sec:multiword}{{2}{9}{Multi-Word Floating-Point Arithmetic}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Motivation and Historical Background}{9}{subsection.2.1}\protected@file@percent }
+\citation{Knuth1969}
+\citation{Moller1965}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Conceptual layout of multi-word numbers. Each box is one FP64 word (53 bits). DW/QDW doubles effective precision by retaining the discarded bits in $x_l$. TW/QTW adds a third word $x_m$. The non-overlapping condition $|x_l|\leq \mathbf  {u}|x_h|$ ensures the words tile the bit-line without gap or overlap.}}{10}{figure.4}\protected@file@percent }
+\newlabel{fig:multiword_concept}{{4}{10}{Conceptual layout of multi-word numbers. Each box is one FP64 word (53 bits). DW/QDW doubles effective precision by retaining the discarded bits in $x_l$. TW/QTW adds a third word $x_m$. The non-overlapping condition $|x_l|\leq \mathbf {u}|x_h|$ ensures the words tile the bit-line without gap or overlap}{figure.4}{}}
+\@writefile{toc}{\contentsline {paragraph}{The fundamental limitation of FP64.}{10}{section*.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Floating-Point Notation and Prerequisites}{10}{subsection.2.2}\protected@file@percent }
+\newlabel{sec:notation}{{2.2}{10}{Floating-Point Notation and Prerequisites}{subsection.2.2}{}}
+\newlabel{eq:rounding_model}{{20}{10}{IEEE 754 Rounding Model}{equation.2.20}{}}
+\citation{Dekker1971}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Basic Building Blocks: TwoSum and TwoProd}{11}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.3.1}TwoSum: Error-Free Addition}{11}{subsubsection.2.3.1}\protected@file@percent }
+\newlabel{thm:twosum}{{2.3}{11}{TwoSum~\cite {Knuth1969,Moller1965}}{theorem.2.3}{}}
+\newlabel{eq:twosum_exact}{{23}{11}{TwoSum~\cite {Knuth1969,Moller1965}}{equation.2.23}{}}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces $\mathrm  {TwoSum}(a, b) \to (s,\, e)$}}{11}{algorithm.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.3.2}TwoProd: Error-Free Multiplication}{11}{subsubsection.2.3.2}\protected@file@percent }
+\newlabel{thm:twoprod}{{2.5}{11}{TwoProd via FMA~\cite {Dekker1971}}{theorem.2.5}{}}
+\newlabel{eq:twoprod_exact}{{29}{11}{TwoProd via FMA~\cite {Dekker1971}}{equation.2.29}{}}
+\@writefile{toc}{\contentsline {paragraph}{Without FMA: Dekker splitting.}{11}{section*.4}\protected@file@percent }
+\citation{Joldes2017}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Double-Word (DW) Arithmetic}{12}{subsection.2.4}\protected@file@percent }
+\newlabel{sec:dw}{{2.4}{12}{Double-Word (DW) Arithmetic}{subsection.2.4}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.4.1}Definition}{12}{subsubsection.2.4.1}\protected@file@percent }
+\newlabel{eq:nonoverlap_dw}{{30}{12}{Double-Word Number}{equation.2.30}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.4.2}DW Addition}{12}{subsubsection.2.4.2}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {2}{\ignorespaces $\mathrm  {DWadd}(x_h, x_l,\tmspace  +\thickmuskip {.2777em} y_h, y_l) \to (z_h,\, z_l)$}}{12}{algorithm.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.4.3}Quasi DW Addition (QDWadd)}{12}{subsubsection.2.4.3}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {3}{\ignorespaces $\mathrm  {QDWadd}(x_h, x_l,\tmspace  +\thickmuskip {.2777em} y_h, y_l) \to (z_h,\, z_l)$}}{12}{algorithm.3}\protected@file@percent }
+\citation{Joldes2017}
+\citation{Fabiano2019}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.4.4}DW Multiplication}{13}{subsubsection.2.4.4}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {4}{\ignorespaces $\mathrm  {DWmul}(x_h, x_l,\tmspace  +\thickmuskip {.2777em} y_h, y_l) \to (z_h,\, z_l)$}}{13}{algorithm.4}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {5}{\ignorespaces $\mathrm  {QDWmul}(x_h, x_l,\tmspace  +\thickmuskip {.2777em} y_h, y_l) \to (z_h,\, z_l)$}}{13}{algorithm.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.5}Triple-Word (TW) Arithmetic}{13}{subsection.2.5}\protected@file@percent }
+\newlabel{sec:tw}{{2.5}{13}{Triple-Word (TW) Arithmetic}{subsection.2.5}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.5.1}Definition}{13}{subsubsection.2.5.1}\protected@file@percent }
+\newlabel{eq:nonoverlap_tw}{{32}{13}{Triple-Word Number~\cite {Fabiano2019}}{equation.2.32}{}}
+\citation{Fabiano2019}
+\citation{Fabiano2019}
+\citation{Mukunoki2025}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.5.2}The Renormalize Subroutine}{14}{subsubsection.2.5.2}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {6}{\ignorespaces $\mathrm  {Renormalize}(a, b, c) \to (z_h,\, z_m,\, z_l)$}}{14}{algorithm.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.5.3}TW Addition}{14}{subsubsection.2.5.3}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {7}{\ignorespaces $\mathrm  {TWadd}(x_h,x_m,x_l,\tmspace  +\thickmuskip {.2777em} y_h,y_m,y_l) \to (z_h,z_m,z_l)$}}{14}{algorithm.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.5.4}TW Multiplication}{14}{subsubsection.2.5.4}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {8}{\ignorespaces $\mathrm  {TWmul}(x_h,x_m,x_l,\tmspace  +\thickmuskip {.2777em} y_h,y_m,y_l) \to (z_h,z_m,z_l)$}}{14}{algorithm.8}\protected@file@percent }
+\citation{Mukunoki2025}
+\citation{Kanamori2026}
 \citation{Mukunoki2025}
 \citation{Mukunoki2025}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Condition Number Analysis}{21}{subsection.3.4}\protected@file@percent }
-\newlabel{sec:lqcd_comparison}{{3.4}{21}{Condition Number Analysis}{subsection.3.4}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.4.1}Why Lattice QCD Differs from General SpMV}{21}{subsubsection.3.4.1}\protected@file@percent }
+\citation{Mukunoki2025}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.5.5}Quasi TW (QTW)}{15}{subsubsection.2.5.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.6}Quasi Algorithms: Drift and Normalization}{15}{subsection.2.6}\protected@file@percent }
+\newlabel{sec:drift}{{2.6}{15}{Quasi Algorithms: Drift and Normalization}{subsection.2.6}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.6.1}Mathematical Structure of Drift}{15}{subsubsection.2.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Repair via normalization.}{15}{section*.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.7}Numerical Performance: Mukunoki \& Ozaki (2025)}{15}{subsection.2.7}\protected@file@percent }
+\newlabel{sec:mukunoki}{{2.7}{15}{Numerical Performance: Mukunoki \& Ozaki (2025)}{subsection.2.7}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.7.1}Per-Iteration Overhead}{15}{subsubsection.2.7.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Relative execution time per 100 CG iterations (normalized to FP64). Measured on Intel Xeon Gold 6230 with AVX-512. Source: Mukunoki \& Ozaki, arXiv:2510.13536~\cite  {Mukunoki2025}.}}{15}{table.3}\protected@file@percent }
+\citation{Mukunoki2025}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.7.2}Total Time to Solution: When QTW Beats QDW}{16}{subsubsection.2.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Core finding of Mukunoki \& Ozaki (2025)~\cite  {Mukunoki2025}.}{16}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.7.3}Arithmetic Mode Summary}{16}{subsubsection.2.7.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Summary of all arithmetic modes discussed in this chapter.}}{16}{table.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Multi-Word Arithmetic in Lattice QCD Solvers}{16}{section.3}\protected@file@percent }
+\newlabel{sec:application}{{3}{16}{Multi-Word Arithmetic in Lattice QCD Solvers}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}CGNE Solver with QDW/QTW Precision}{17}{subsection.3.1}\protected@file@percent }
+\newlabel{sec:cgne}{{3.1}{17}{CGNE Solver with QDW/QTW Precision}{subsection.3.1}{}}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {9}{\ignorespaces CGNE with QDW/QTW precision (Lattice QCD, DWF)}}{17}{algorithm.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Precision Assignment: Which Quantities Need DW?}{17}{subsection.3.2}\protected@file@percent }
+\newlabel{sec:precision_assignment}{{3.2}{17}{Precision Assignment: Which Quantities Need DW?}{subsection.3.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}The Residual Floor Is Set by the Least-Precise Operand}{17}{subsubsection.3.2.1}\protected@file@percent }
+\newlabel{eq:operand_floor}{{38}{18}{The Residual Floor Is Set by the Least-Precise Operand}{equation.3.38}{}}
+\@writefile{toc}{\contentsline {paragraph}{Every operand must be promoted.}{18}{section*.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}SU(3) Reconstruction Must Match the Target Precision}{18}{subsubsection.3.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.3}Precision Assignment Table}{19}{subsubsection.3.2.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Recommended precision for each quantity in the CGNE solver. To reach the DW/TW floor, \emph  {every} operand entering the SpMV must be promoted---there is no operand that may safely remain FP64.}}{19}{table.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Memory Layout for GPU Implementation}{19}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:layout}{{3.3}{19}{Memory Layout for GPU Implementation}{subsection.3.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.1}Existing Spinor Layout (AoSoA)}{19}{subsubsection.3.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.2}Implemented Layout}{19}{subsubsection.3.3.2}\protected@file@percent }
+\newlabel{eq:d4_index}{{42}{19}{Implemented Layout}{equation.3.42}{}}
+\citation{Mukunoki2025}
+\citation{Mukunoki2025}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Condition Number Analysis}{20}{subsection.3.4}\protected@file@percent }
+\newlabel{sec:lqcd_comparison}{{3.4}{20}{Condition Number Analysis}{subsection.3.4}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.4.1}Why Lattice QCD Differs from General SpMV}{20}{subsubsection.3.4.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Toy unpreconditioned CG over a range of condition numbers $\kappa $, comparing FP32 and FP64. At $\kappa = 10$ the two precisions track each other exactly; for $\kappa \gtrsim 10^{3}$ FP32 loses orthogonality and stalls. This is the Mukunoki--Ozaki regime, in which precision buys \emph  {fewer iterations}---and the regime our eo-preconditioned DWF tests do \emph  {not} sit in.}}{20}{figure.5}\protected@file@percent }
+\newlabel{fig:toy_cg_kappa}{{5}{20}{Toy unpreconditioned CG over a range of condition numbers $\kappa $, comparing FP32 and FP64. At $\kappa = 10$ the two precisions track each other exactly; for $\kappa \gtrsim 10^{3}$ FP32 loses orthogonality and stalls. This is the Mukunoki--Ozaki regime, in which precision buys \emph {fewer iterations}---and the regime our eo-preconditioned DWF tests do \emph {not} sit in}{figure.5}{}}
 \citation{Chen2026}
-\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Toy unpreconditioned CG over a range of condition numbers $\kappa $, comparing FP32 and FP64. At $\kappa = 10$ the two precisions track each other exactly; for $\kappa \gtrsim 10^{3}$ FP32 loses orthogonality and stalls. This is the Mukunoki--Ozaki regime, in which precision buys \emph  {fewer iterations}---and the regime our eo-preconditioned DWF tests do \emph  {not} sit in.}}{22}{figure.5}\protected@file@percent }
-\newlabel{fig:toy_cg_kappa}{{5}{22}{Toy unpreconditioned CG over a range of condition numbers $\kappa $, comparing FP32 and FP64. At $\kappa = 10$ the two precisions track each other exactly; for $\kappa \gtrsim 10^{3}$ FP32 loses orthogonality and stalls. This is the Mukunoki--Ozaki regime, in which precision buys \emph {fewer iterations}---and the regime our eo-preconditioned DWF tests do \emph {not} sit in}{figure.5}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.4.2}Effective Precision Thresholds}{22}{subsubsection.3.4.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Approximate stagnation thresholds ($N = 10^6$). $\text  {$\mathsurround \z@ \mathchar "458$}$ = converges, $\times $ = stagnates.}}{22}{table.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Grounding the thresholds in measured $\kappa $.}{22}{section*.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Empirical Results: QDW/QTW in the Bridge++ DWF Solver}{23}{subsection.3.5}\protected@file@percent }
-\newlabel{sec:results}{{3.5}{23}{Empirical Results: QDW/QTW in the Bridge++ DWF Solver}{subsection.3.5}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.1}FP32-base: beyond FP64 without FP64 hardware}{23}{subsubsection.3.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.2}FP64-base: a triple-double precision ladder}{24}{subsubsection.3.5.2}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces FP64-base multiword: true-residual descent for FP, DW, and TW. The triple-double constant pipeline yields three cleanly separated floors ($1.59\times 10^{-30}$ / $1.03\times 10^{-62}$ / $8.57\times 10^{-76}$), tens of orders below native FP64, with no breakdown.}}{24}{figure.6}\protected@file@percent }
-\newlabel{fig:double_base}{{6}{24}{FP64-base multiword: true-residual descent for FP, DW, and TW. The triple-double constant pipeline yields three cleanly separated floors ($1.59\times 10^{-30}$ / $1.03\times 10^{-62}$ / $8.57\times 10^{-76}$), tens of orders below native FP64, with no breakdown}{figure.6}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Six-mode precision ladder (FP/DW/TW $\times $ FP32-base/FP64-base) on $16^4$. Each precision sets a distinct residual floor while the descent rate is shared---precision sets the floor, the spectrum sets the rate.}}{25}{figure.7}\protected@file@percent }
-\newlabel{fig:ladder}{{7}{25}{Six-mode precision ladder (FP/DW/TW $\times $ FP32-base/FP64-base) on $16^4$. Each precision sets a distinct residual floor while the descent rate is shared---precision sets the floor, the spectrum sets the rate}{figure.7}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.3}Reach, not rate: recursive versus true residual}{25}{subsubsection.3.5.3}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Recursive (CG-internal) versus true residual $\|b-Ax\|$ on the real $16^4$ configuration. The recursive curves of all precisions overlap; only the true-residual floor separates by $\mathbf  {u}$, directly exhibiting the reach-versus-rate distinction.}}{26}{figure.8}\protected@file@percent }
-\newlabel{fig:recursive_vs_true}{{8}{26}{Recursive (CG-internal) versus true residual $\|b-Ax\|$ on the real $16^4$ configuration. The recursive curves of all precisions overlap; only the true-residual floor separates by $\uu $, directly exhibiting the reach-versus-rate distinction}{figure.8}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Six-mode ladders on the real thermalized $16^4$ configuration at $m=0.10$ (top) and $m=0.05$ (bottom). The descent overlap and the per-precision floors persist on a genuine gauge field (cf.\ $m=0.025$, not shown).}}{27}{figure.9}\protected@file@percent }
-\newlabel{fig:ladder_real}{{9}{27}{Six-mode ladders on the real thermalized $16^4$ configuration at $m=0.10$ (top) and $m=0.05$ (bottom). The descent overlap and the per-precision floors persist on a genuine gauge field (cf.\ $m=0.025$, not shown)}{figure.9}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.4}Caveats}{27}{subsubsection.3.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.4.2}Effective Precision Thresholds}{21}{subsubsection.3.4.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Approximate stagnation thresholds ($N = 10^6$). $\text  {$\mathsurround \z@ \mathchar "458$}$ = converges, $\times $ = stagnates.}}{21}{table.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Grounding the thresholds in measured $\kappa $.}{21}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Status and implementation order.}{21}{section*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Empirical Results: QDW/QTW in the Bridge++ DWF Solver}{22}{subsection.3.5}\protected@file@percent }
+\newlabel{sec:results}{{3.5}{22}{Empirical Results: QDW/QTW in the Bridge++ DWF Solver}{subsection.3.5}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.1}FP32-base doublet/triplet: FP64-class accuracy on FP64-poor hardware}{22}{subsubsection.3.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{The value proposition.}{22}{section*.10}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces FP32-base multiword on the $32\times 8\times 8\times 12$ problem (RTX~3080, FP64 throughput $1\!:\!64$). The doublet matches native FP64; the triplet beats it---using no FP64 hardware. Observable error is the converged 2-point quantity; wall time is normalised to a native-FP64 solve.}}{22}{table.7}\protected@file@percent }
+\newlabel{tab:fp32base}{{7}{22}{FP32-base multiword on the $32\times 8\times 8\times 12$ problem (RTX~3080, FP64 throughput $1\!:\!64$). The doublet matches native FP64; the triplet beats it---using no FP64 hardware. Observable error is the converged 2-point quantity; wall time is normalised to a native-FP64 solve}{table.7}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.2}FP64-base: a triple-double precision ladder}{23}{subsubsection.3.5.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces FP64-base multiword: true-residual descent for FP, DW, and TW. The triple-double constant pipeline yields three cleanly separated floors ($1.59\times 10^{-30}$ / $1.03\times 10^{-62}$ / $8.57\times 10^{-76}$), tens of orders below native FP64, with no breakdown.}}{23}{figure.6}\protected@file@percent }
+\newlabel{fig:double_base}{{6}{23}{FP64-base multiword: true-residual descent for FP, DW, and TW. The triple-double constant pipeline yields three cleanly separated floors ($1.59\times 10^{-30}$ / $1.03\times 10^{-62}$ / $8.57\times 10^{-76}$), tens of orders below native FP64, with no breakdown}{figure.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Six-mode precision ladder (FP/DW/TW $\times $ FP32-base/FP64-base) on $16^4$. Each precision sets a distinct residual floor while the descent rate is shared---precision sets the floor, the spectrum sets the rate.}}{24}{figure.7}\protected@file@percent }
+\newlabel{fig:ladder}{{7}{24}{Six-mode precision ladder (FP/DW/TW $\times $ FP32-base/FP64-base) on $16^4$. Each precision sets a distinct residual floor while the descent rate is shared---precision sets the floor, the spectrum sets the rate}{figure.7}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.3}Reach, not rate: recursive versus true residual}{24}{subsubsection.3.5.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Recursive (CG-internal) versus true residual $\|b-Ax\|$ on the real $16^4$ configuration. The recursive curves of all precisions overlap; only the true-residual floor separates by $\mathbf  {u}$, directly exhibiting the reach-versus-rate distinction.}}{25}{figure.8}\protected@file@percent }
+\newlabel{fig:recursive_vs_true}{{8}{25}{Recursive (CG-internal) versus true residual $\|b-Ax\|$ on the real $16^4$ configuration. The recursive curves of all precisions overlap; only the true-residual floor separates by $\uu $, directly exhibiting the reach-versus-rate distinction}{figure.8}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Six-mode ladders on the real thermalized $16^4$ configuration at $m=0.10$ (top) and $m=0.05$ (bottom). The descent overlap and the per-precision floors persist on a genuine gauge field (cf.\ $m=0.025$, not shown).}}{26}{figure.9}\protected@file@percent }
+\newlabel{fig:ladder_real}{{9}{26}{Six-mode ladders on the real thermalized $16^4$ configuration at $m=0.10$ (top) and $m=0.05$ (bottom). The descent overlap and the per-precision floors persist on a genuine gauge field (cf.\ $m=0.025$, not shown)}{figure.9}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.4}Caveats}{26}{subsubsection.3.5.4}\protected@file@percent }
 \citation{Chen2026}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Future Research: Systematic Wilson vs DWF Benchmark}{28}{subsection.3.6}\protected@file@percent }
-\newlabel{sec:future}{{3.6}{28}{Future Research: Systematic Wilson vs DWF Benchmark}{subsection.3.6}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.1}The $2 \times 3$ Benchmark Matrix}{28}{subsubsection.3.6.1}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Proposed benchmark matrix. Each cell records: total wall time $T$, iteration count $K$, and final relative residual $\|r\|/\|b\|$.}}{28}{table.6}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.2}Hypotheses Revisited in Light of the Measurements}{28}{subsubsection.3.6.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Status per cell. ``$\downarrow K$'' = iteration-count reduction relative to FP64 (the speedup effect, regime-dependent); ``floor'' = lower attainable residual (the reach effect, confirmed).}}{28}{table.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Future Research: Systematic Wilson vs DWF Benchmark}{27}{subsection.3.6}\protected@file@percent }
+\newlabel{sec:future}{{3.6}{27}{Future Research: Systematic Wilson vs DWF Benchmark}{subsection.3.6}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.1}The $2 \times 3$ Benchmark Matrix}{27}{subsubsection.3.6.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Proposed benchmark matrix. Each cell records: total wall time $T$, iteration count $K$, and final relative residual $\|r\|/\|b\|$.}}{27}{table.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.2}Hypotheses Revisited in Light of the Measurements}{27}{subsubsection.3.6.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Status per cell. ``$\downarrow K$'' = iteration-count reduction relative to FP64 (the speedup effect, regime-dependent); ``floor'' = lower attainable residual (the reach effect, confirmed).}}{27}{table.9}\protected@file@percent }
 \citation{Kanamori2026}
 \citation{Chen2026}
 \citation{Chen2025}
@@ -211,10 +222,11 @@
 \bibcite{Dekker1971}{2}
 \bibcite{Moller1965}{3}
 \bibcite{Joldes2017}{4}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.3}Implementation Plan}{29}{subsubsection.3.6.3}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Implementation checklist (status: \text  {$\mathsurround \z@ \mathchar "458$}{} done, --- future work).}}{29}{table.8}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.4}Metrics and Analysis}{29}{subsubsection.3.6.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{References}{29}{section*.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.3}Implementation Plan}{28}{subsubsection.3.6.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces Implementation checklist (status: \text  {$\mathsurround \z@ \mathchar "458$}{} done, --- future work).}}{28}{table.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.4}Metrics and Analysis}{28}{subsubsection.3.6.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Why this benchmark matters.}{28}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{28}{section*.12}\protected@file@percent }
 \bibcite{Fabiano2019}{5}
 \bibcite{Mukunoki2025}{6}
 \bibcite{Ozaki2012}{7}
@@ -228,4 +240,4 @@
 \bibcite{Kanamori2026}{15}
 \bibcite{Chen2026}{16}
 \bibcite{Neff2015}{17}
-\gdef \@abspage@last{30}
+\gdef \@abspage@last{29}
