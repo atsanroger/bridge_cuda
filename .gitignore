@@ -54,7 +54,7 @@ sweep_launch.log
 **/gpu_before
 **/gpu_after
 
-# === Claude Code / tooling litter (keep out of source tree) ===
+# === editor / tooling litter (keep out of source tree) ===
 .progress_count
 *.txtopttopt
 

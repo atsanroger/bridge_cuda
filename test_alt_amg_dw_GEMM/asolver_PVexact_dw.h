@@ -1,7 +1,7 @@
 /*!
       @file    asolver_PVexact_dw.h
       @brief   Exact site-diagonal C_PV^{-1} wrapped as an ASolver.
-      @author  Wei-Lun Chen (with Claude Code)
+      @author  Wei-Lun Chen
 
   Applies the Pauli-Villars operator's "Prec" mode (the exact 5D site-diagonal
   LU inverse, L_inv o U_inv) in one shot, with no iteration. This replaces the

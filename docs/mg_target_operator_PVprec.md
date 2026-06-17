@@ -1,7 +1,7 @@
 # MG target operator — FP implementation & 16⁴ spectrum
 
 **Date:** 2026-06-06
-**Author:** Wei-Lun Chen (with Claude Code)
+**Author:** Wei-Lun Chen
 **Paper basis:** I. Kanamori, W.-L. Chen, H. Matsufuru, *Spectrum of Preconditioned
 Moebius Domain-wall Operators*, PoS(LATTICE2024)414 (`reference/mgspecturm.pdf`).
 

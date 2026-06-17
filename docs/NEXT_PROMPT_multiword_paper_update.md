@@ -2,7 +2,7 @@
 
 > Paste the block below into a fresh conversation **in this same Bridge repo**
 > (the LaTeX source and `pdflatex` are both on this WSL box). The persistent
-> Claude memory is shared, so the next agent has the full record; this prompt is
+> The persistent agent memory is shared, so the next agent has the full record; this prompt is
 > the targeted brief.
 
 ---
