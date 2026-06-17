@@ -1130,31 +1130,6 @@ followed by the trivial recovery of the odd-site solution:
   \psi_o = D_{oo}^{-1}(b_o - D_{oe}\,\psi_e).
 \end{equation}
 
-\subsubsection{Computational Benefit and DWF Extension}
-
-The effective matrix $\hat{D}$ acts on $V/2$ sites.
-One application of $\hat{D}$ requires two Wilson hoppings on half the sites,
-so the net SpMV cost is equal to one full $D_W$ application, but the
-\textbf{iteration count is roughly halved} due to improved diagonal dominance.
-
-For DWF, the even-odd decomposition is applied in the 4D directions only;
-the 5th-dimension coupling in $D_s$ is absorbed into the diagonal blocks
-$D_{ee/oo}^{(5D)}$.
-The Schur complement is formed analogously to~\eqref{eq:schur}.
-
-\begin{tcolorbox}[warnbox={Even-Odd Does Not Reduce the Multi-Word Overhead}]
-The reduced-system spinor fields carry the multiword limbs, but even-odd
-preconditioning gives the multiword scheme \textbf{no} memory advantage over
-FP64. The QDW and QTW overhead factors ($2\times$ and $3\times$ memory) are
-per-element multipliers fixed by the number of words; they are independent of
-the vector length. Even-odd halves the \emph{absolute} array length
-($V \to V/2$) for the multiword field and the FP64 baseline \emph{alike}, so the
-\emph{relative} overhead stays exactly $2\times$ / $3\times$---there is no
-``halving of the overhead.'' (For DWF the reduced field has $\tfrac{V}{2}\,L_s$
-sites, and per Section~\ref{sec:precision_assignment} the gauge links, $m_f$,
-$b$, $c$, and $M_0$---not the spinor alone---must also be promoted.)
-\end{tcolorbox}
-
 % ----------------------------------------------------------
 \subsection{The Bridge++ Code Set}
 \label{sec:bridgepp}
@@ -1273,10 +1248,10 @@ the spinor vectors and scalar quantities within the solver.
     \Comment{Apply $D_{\mathrm{DW}}$ (dominant cost)}
   \State $\alpha \leftarrow \rho \;/\; \mathrm{QDWdot}(q, q)$
     \Comment{$\alpha = \|D^\dagger r\|^2 / \|Dp\|^2$}
-  \State $x \leftarrow x + \alpha\, p$
-    \Comment{AXPY}
-  \State $r \leftarrow r - \alpha\, q$
-    \Comment{AXPY}
+  \State $x \leftarrow \mathrm{QDW\text{-}AXPY}(\alpha,\; p,\; x)$
+    \Comment{$x + \alpha p$ in QDW/QTW}
+  \State $r \leftarrow \mathrm{QDW\text{-}AXPY}(-\alpha,\; q,\; r)$
+    \Comment{$r - \alpha q$ in QDW/QTW}
   \State $\boxed{r \leftarrow \mathrm{Normalize}(r)}$
     \Comment{{\color{red}Key: one normalization per iteration (Section~\ref{sec:drift})}}
   \State $s \leftarrow D^\dagger r$
@@ -1337,9 +1312,33 @@ reconstruction, $m_f$, $b$, $c$, and $M_0$---must be stored and combined in DW
 (resp.\ TW)}. There is no ``free'' FP64 operand.
 \end{tcolorbox}
 
-By Eq.~\eqref{eq:operand_floor}, with every operand at DW the floor is
-$O(\uu^2)$ and at TW $O(\uu^3)$---precisely the ladder measured in
-Section~\ref{sec:results} (down to $\sim\!10^{-76}$ in the FP64-base TW run).
+The mechanism is visible at the level of a single SpMV element. If the matrix
+operand is left in FP64 it dominates and caps the element precision of $q$ at
+$O(\uu)$, irrespective of the spinor's limbs:
+\begin{equation}
+  \underbrace{U_\mu}_{\text{FP64},\; O(\uu)}
+  \;\times\;
+  \underbrace{\psi}_{\text{QDW},\; O(\uu^2)}
+  \;\longrightarrow\;
+  \underbrace{q}_{\text{element precision} \;=\; O(\uu)\ (\textbf{capped})}.
+\end{equation}
+A QDW dot product over such a $q$ controls only the \emph{accumulation} term,
+$\langle q,q\rangle = \sum_i q_i^2 + O(N\uu^2\|q\|^2)$, but each $q_i$ is itself
+wrong at $O(\uu)$, so the true residual cannot fall below the FP64 floor.
+Promoting the matrix operand as well removes the cap:
+\begin{equation}
+  \underbrace{U_\mu}_{\text{QDW},\; O(\uu^2)}
+  \;\times\;
+  \underbrace{\psi}_{\text{QDW},\; O(\uu^2)}
+  \;\longrightarrow\;
+  \underbrace{q}_{\text{element precision} \;=\; O(\uu^2)}.
+\end{equation}
+By Eq.~\eqref{eq:operand_floor}, only when \emph{both} the operands and the
+accumulation are at DW does the floor reach $O(\uu^2)$ (and $O(\uu^3)$ at
+TW)---precisely the ladder measured in Section~\ref{sec:results} (down to
+$\sim\!10^{-76}$ in the FP64-base TW run). Precision must be carried
+consistently through both the operands and their aggregation, not in the spinor
+alone.
 
 \subsubsection{SU(3) Reconstruction Must Match the Target Precision}
 
@@ -1375,34 +1374,6 @@ Domain-wall height $M_0$  & \textbf{QDW/QTW} & Enters every site; same operand-f
 \bottomrule
 \end{tabular}
 \end{table}
-
-\subsubsection{Error Flow Through SpMV}
-
-When the matrix operand is left in FP64 it dominates and caps the element
-precision of $q$ at $O(\uu)$, irrespective of the spinor's limbs:
-\begin{equation}
-  \underbrace{U_\mu}_{\text{FP64},\; O(\uu)}
-  \;\times\;
-  \underbrace{\psi}_{\text{QDW},\; O(\uu^2)}
-  \;\longrightarrow\;
-  \underbrace{q}_{\text{element precision} \;=\; O(\uu)\ (\textbf{capped})}.
-\end{equation}
-A QDW dot product over such a $q$ controls only the \emph{accumulation} term,
-$\langle q,q\rangle = \sum_i q_i^2 + O(N\uu^2\|q\|^2)$, but each $q_i$ is itself
-wrong at $O(\uu)$, so the true residual cannot fall below the FP64 floor. To
-push the floor down, the matrix operand must be promoted as well:
-\begin{equation}
-  \underbrace{U_\mu}_{\text{QDW},\; O(\uu^2)}
-  \;\times\;
-  \underbrace{\psi}_{\text{QDW},\; O(\uu^2)}
-  \;\longrightarrow\;
-  \underbrace{q}_{\text{element precision} \;=\; O(\uu^2)}.
-\end{equation}
-Only when both the operand and the accumulation are at DW does the floor reach
-$O(\uu^2)$; the same statement at TW gives $O(\uu^3)$. This is the
-operand-floor principle of Section~\ref{sec:precision_assignment} made
-explicit: precision must be carried consistently through \emph{both} the
-operands and their aggregation, not in the spinor alone.
 
 % ----------------------------------------------------------
 \subsection{Memory Layout for GPU Implementation}
