@@ -85,19 +85,546 @@
 \newpage
 
 % ##########################################################
-% CHAPTER 1: MULTI-WORD ARITHMETIC
+% CHAPTER 1: LATTICE QCD REVIEW
+% ##########################################################
+
+% ==========================================================
+\section{Lattice QCD: Background and Related Work}
+\label{sec:lqcd}
+
+This chapter reviews the Lattice QCD setting that motivates the application
+of multi-word arithmetic.
+Section~\ref{sec:quark} introduces the quark propagator problem.
+Sections~\ref{sec:wilson} and~\ref{sec:dwf} give detailed descriptions of the
+Wilson fermion operator and Domain-Wall fermion operator, the two discretizations
+studied in this work.
+Section~\ref{sec:evenodd} covers even-odd preconditioning.
+Section~\ref{sec:bridgepp} describes the Bridge++ code set used for implementation.
+
+% ----------------------------------------------------------
+\subsection{The Quark Propagator Problem}
+\label{sec:quark}
+
+Lattice Quantum Chromodynamics (Lattice QCD) is a non-perturbative,
+first-principles approach to calculating the low-energy properties of
+the strong interaction~\cite{Wilson1974}.
+Space-time is discretized onto a hypercubic lattice with spacing $a$,
+quark fields $\psi(x)$ residing on sites, and $\mathrm{SU}(3)$ gauge
+links $U_\mu(x)$ on the directed bonds between neighbouring sites.
+
+The central computational task---accounting for 70--90\% of total simulation
+time---is solving the \textbf{quark propagator equation}:
+\begin{equation}
+  D\,\psi = b,
+  \label{eq:quark_eq}
+\end{equation}
+where $D$ is the \textbf{Dirac operator} encoding quark mass and gauge coupling.
+The operator $D$ is large and sparse:
+\begin{itemize}
+  \item \textbf{Dimension:} $(N_c \cdot N_d \cdot V) \times (N_c \cdot N_d \cdot V)$,
+        where $N_c = 3$, $N_d = 4$, $V = N_x N_y N_z N_t \sim 10^6$--$10^7$.
+  \item \textbf{Sparsity:} each site couples only to its $2d = 8$ nearest
+        neighbours in 4D (hopping term); $D$ is \emph{never} assembled---it
+        is applied on-the-fly via gauge links.
+  \item \textbf{Ill-conditioning:} $\kappa(D)$ diverges as quark mass approaches
+        the critical (chiral) limit.
+\end{itemize}
+
+% ----------------------------------------------------------
+\subsection{Wilson Fermion Operator}
+\label{sec:wilson}
+
+\subsubsection{Lattice Discretization and the Doubling Problem}
+
+In the na\"{i}ve lattice discretization of the Dirac equation, replacing
+continuum derivatives with symmetric finite differences introduces
+\textbf{16 degenerate fermion species} (doublers) instead of the intended one.
+Wilson~\cite{Wilson1974} eliminated the doublers by adding a
+dimension-5 irrelevant operator---the \textbf{Wilson term}---proportional
+to the lattice Laplacian:
+\begin{equation}
+  D_W(x,y) = \delta_{x,y}
+  - \kappa \sum_{\mu=1}^{4}
+    \Bigl[
+      (1-\gamma_\mu)\,U_\mu(x)\,\delta_{y,x+\hat\mu}
+      + (1+\gamma_\mu)\,U_\mu^\dagger(x-\hat\mu)\,\delta_{y,x-\hat\mu}
+    \Bigr].
+  \label{eq:wilson_op}
+\end{equation}
+The doublers acquire a mass of order $1/a$ from the Wilson term and
+decouple in the continuum limit $a\to 0$.
+
+\subsubsection{Operator Structure}
+
+The parameter $\kappa = 1/(2m_0 + 8)$ is the \textbf{hopping parameter}, where
+$m_0$ is the bare quark mass.
+The field lives in colour $\otimes$ spinor space: each site $x$ carries a
+spinor $\psi_\alpha^c(x)$ with colour index $c\in\{1,2,3\}$ and Dirac index
+$\alpha\in\{1,2,3,4\}$.
+
+The matrices $(1 \pm \gamma_\mu)$ are $4\times4$ Hermitian rank-2 projectors:
+\begin{equation}
+  P_\mu^\pm = \tfrac{1}{2}(1\pm\gamma_\mu),
+  \qquad (P_\mu^\pm)^2 = P_\mu^\pm, \qquad
+  P_\mu^+ + P_\mu^- = \mathbf{1}.
+  \label{eq:projectors}
+\end{equation}
+They project out two of the four spinor components before the colour-matrix
+$U_\mu(x)\in\mathrm{SU}(3)$ acts on the colour degree of freedom.
+The matrix representation in the Dirac basis is:
+\begin{equation}
+  \gamma_1 = \begin{pmatrix}0 & 0 & 0 & -i \\ 0 & 0 & -i & 0 \\ 0 & i & 0 & 0 \\ i & 0 & 0 & 0\end{pmatrix},\quad
+  \gamma_4 = \begin{pmatrix}1 & 0 & 0 & 0 \\ 0 & 1 & 0 & 0 \\ 0 & 0 & -1 & 0 \\ 0 & 0 & 0 & -1\end{pmatrix},
+  \quad \text{(similar for }\gamma_2,\gamma_3\text{)}.
+\end{equation}
+Because of the half-projector structure, each hopping direction transfers only
+2 out of 4 spinor components---this \textbf{spin projection trick} halves the
+number of floating-point operations in the SpMV~\cite{Akahoshi2022}.
+
+\subsubsection{Geometrical Structure: Nearest-Neighbour Hopping}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1.15, font=\small]
+  % Draw 2D slice of lattice (x-t plane)
+  \foreach \x in {0,1,2,3,4} {
+    \foreach \t in {0,1,2,3} {
+      \fill[gray!25] (\x,\t) circle (3pt);
+    }
+  }
+  % Highlight center site
+  \fill[blue!70] (2,2) circle (5pt);
+  \node[above right, blue!80!black] at (2,2) {$x$};
+  % Forward links (arrows)
+  \draw[-{Latex[length=3mm]}, thick, red!70!black]
+    (2,2) -- (3,2) node[midway, above] {$U_1(x)$};
+  \draw[-{Latex[length=3mm]}, thick, red!70!black]
+    (2,2) -- (2,3) node[midway, right] {$U_4(x)$};
+  % Backward links (dagger)
+  \draw[-{Latex[length=3mm]}, thick, orange!80!black]
+    (2,2) -- (1,2) node[midway, above] {$U_1^\dagger(x{-}\hat{1})$};
+  \draw[-{Latex[length=3mm]}, thick, orange!80!black]
+    (2,2) -- (2,1) node[midway, right] {$U_4^\dagger(x{-}\hat{4})$};
+  % Neighbour labels
+  \fill[green!60!black] (3,2) circle (4pt);
+  \node[below right] at (3,2) {$x+\hat{1}$};
+  \fill[green!60!black] (2,3) circle (4pt);
+  \node[above right] at (2,3) {$x+\hat{4}$};
+  \fill[orange!70!black] (1,2) circle (4pt);
+  \node[below left] at (1,2) {$x-\hat{1}$};
+  \fill[orange!70!black] (2,1) circle (4pt);
+  \node[below right] at (2,1) {$x-\hat{4}$};
+  % Axes labels
+  \node[below] at (2,0) {};
+  \draw[->] (4.3,0.2) -- (4.8,0.2) node[right] {$\mu=1$};
+  \draw[->] (4.3,0.2) -- (4.3,0.7) node[above] {$\mu=4$};
+  % Caption note
+  \node[align=center, text width=8cm] at (2,-0.6)
+    {(2D slice; full lattice has 4D: $\mu\in\{1,2,3,4\}$, giving 8 neighbours)};
+\end{tikzpicture}
+\caption{Nearest-neighbour hopping of the Wilson operator on a 2D slice of
+the 4D lattice.
+Site $x$ (blue) is connected to its 8 neighbours via forward gauge links
+$U_\mu(x)$ (red) and backward links $U_\mu^\dagger(x-\hat\mu)$ (orange).
+The forward hop carries the projector $(1-\gamma_\mu)$; the backward hop
+carries $(1+\gamma_\mu)$.}
+\label{fig:wilson_hopping}
+\end{figure}
+
+\subsubsection{Hopping Parameter and Critical Mass}
+
+Increasing $\kappa$ corresponds to decreasing quark mass $m_0$.
+There exists a critical value $\kappa_{\mathrm{crit}} \lesssim 1/8$ (shifted from
+the free-field value by gauge interactions) at which the quark becomes
+\textbf{massless} and $D_W$ becomes singular:
+\begin{equation}
+  \kappa(D_W) \;\sim\; \frac{1}{\kappa_{\mathrm{hop}} - \kappa_{\mathrm{crit}}},
+  \qquad \kappa_{\mathrm{hop}} \to \kappa_{\mathrm{crit}}.
+  \label{eq:wilson_condition}
+\end{equation}
+Physical simulations target $\kappa_{\mathrm{hop}}$ close to $\kappa_{\mathrm{crit}}$
+to reproduce light quark masses, making the system inherently ill-conditioned.
+This is the primary numerical challenge that motivates multi-word arithmetic.
+
+\subsubsection{Non-Hermiticity and Solver Choice}
+
+The Wilson operator satisfies $\gamma_5 D_W \gamma_5 = D_W^\dagger$
+(\textbf{$\gamma_5$-Hermiticity}), but $D_W \neq D_W^\dagger$, so
+standard CG is inapplicable.
+Two solver strategies are used:
+\begin{itemize}
+  \item \textbf{BiCGStab} applied directly to $D_W\psi = b$ (non-symmetric):
+        2 SpMV applications of $D_W$ per iteration.
+  \item \textbf{CG} applied to the Hermitian system $(D_W^\dagger D_W)\psi = D_W^\dagger b$:
+        the normal equations, but this squares $\kappa(D_W)$.
+\end{itemize}
+BiCGStab is the standard choice for Wilson fermions in practice.
+
+\subsubsection{Clover (Sheikholeslami--Wohlert) Improvement}
+
+The Wilson term breaks chiral symmetry and introduces $O(a)$ discretization
+errors.
+The Clover improvement~\cite{Akahoshi2022} adds a second term:
+\begin{equation}
+  D_{\mathrm{clover}}(x,x) = \delta_{x,x} - \tfrac{i}{4}\,c_{SW}\,\kappa
+    \sum_{\mu<\nu} \sigma_{\mu\nu} F_{\mu\nu}(x),
+  \label{eq:clover}
+\end{equation}
+where $\sigma_{\mu\nu} = \tfrac{i}{2}[\gamma_\mu,\gamma_\nu]$ and $F_{\mu\nu}$
+is the clover-leaf approximation to the field strength tensor.
+This removes $O(a)$ errors, leaving only $O(a^2)$ artifacts.
+The Clover term is \textbf{diagonal in site index}---it does not add new
+off-diagonal entries---so it modifies the diagonal block $D_{ee/oo}$ in
+even-odd preconditioning (Section~\ref{sec:evenodd}) without changing the
+hopping structure.
+
+% ----------------------------------------------------------
+\subsection{Domain-Wall Fermion Operator}
+\label{sec:dwf}
+
+\subsubsection{Motivation: Preserving Chiral Symmetry}
+
+Chiral symmetry---the invariance of massless QCD under independent phase
+rotations of left- and right-handed quark fields---plays a fundamental role
+in hadron physics.
+The Wilson term explicitly breaks chiral symmetry, leading to unwanted
+additive mass renormalizations.
+Domain-Wall Fermions~\cite{Kaplan1992,Shamir1993} recover chiral symmetry
+on the lattice by a geometric construction: the quark field propagates
+in a \textbf{5-dimensional slab}, and chiral modes emerge as
+zero-modes \emph{trapped on the 4D boundaries}.
+
+\subsubsection{The 5D Operator: Shamir Variant}
+
+The DWF operator extends the 4D lattice with a 5th direction $s \in \{0,\ldots,L_s-1\}$,
+giving a total field space of dimension $N_c \cdot N_d \cdot V \cdot L_s$:
+\begin{equation}
+  D_{\mathrm{DW}}(x,s;\,y,t)
+  = D_W^{(4)}(x,y)\,\delta_{s,t}
+  + \delta_{x,y}\,D_s(s,t),
+  \label{eq:dwf_op}
+\end{equation}
+where $D_W^{(4)}$ is the 4D Wilson hopping operator (applied uniformly across
+all $s$-slices), and $D_s$ governs propagation in the 5th direction.
+In the Shamir formulation~\cite{Shamir1993}:
+\begin{equation}
+  D_s(s,t) = \begin{cases}
+  P_- \,\delta_{t,s+1} + P_+ \,\delta_{t,s-1} & 0 < s < L_s-1 \\
+  -m_f P_- \,\delta_{t,0} + P_+ \,\delta_{t,1} & s = 0 \\
+  P_- \,\delta_{t,L_s-2} - m_f P_+ \,\delta_{t,L_s-1} & s = L_s-1
+  \end{cases}
+  \label{eq:ds_matrix}
+\end{equation}
+where $P_\pm = \tfrac{1}{2}(1\pm\gamma_5)$ are \textbf{chiral projectors} and
+$m_f$ is the bare quark mass ($m_f \to 0$ for massless quarks).
+The bulk coupling moves right-handed modes ($P_-$ in the $+s$ direction)
+and left-handed modes ($P_+$ in the $-s$ direction), trapping them
+on opposite walls.
+
+\begin{figure}[H]
+\centering
+% Slab positions: s=0->x=0, s=1->x=1.55, ... s=5->x=7.75
+% Slab width=1.3, height H=1.6
+\begin{tikzpicture}[scale=1.0, font=\small]
+  % Slabs s=0..5
+  \foreach \xpos/\slabel in
+    {0.00/0, 1.55/1, 3.10/2, 4.65/3, 6.20/4, 7.75/5} {
+    \draw[fill=blue!8, draw=blue!40] (\xpos,0) rectangle (\xpos+1.3,1.6);
+    \foreach \ii in {0.25, 0.65, 1.05} {
+      \foreach \jj in {0.37, 0.80, 1.23} {
+        \fill[blue!50] (\xpos+\ii, \jj) circle (1.2pt);
+      }
+    }
+    \node[below] at (\xpos+0.65, 0) {\small $s{=}\slabel$};
+  }
+  % 5th-dim arrows between slabs (hardcoded xfrom = xpos+1.3, xto = xpos+1.55)
+  \foreach \xf/\xt in
+    {1.30/1.55, 2.85/3.10, 4.40/4.65, 5.95/6.20, 7.50/7.75} {
+    \draw[-{Latex[length=2.5mm]}, thick, red!60!black]
+      (\xf, 1.1) -- (\xt, 1.1) node[midway, above=1pt, font=\tiny] {$P_-$};
+    \draw[-{Latex[length=2.5mm]}, thick, green!50!black]
+      (\xt, 0.5) -- (\xf, 0.5) node[midway, below=1pt, font=\tiny] {$P_+$};
+  }
+  % Left boundary wall highlight
+  \draw[very thick, red!80!black] (0,0) rectangle (1.3,1.6);
+  \node[below=8pt, red!80!black, font=\bfseries\small] at (0.65, 0) {};
+  \node[left=3pt, red!80!black] at (0, 0.8) {$\psi_L$};
+  % Right boundary wall highlight
+  \draw[very thick, orange!80!black] (7.75,0) rectangle (9.05,1.6);
+  \node[right=3pt, orange!80!black] at (9.05, 0.8) {$\psi_R$};
+  % 5th-dim axis
+  \draw[->] (0,-0.55) -- (9.1,-0.55) node[right] {5th dim $s$};
+  % Physical quark annotation
+  \node[align=center, font=\small] at (4.5, 2.1)
+    {Physical quark: $q = P_-\Psi(s{=}0) + P_+\Psi(s{=}L_s{-}1)$};
+  \draw[->, dashed, gray] (3.2, 1.95) -- (0.65, 1.65);
+  \draw[->, dashed, gray] (5.6, 1.95) -- (8.4,  1.65);
+\end{tikzpicture}
+\caption{Domain-Wall Fermion structure.
+The 4D lattice is extended to $L_s$ slices in the 5th direction.
+Right-handed modes ($P_-$, red arrows) propagate toward $s=0$;
+left-handed modes ($P_+$, green arrows) propagate toward $s=L_s-1$.
+They are exponentially localised on opposite walls with amplitude
+$\sim e^{-\alpha s}$ (left wall) and $\sim e^{-\alpha(L_s-1-s)}$ (right wall).
+The physical 4D quark propagator is obtained by projecting the solution
+onto the boundary walls.}
+\label{fig:dwf_structure}
+\end{figure}
+
+\subsubsection{Physical Solution Extraction}
+
+The 5D system is solved for the full field $\Psi(x,s)$, and the
+physical quark propagator is obtained by the boundary projections:
+\begin{equation}
+  q(x) = P_-\,\Psi(x,0) + P_+\,\Psi(x,L_s-1),
+  \qquad
+  \bar{q}(x) = \bar\Psi(x,0)\,P_+ + \bar\Psi(x,L_s-1)\,P_-.
+\end{equation}
+The chiral symmetry breaking is residual:
+\begin{equation}
+  m_{\mathrm{res}} \;\sim\; e^{-\alpha L_s},
+\end{equation}
+where $\alpha > 0$ depends on the gap in the 5D spectrum.
+Increasing $L_s$ exponentially suppresses the explicit chiral symmetry
+breaking, at the cost of an $L_s$-fold increase in computational expense.
+
+\subsubsection{Solver: CGNE and the Squared Condition Number}
+
+The DWF operator is $\gamma_5$-Hermitian in a generalised sense, but not
+symmetric positive-definite.
+The standard approach applies \textbf{CGNE} (CG on the Normal Equations):
+\begin{equation}
+  D_{\mathrm{DW}}^\dagger D_{\mathrm{DW}}\, x = D_{\mathrm{DW}}^\dagger b.
+  \label{eq:normal_eq}
+\end{equation}
+The matrix $A = D_{\mathrm{DW}}^\dagger D_{\mathrm{DW}}$ is SPD with condition number:
+\begin{equation}
+  \kappa(A) = \kappa(D_{\mathrm{DW}}^\dagger D_{\mathrm{DW}})
+  = \kappa(D_{\mathrm{DW}})^2.
+  \label{eq:kappa_squared}
+\end{equation}
+This squaring is the central numerical difficulty: near the chiral limit,
+$\kappa(D_{\mathrm{DW}}) \sim 10^6$--$10^{12}$, so
+$\kappa(A) \sim 10^{12}$--$10^{24}$---far beyond what FP64 can handle.
+
+\paragraph{Why DWF is harder than Wilson.}
+Table~\ref{tab:dwf_vs_wilson} contrasts the two settings. Both the squared
+condition number and the $L_s$-fold operator cost make DWF$+$CGNE the primary
+target for QDW/QTW arithmetic.
+
+\begin{table}[H]
+\centering
+\caption{Numerical cost contrast between Wilson and DWF.}
+\label{tab:dwf_vs_wilson}
+\begin{tabular}{lll}
+\toprule
+ & \textbf{Wilson + BiCGStab} & \textbf{DWF + CGNE} \\
+\midrule
+Matrix condition & $\kappa(D_W)$ & $\kappa(D_W)^2$ \\
+SpMV per iter   & 2 ($D_W$ only) & 2 ($D_{\mathrm{DW}}$ and $D_{\mathrm{DW}}^\dagger$) \\
+Slab cost       & $V$ sites      & $L_s \cdot V$ sites \\
+Total overhead  & $1\times$ (baseline) & $\sim L_s \times \kappa$-amplified \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{M\"{o}bius Domain-Wall Fermions}
+
+The M\"{o}bius variant~\cite{Brower2012} replaces the Shamir kernel
+with a rational approximation to the sign function:
+\begin{equation}
+  D_{\mathrm{M\ddot{o}b}}^{5D} = \frac{D_{\mathrm{DW}}(\omega_n)}{1+D_{\mathrm{DW}}(\omega_n)},
+\end{equation}
+where $\omega_n$ are optimised coefficients.
+This achieves the same chiral accuracy as Shamir DWF with a smaller $L_s$,
+reducing computational cost while maintaining the 5D structure and CGNE solver.
+Related work from this group~\cite{Chen2026} further modifies the 5D coupling
+$D_s$ to improve the condition number of the normal equations while leaving the
+4D physical solution unchanged.
+
+% ----------------------------------------------------------
+\subsection{Even-Odd (Checkerboard) Preconditioning}
+\label{sec:evenodd}
+
+Both Wilson and DWF operators can be substantially accelerated by
+\textbf{even-odd preconditioning} (checkerboard decomposition), which
+reduces the effective matrix size by a factor of 2.
+
+\subsubsection{Site Decomposition}
+
+Lattice sites are partitioned into \textbf{even} and \textbf{odd} sublattices
+by site coordinate parity:
+\begin{equation}
+  \text{even}: (x_0+x_1+x_2+x_3) \bmod 2 = 0, \qquad
+  \text{odd}:  (x_0+x_1+x_2+x_3) \bmod 2 = 1.
+\end{equation}
+Since the hopping term only connects nearest neighbours, the Wilson
+operator has a block structure:
+\begin{equation}
+  D_W =
+  \begin{pmatrix}
+    D_{ee} & D_{eo} \\
+    D_{oe} & D_{oo}
+  \end{pmatrix},
+  \label{eq:block_D}
+\end{equation}
+where $D_{ee}$ and $D_{oo}$ are purely diagonal (mass terms, no hopping),
+and $D_{eo}$, $D_{oe}$ are the off-diagonal hopping terms.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.72, font=\small]
+  % Draw 4x4 checkerboard (even = blue, odd = orange)
+  % Even squares (x+y even)
+  \foreach \x/\y in {0/0,0/2,1/1,1/3,2/0,2/2,3/1,3/3} {
+    \draw[fill=blue!25, draw=blue!60] (\x,\y) rectangle (\x+1,\y+1);
+    \fill[blue!70] (\x+0.5,\y+0.5) circle (4pt);
+  }
+  % Odd squares (x+y odd)
+  \foreach \x/\y in {0/1,0/3,1/0,1/2,2/1,2/3,3/0,3/2} {
+    \draw[fill=orange!25, draw=orange!60] (\x,\y) rectangle (\x+1,\y+1);
+    \fill[orange!70] (\x+0.5,\y+0.5) circle (4pt);
+  }
+  % Hopping arrow: even -> odd
+  \draw[-{Latex[length=2.5mm]}, thick, red!70!black]
+    (0.5,0.5) -- (1.5,0.5);
+  \draw[-{Latex[length=2.5mm]}, thick, red!70!black]
+    (0.5,0.5) -- (0.5,1.5);
+  % Labels
+  \node[above] at (2,4.2) {\textbf{Even-Odd (Checkerboard) Decomposition}};
+  \node[below] at (0.5, -0.2) {\color{blue!70!black}E};
+  \node[below] at (1.5, -0.2) {\color{orange!70!black}O};
+  \node[below] at (2.5, -0.2) {\color{blue!70!black}E};
+  \node[below] at (3.5, -0.2) {\color{orange!70!black}O};
+  % Legend
+  \fill[blue!25, draw=blue!60] (5.0,2.8) rectangle (5.6,3.4);
+  \fill[blue!70] (5.3, 3.1) circle (3.5pt);
+  \node[right] at (5.7, 3.1) {Even site ($\sum x_i$ even)};
+  \fill[orange!25, draw=orange!60] (5.0,1.8) rectangle (5.6,2.4);
+  \fill[orange!70] (5.3, 2.1) circle (3.5pt);
+  \node[right] at (5.7, 2.1) {Odd site ($\sum x_i$ odd)};
+  % Hopping note
+  \node[right, align=left, text width=4.5cm] at (5.0, 0.9)
+    {\small Hopping only connects\\E $\leftrightarrow$ O neighbours\\($D_{eo}$, $D_{oe}$)};
+  % Size annotation
+  \draw[decorate, decoration={brace,amplitude=4pt}] (-0.1,0) -- (-0.1,4)
+    node[midway, left=4pt] {$V$ sites};
+  \draw[{Latex[length=2mm]}-{Latex[length=2mm]}, dashed, gray] (4.2,0) -- (4.2,4)
+    node[midway, right=2pt, gray] {\small $V/2$ each};
+\end{tikzpicture}
+\caption{Even-odd (checkerboard) decomposition of the lattice.
+Blue sites (even: $\sum_\mu x_\mu$ even) and orange sites (odd) form two sublattices.
+Nearest-neighbour hopping only connects even $\leftrightarrow$ odd sites, giving the
+block off-diagonal structure~\eqref{eq:block_D}.
+Each sublattice contains $V/2$ sites, and the Schur-complement system~\eqref{eq:schur}
+acts only on the even sublattice.}
+\label{fig:checkerboard}
+\end{figure}
+
+\subsubsection{Schur Complement}
+
+Applying the Schur decomposition to~\eqref{eq:block_D}:
+\begin{equation}
+  \hat{D} \;=\; D_{ee} - D_{eo}\,D_{oo}^{-1}\,D_{oe}.
+  \label{eq:schur}
+\end{equation}
+Since $D_{oo}$ is diagonal, $D_{oo}^{-1}$ is trivially computed in $O(V/2)$.
+
+\subsubsection{Reduced System}
+
+The full solve $D_W \psi = b$ reduces to solving the \emph{half-size} system:
+\begin{equation}
+  \hat{D}\,\psi_e = b_e - D_{eo}D_{oo}^{-1}b_o \;\eqqcolon\; \hat{b}_e,
+  \label{eq:reduced}
+\end{equation}
+followed by the trivial recovery of the odd-site solution:
+\begin{equation}
+  \psi_o = D_{oo}^{-1}(b_o - D_{oe}\,\psi_e).
+\end{equation}
+
+% ----------------------------------------------------------
+\subsection{The Bridge++ Code Set}
+\label{sec:bridgepp}
+
+All numerical work is based on \textbf{Bridge++}~\cite{Bridge,Akahoshi2022},
+a general-purpose Lattice QCD code set designed for portability, readability,
+and performance across diverse HPC architectures.
+
+\subsubsection{Design and GPU Backends}
+
+Bridge++ is written in C++ with an object-oriented architecture.
+Version 2.0~\cite{Akahoshi2022} introduced machine-dependent optimization
+modules enabling flexible data layouts, SIMD vectorization, and GPU offloading.
+Two GPU backends are available:
+\begin{itemize}
+  \item \textbf{OpenACC/OpenMP offload:} directive-based, portable across
+        NVIDIA and AMD GPUs.
+  \item \textbf{CUDA:} API-based, enables detailed hardware tuning.
+\end{itemize}
+A performance comparison of the two approaches is reported in~\cite{Chen2025}:
+CUDA achieves higher peak performance; OpenACC approaches it at large volumes.
+
+\subsubsection{Data Layout: AoSoA with Packing Width NWP}
+
+The spinor field uses an \textbf{Array-of-Structures-of-Arrays (AoSoA)} layout
+with packing width $\NWP = 32$ (matching the NVIDIA warp size):
+\begin{equation}
+  \mathrm{index}(\mathtt{ri},\, c,\, d,\, s,\, \mathtt{site})
+  = (\mathtt{site}\;\%\;\NWP)
+  + \NWP \times
+  \bigl(\mathtt{ri} + 2(c + \Nc(d + \Nd(s + \Ns\,(\mathtt{site}/\NWP))))\bigr),
+  \label{eq:bridge_index}
+\end{equation}
+where $\mathtt{ri} \in \{0,1\}$ indexes real/imaginary parts.
+The $\NWP$ innermost sites form the warp unit; all 32 threads access
+consecutive memory locations in a single coalesced transaction.
+This layout is the starting point for DW/TW spinor extensions
+in Section~\ref{sec:layout}.
+
+\subsubsection{Available Solvers}
+
+\begin{table}[H]
+\centering
+\caption{Iterative solvers in Bridge++ relevant to this work.}
+\begin{tabular}{llll}
+\toprule
+\textbf{Solver} & \textbf{Applicable to} & \textbf{SpMV/iter} & \textbf{Notes} \\
+\midrule
+CG              & SPD matrices only       & 1  & Inapplicable to $D_W$ or $D_{\mathrm{DW}}$ \\
+BiCGStab        & General non-Hermitian   & 2  & Standard for Wilson fermions \\
+CGNE            & Non-SPD via $D^\dagger D$ & 2  & Standard for DWF \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Related Precision Work on Bridge++}
+
+Two companion papers directly motivate the present work.
+Kanamori et al.~\cite{Kanamori2026} implement FP16 mixed-precision BiCGStab
+for Wilson fermions on the A64FX (Fugaku), achieving near-FP64 convergence
+with a per-iteration rescaling strategy analogous to QDW/QTW normalization.
+Chen et al.~\cite{Chen2026} implement Neff's modified DWF operator~\cite{Neff2015}
+in Bridge++, which algebraically reduces $\kappa(D_{\mathrm{DW}}^\dagger D_{\mathrm{DW}})$
+and complements the arithmetic precision increase provided by QDW/QTW.
+
+
+% ##########################################################
+% CHAPTER 2: MULTI-WORD ARITHMETIC
 % ##########################################################
 
 % ==========================================================
 \section{Multi-Word Floating-Point Arithmetic}
 \label{sec:multiword}
 
-This chapter provides a self-contained derivation of Double-Word (DW) and
-Triple-Word (TW) floating-point arithmetic and their Quasi variants (QDW,
-QTW).
-The motivation is the need for precision beyond IEEE 754 FP64 in
-ill-conditioned linear systems, without resorting to software arbitrary-precision
-libraries (e.g.\ MPFR) that are orders of magnitude slower.
+The Domain-Wall solve of Chapter~\ref{sec:lqcd} squares an already large
+condition number (Eq.~\eqref{eq:kappa_squared}), so the attainable accuracy is
+limited by the rounding unit of the arithmetic, not by the algorithm. This
+chapter provides the tool to lower that unit: a self-contained derivation of
+Double-Word (DW) and Triple-Word (TW) floating-point arithmetic and their Quasi
+variants (QDW, QTW). The motivation is precisely the need for precision beyond
+IEEE 754 FP64 in such ill-conditioned linear systems, without resorting to
+software arbitrary-precision libraries (e.g.\ MPFR) that are orders of magnitude
+slower.
 
 % ----------------------------------------------------------
 \subsection{Motivation and Historical Background}
@@ -667,530 +1194,6 @@ QTW   & $\approx 150$ & $O(\uu^3)$  & $\approx 2.4\times$  & \textbf{Use if QDW 
 
 
 % ##########################################################
-% CHAPTER 2: LATTICE QCD REVIEW
-% ##########################################################
-
-% ==========================================================
-\section{Lattice QCD: Background and Related Work}
-\label{sec:lqcd}
-
-This chapter reviews the Lattice QCD setting that motivates the application
-of multi-word arithmetic.
-Section~\ref{sec:quark} introduces the quark propagator problem.
-Sections~\ref{sec:wilson} and~\ref{sec:dwf} give detailed descriptions of the
-Wilson fermion operator and Domain-Wall fermion operator, the two discretizations
-studied in this work.
-Section~\ref{sec:evenodd} covers even-odd preconditioning.
-Section~\ref{sec:bridgepp} describes the Bridge++ code set used for implementation.
-
-% ----------------------------------------------------------
-\subsection{The Quark Propagator Problem}
-\label{sec:quark}
-
-Lattice Quantum Chromodynamics (Lattice QCD) is a non-perturbative,
-first-principles approach to calculating the low-energy properties of
-the strong interaction~\cite{Wilson1974}.
-Space-time is discretized onto a hypercubic lattice with spacing $a$,
-quark fields $\psi(x)$ residing on sites, and $\mathrm{SU}(3)$ gauge
-links $U_\mu(x)$ on the directed bonds between neighbouring sites.
-
-The central computational task---accounting for 70--90\% of total simulation
-time---is solving the \textbf{quark propagator equation}:
-\begin{equation}
-  D\,\psi = b,
-  \label{eq:quark_eq}
-\end{equation}
-where $D$ is the \textbf{Dirac operator} encoding quark mass and gauge coupling.
-The operator $D$ is large and sparse:
-\begin{itemize}
-  \item \textbf{Dimension:} $(N_c \cdot N_d \cdot V) \times (N_c \cdot N_d \cdot V)$,
-        where $N_c = 3$, $N_d = 4$, $V = N_x N_y N_z N_t \sim 10^6$--$10^7$.
-  \item \textbf{Sparsity:} each site couples only to its $2d = 8$ nearest
-        neighbours in 4D (hopping term); $D$ is \emph{never} assembled---it
-        is applied on-the-fly via gauge links.
-  \item \textbf{Ill-conditioning:} $\kappa(D)$ diverges as quark mass approaches
-        the critical (chiral) limit.
-\end{itemize}
-
-% ----------------------------------------------------------
-\subsection{Wilson Fermion Operator}
-\label{sec:wilson}
-
-\subsubsection{Lattice Discretization and the Doubling Problem}
-
-In the na\"{i}ve lattice discretization of the Dirac equation, replacing
-continuum derivatives with symmetric finite differences introduces
-\textbf{16 degenerate fermion species} (doublers) instead of the intended one.
-Wilson~\cite{Wilson1974} eliminated the doublers by adding a
-dimension-5 irrelevant operator---the \textbf{Wilson term}---proportional
-to the lattice Laplacian:
-\begin{equation}
-  D_W(x,y) = \delta_{x,y}
-  - \kappa \sum_{\mu=1}^{4}
-    \Bigl[
-      (1-\gamma_\mu)\,U_\mu(x)\,\delta_{y,x+\hat\mu}
-      + (1+\gamma_\mu)\,U_\mu^\dagger(x-\hat\mu)\,\delta_{y,x-\hat\mu}
-    \Bigr].
-  \label{eq:wilson_op}
-\end{equation}
-The doublers acquire a mass of order $1/a$ from the Wilson term and
-decouple in the continuum limit $a\to 0$.
-
-\subsubsection{Operator Structure}
-
-The parameter $\kappa = 1/(2m_0 + 8)$ is the \textbf{hopping parameter}, where
-$m_0$ is the bare quark mass.
-The field lives in colour $\otimes$ spinor space: each site $x$ carries a
-spinor $\psi_\alpha^c(x)$ with colour index $c\in\{1,2,3\}$ and Dirac index
-$\alpha\in\{1,2,3,4\}$.
-
-The matrices $(1 \pm \gamma_\mu)$ are $4\times4$ Hermitian rank-2 projectors:
-\begin{equation}
-  P_\mu^\pm = \tfrac{1}{2}(1\pm\gamma_\mu),
-  \qquad (P_\mu^\pm)^2 = P_\mu^\pm, \qquad
-  P_\mu^+ + P_\mu^- = \mathbf{1}.
-  \label{eq:projectors}
-\end{equation}
-They project out two of the four spinor components before the colour-matrix
-$U_\mu(x)\in\mathrm{SU}(3)$ acts on the colour degree of freedom.
-The matrix representation in the Dirac basis is:
-\begin{equation}
-  \gamma_1 = \begin{pmatrix}0 & 0 & 0 & -i \\ 0 & 0 & -i & 0 \\ 0 & i & 0 & 0 \\ i & 0 & 0 & 0\end{pmatrix},\quad
-  \gamma_4 = \begin{pmatrix}1 & 0 & 0 & 0 \\ 0 & 1 & 0 & 0 \\ 0 & 0 & -1 & 0 \\ 0 & 0 & 0 & -1\end{pmatrix},
-  \quad \text{(similar for }\gamma_2,\gamma_3\text{)}.
-\end{equation}
-Because of the half-projector structure, each hopping direction transfers only
-2 out of 4 spinor components---this \textbf{spin projection trick} halves the
-number of floating-point operations in the SpMV~\cite{Akahoshi2022}.
-
-\subsubsection{Geometrical Structure: Nearest-Neighbour Hopping}
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[scale=1.15, font=\small]
-  % Draw 2D slice of lattice (x-t plane)
-  \foreach \x in {0,1,2,3,4} {
-    \foreach \t in {0,1,2,3} {
-      \fill[gray!25] (\x,\t) circle (3pt);
-    }
-  }
-  % Highlight center site
-  \fill[blue!70] (2,2) circle (5pt);
-  \node[above right, blue!80!black] at (2,2) {$x$};
-  % Forward links (arrows)
-  \draw[-{Latex[length=3mm]}, thick, red!70!black]
-    (2,2) -- (3,2) node[midway, above] {$U_1(x)$};
-  \draw[-{Latex[length=3mm]}, thick, red!70!black]
-    (2,2) -- (2,3) node[midway, right] {$U_4(x)$};
-  % Backward links (dagger)
-  \draw[-{Latex[length=3mm]}, thick, orange!80!black]
-    (2,2) -- (1,2) node[midway, above] {$U_1^\dagger(x{-}\hat{1})$};
-  \draw[-{Latex[length=3mm]}, thick, orange!80!black]
-    (2,2) -- (2,1) node[midway, right] {$U_4^\dagger(x{-}\hat{4})$};
-  % Neighbour labels
-  \fill[green!60!black] (3,2) circle (4pt);
-  \node[below right] at (3,2) {$x+\hat{1}$};
-  \fill[green!60!black] (2,3) circle (4pt);
-  \node[above right] at (2,3) {$x+\hat{4}$};
-  \fill[orange!70!black] (1,2) circle (4pt);
-  \node[below left] at (1,2) {$x-\hat{1}$};
-  \fill[orange!70!black] (2,1) circle (4pt);
-  \node[below right] at (2,1) {$x-\hat{4}$};
-  % Axes labels
-  \node[below] at (2,0) {};
-  \draw[->] (4.3,0.2) -- (4.8,0.2) node[right] {$\mu=1$};
-  \draw[->] (4.3,0.2) -- (4.3,0.7) node[above] {$\mu=4$};
-  % Caption note
-  \node[align=center, text width=8cm] at (2,-0.6)
-    {(2D slice; full lattice has 4D: $\mu\in\{1,2,3,4\}$, giving 8 neighbours)};
-\end{tikzpicture}
-\caption{Nearest-neighbour hopping of the Wilson operator on a 2D slice of
-the 4D lattice.
-Site $x$ (blue) is connected to its 8 neighbours via forward gauge links
-$U_\mu(x)$ (red) and backward links $U_\mu^\dagger(x-\hat\mu)$ (orange).
-The forward hop carries the projector $(1-\gamma_\mu)$; the backward hop
-carries $(1+\gamma_\mu)$.}
-\label{fig:wilson_hopping}
-\end{figure}
-
-\subsubsection{Hopping Parameter and Critical Mass}
-
-Increasing $\kappa$ corresponds to decreasing quark mass $m_0$.
-There exists a critical value $\kappa_{\mathrm{crit}} \lesssim 1/8$ (shifted from
-the free-field value by gauge interactions) at which the quark becomes
-\textbf{massless} and $D_W$ becomes singular:
-\begin{equation}
-  \kappa(D_W) \;\sim\; \frac{1}{\kappa_{\mathrm{hop}} - \kappa_{\mathrm{crit}}},
-  \qquad \kappa_{\mathrm{hop}} \to \kappa_{\mathrm{crit}}.
-  \label{eq:wilson_condition}
-\end{equation}
-Physical simulations target $\kappa_{\mathrm{hop}}$ close to $\kappa_{\mathrm{crit}}$
-to reproduce light quark masses, making the system inherently ill-conditioned.
-This is the primary numerical challenge that motivates multi-word arithmetic.
-
-\subsubsection{Non-Hermiticity and Solver Choice}
-
-The Wilson operator satisfies $\gamma_5 D_W \gamma_5 = D_W^\dagger$
-(\textbf{$\gamma_5$-Hermiticity}), but $D_W \neq D_W^\dagger$, so
-standard CG is inapplicable.
-Two solver strategies are used:
-\begin{itemize}
-  \item \textbf{BiCGStab} applied directly to $D_W\psi = b$ (non-symmetric):
-        2 SpMV applications of $D_W$ per iteration.
-  \item \textbf{CG} applied to the Hermitian system $(D_W^\dagger D_W)\psi = D_W^\dagger b$:
-        the normal equations, but this squares $\kappa(D_W)$.
-\end{itemize}
-BiCGStab is the standard choice for Wilson fermions in practice.
-
-\subsubsection{Clover (Sheikholeslami--Wohlert) Improvement}
-
-The Wilson term breaks chiral symmetry and introduces $O(a)$ discretization
-errors.
-The Clover improvement~\cite{Akahoshi2022} adds a second term:
-\begin{equation}
-  D_{\mathrm{clover}}(x,x) = \delta_{x,x} - \tfrac{i}{4}\,c_{SW}\,\kappa
-    \sum_{\mu<\nu} \sigma_{\mu\nu} F_{\mu\nu}(x),
-  \label{eq:clover}
-\end{equation}
-where $\sigma_{\mu\nu} = \tfrac{i}{2}[\gamma_\mu,\gamma_\nu]$ and $F_{\mu\nu}$
-is the clover-leaf approximation to the field strength tensor.
-This removes $O(a)$ errors, leaving only $O(a^2)$ artifacts.
-The Clover term is \textbf{diagonal in site index}---it does not add new
-off-diagonal entries---so it modifies the diagonal block $D_{ee/oo}$ in
-even-odd preconditioning (Section~\ref{sec:evenodd}) without changing the
-hopping structure.
-
-% ----------------------------------------------------------
-\subsection{Domain-Wall Fermion Operator}
-\label{sec:dwf}
-
-\subsubsection{Motivation: Preserving Chiral Symmetry}
-
-Chiral symmetry---the invariance of massless QCD under independent phase
-rotations of left- and right-handed quark fields---plays a fundamental role
-in hadron physics.
-The Wilson term explicitly breaks chiral symmetry, leading to unwanted
-additive mass renormalizations.
-Domain-Wall Fermions~\cite{Kaplan1992,Shamir1993} recover chiral symmetry
-on the lattice by a geometric construction: the quark field propagates
-in a \textbf{5-dimensional slab}, and chiral modes emerge as
-zero-modes \emph{trapped on the 4D boundaries}.
-
-\subsubsection{The 5D Operator: Shamir Variant}
-
-The DWF operator extends the 4D lattice with a 5th direction $s \in \{0,\ldots,L_s-1\}$,
-giving a total field space of dimension $N_c \cdot N_d \cdot V \cdot L_s$:
-\begin{equation}
-  D_{\mathrm{DW}}(x,s;\,y,t)
-  = D_W^{(4)}(x,y)\,\delta_{s,t}
-  + \delta_{x,y}\,D_s(s,t),
-  \label{eq:dwf_op}
-\end{equation}
-where $D_W^{(4)}$ is the 4D Wilson hopping operator (applied uniformly across
-all $s$-slices), and $D_s$ governs propagation in the 5th direction.
-In the Shamir formulation~\cite{Shamir1993}:
-\begin{equation}
-  D_s(s,t) = \begin{cases}
-  P_- \,\delta_{t,s+1} + P_+ \,\delta_{t,s-1} & 0 < s < L_s-1 \\
-  -m_f P_- \,\delta_{t,0} + P_+ \,\delta_{t,1} & s = 0 \\
-  P_- \,\delta_{t,L_s-2} - m_f P_+ \,\delta_{t,L_s-1} & s = L_s-1
-  \end{cases}
-  \label{eq:ds_matrix}
-\end{equation}
-where $P_\pm = \tfrac{1}{2}(1\pm\gamma_5)$ are \textbf{chiral projectors} and
-$m_f$ is the bare quark mass ($m_f \to 0$ for massless quarks).
-The bulk coupling moves right-handed modes ($P_-$ in the $+s$ direction)
-and left-handed modes ($P_+$ in the $-s$ direction), trapping them
-on opposite walls.
-
-\begin{figure}[H]
-\centering
-% Slab positions: s=0->x=0, s=1->x=1.55, ... s=5->x=7.75
-% Slab width=1.3, height H=1.6
-\begin{tikzpicture}[scale=1.0, font=\small]
-  % Slabs s=0..5
-  \foreach \xpos/\slabel in
-    {0.00/0, 1.55/1, 3.10/2, 4.65/3, 6.20/4, 7.75/5} {
-    \draw[fill=blue!8, draw=blue!40] (\xpos,0) rectangle (\xpos+1.3,1.6);
-    \foreach \ii in {0.25, 0.65, 1.05} {
-      \foreach \jj in {0.37, 0.80, 1.23} {
-        \fill[blue!50] (\xpos+\ii, \jj) circle (1.2pt);
-      }
-    }
-    \node[below] at (\xpos+0.65, 0) {\small $s{=}\slabel$};
-  }
-  % 5th-dim arrows between slabs (hardcoded xfrom = xpos+1.3, xto = xpos+1.55)
-  \foreach \xf/\xt in
-    {1.30/1.55, 2.85/3.10, 4.40/4.65, 5.95/6.20, 7.50/7.75} {
-    \draw[-{Latex[length=2.5mm]}, thick, red!60!black]
-      (\xf, 1.1) -- (\xt, 1.1) node[midway, above=1pt, font=\tiny] {$P_-$};
-    \draw[-{Latex[length=2.5mm]}, thick, green!50!black]
-      (\xt, 0.5) -- (\xf, 0.5) node[midway, below=1pt, font=\tiny] {$P_+$};
-  }
-  % Left boundary wall highlight
-  \draw[very thick, red!80!black] (0,0) rectangle (1.3,1.6);
-  \node[below=8pt, red!80!black, font=\bfseries\small] at (0.65, 0) {};
-  \node[left=3pt, red!80!black] at (0, 0.8) {$\psi_L$};
-  % Right boundary wall highlight
-  \draw[very thick, orange!80!black] (7.75,0) rectangle (9.05,1.6);
-  \node[right=3pt, orange!80!black] at (9.05, 0.8) {$\psi_R$};
-  % 5th-dim axis
-  \draw[->] (0,-0.55) -- (9.1,-0.55) node[right] {5th dim $s$};
-  % Physical quark annotation
-  \node[align=center, font=\small] at (4.5, 2.1)
-    {Physical quark: $q = P_-\Psi(s{=}0) + P_+\Psi(s{=}L_s{-}1)$};
-  \draw[->, dashed, gray] (3.2, 1.95) -- (0.65, 1.65);
-  \draw[->, dashed, gray] (5.6, 1.95) -- (8.4,  1.65);
-\end{tikzpicture}
-\caption{Domain-Wall Fermion structure.
-The 4D lattice is extended to $L_s$ slices in the 5th direction.
-Right-handed modes ($P_-$, red arrows) propagate toward $s=0$;
-left-handed modes ($P_+$, green arrows) propagate toward $s=L_s-1$.
-They are exponentially localised on opposite walls with amplitude
-$\sim e^{-\alpha s}$ (left wall) and $\sim e^{-\alpha(L_s-1-s)}$ (right wall).
-The physical 4D quark propagator is obtained by projecting the solution
-onto the boundary walls.}
-\label{fig:dwf_structure}
-\end{figure}
-
-\subsubsection{Physical Solution Extraction}
-
-The 5D system is solved for the full field $\Psi(x,s)$, and the
-physical quark propagator is obtained by the boundary projections:
-\begin{equation}
-  q(x) = P_-\,\Psi(x,0) + P_+\,\Psi(x,L_s-1),
-  \qquad
-  \bar{q}(x) = \bar\Psi(x,0)\,P_+ + \bar\Psi(x,L_s-1)\,P_-.
-\end{equation}
-The chiral symmetry breaking is residual:
-\begin{equation}
-  m_{\mathrm{res}} \;\sim\; e^{-\alpha L_s},
-\end{equation}
-where $\alpha > 0$ depends on the gap in the 5D spectrum.
-Increasing $L_s$ exponentially suppresses the explicit chiral symmetry
-breaking, at the cost of an $L_s$-fold increase in computational expense.
-
-\subsubsection{Solver: CGNE and the Squared Condition Number}
-
-The DWF operator is $\gamma_5$-Hermitian in a generalised sense, but not
-symmetric positive-definite.
-The standard approach applies \textbf{CGNE} (CG on the Normal Equations):
-\begin{equation}
-  D_{\mathrm{DW}}^\dagger D_{\mathrm{DW}}\, x = D_{\mathrm{DW}}^\dagger b.
-  \label{eq:normal_eq}
-\end{equation}
-The matrix $A = D_{\mathrm{DW}}^\dagger D_{\mathrm{DW}}$ is SPD with condition number:
-\begin{equation}
-  \kappa(A) = \kappa(D_{\mathrm{DW}}^\dagger D_{\mathrm{DW}})
-  = \kappa(D_{\mathrm{DW}})^2.
-  \label{eq:kappa_squared}
-\end{equation}
-This squaring is the central numerical difficulty: near the chiral limit,
-$\kappa(D_{\mathrm{DW}}) \sim 10^6$--$10^{12}$, so
-$\kappa(A) \sim 10^{12}$--$10^{24}$---far beyond what FP64 can handle.
-
-\paragraph{Why DWF is harder than Wilson.}
-Table~\ref{tab:dwf_vs_wilson} contrasts the two settings. Both the squared
-condition number and the $L_s$-fold operator cost make DWF$+$CGNE the primary
-target for QDW/QTW arithmetic.
-
-\begin{table}[H]
-\centering
-\caption{Numerical cost contrast between Wilson and DWF.}
-\label{tab:dwf_vs_wilson}
-\begin{tabular}{lll}
-\toprule
- & \textbf{Wilson + BiCGStab} & \textbf{DWF + CGNE} \\
-\midrule
-Matrix condition & $\kappa(D_W)$ & $\kappa(D_W)^2$ \\
-SpMV per iter   & 2 ($D_W$ only) & 2 ($D_{\mathrm{DW}}$ and $D_{\mathrm{DW}}^\dagger$) \\
-Slab cost       & $V$ sites      & $L_s \cdot V$ sites \\
-Total overhead  & $1\times$ (baseline) & $\sim L_s \times \kappa$-amplified \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsubsection{M\"{o}bius Domain-Wall Fermions}
-
-The M\"{o}bius variant~\cite{Brower2012} replaces the Shamir kernel
-with a rational approximation to the sign function:
-\begin{equation}
-  D_{\mathrm{M\ddot{o}b}}^{5D} = \frac{D_{\mathrm{DW}}(\omega_n)}{1+D_{\mathrm{DW}}(\omega_n)},
-\end{equation}
-where $\omega_n$ are optimised coefficients.
-This achieves the same chiral accuracy as Shamir DWF with a smaller $L_s$,
-reducing computational cost while maintaining the 5D structure and CGNE solver.
-Related work from this group~\cite{Chen2026} further modifies the 5D coupling
-$D_s$ to improve the condition number of the normal equations while leaving the
-4D physical solution unchanged.
-
-% ----------------------------------------------------------
-\subsection{Even-Odd (Checkerboard) Preconditioning}
-\label{sec:evenodd}
-
-Both Wilson and DWF operators can be substantially accelerated by
-\textbf{even-odd preconditioning} (checkerboard decomposition), which
-reduces the effective matrix size by a factor of 2.
-
-\subsubsection{Site Decomposition}
-
-Lattice sites are partitioned into \textbf{even} and \textbf{odd} sublattices
-by site coordinate parity:
-\begin{equation}
-  \text{even}: (x_0+x_1+x_2+x_3) \bmod 2 = 0, \qquad
-  \text{odd}:  (x_0+x_1+x_2+x_3) \bmod 2 = 1.
-\end{equation}
-Since the hopping term only connects nearest neighbours, the Wilson
-operator has a block structure:
-\begin{equation}
-  D_W =
-  \begin{pmatrix}
-    D_{ee} & D_{eo} \\
-    D_{oe} & D_{oo}
-  \end{pmatrix},
-  \label{eq:block_D}
-\end{equation}
-where $D_{ee}$ and $D_{oo}$ are purely diagonal (mass terms, no hopping),
-and $D_{eo}$, $D_{oe}$ are the off-diagonal hopping terms.
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[scale=0.72, font=\small]
-  % Draw 4x4 checkerboard (even = blue, odd = orange)
-  % Even squares (x+y even)
-  \foreach \x/\y in {0/0,0/2,1/1,1/3,2/0,2/2,3/1,3/3} {
-    \draw[fill=blue!25, draw=blue!60] (\x,\y) rectangle (\x+1,\y+1);
-    \fill[blue!70] (\x+0.5,\y+0.5) circle (4pt);
-  }
-  % Odd squares (x+y odd)
-  \foreach \x/\y in {0/1,0/3,1/0,1/2,2/1,2/3,3/0,3/2} {
-    \draw[fill=orange!25, draw=orange!60] (\x,\y) rectangle (\x+1,\y+1);
-    \fill[orange!70] (\x+0.5,\y+0.5) circle (4pt);
-  }
-  % Hopping arrow: even -> odd
-  \draw[-{Latex[length=2.5mm]}, thick, red!70!black]
-    (0.5,0.5) -- (1.5,0.5);
-  \draw[-{Latex[length=2.5mm]}, thick, red!70!black]
-    (0.5,0.5) -- (0.5,1.5);
-  % Labels
-  \node[above] at (2,4.2) {\textbf{Even-Odd (Checkerboard) Decomposition}};
-  \node[below] at (0.5, -0.2) {\color{blue!70!black}E};
-  \node[below] at (1.5, -0.2) {\color{orange!70!black}O};
-  \node[below] at (2.5, -0.2) {\color{blue!70!black}E};
-  \node[below] at (3.5, -0.2) {\color{orange!70!black}O};
-  % Legend
-  \fill[blue!25, draw=blue!60] (5.0,2.8) rectangle (5.6,3.4);
-  \fill[blue!70] (5.3, 3.1) circle (3.5pt);
-  \node[right] at (5.7, 3.1) {Even site ($\sum x_i$ even)};
-  \fill[orange!25, draw=orange!60] (5.0,1.8) rectangle (5.6,2.4);
-  \fill[orange!70] (5.3, 2.1) circle (3.5pt);
-  \node[right] at (5.7, 2.1) {Odd site ($\sum x_i$ odd)};
-  % Hopping note
-  \node[right, align=left, text width=4.5cm] at (5.0, 0.9)
-    {\small Hopping only connects\\E $\leftrightarrow$ O neighbours\\($D_{eo}$, $D_{oe}$)};
-  % Size annotation
-  \draw[decorate, decoration={brace,amplitude=4pt}] (-0.1,0) -- (-0.1,4)
-    node[midway, left=4pt] {$V$ sites};
-  \draw[{Latex[length=2mm]}-{Latex[length=2mm]}, dashed, gray] (4.2,0) -- (4.2,4)
-    node[midway, right=2pt, gray] {\small $V/2$ each};
-\end{tikzpicture}
-\caption{Even-odd (checkerboard) decomposition of the lattice.
-Blue sites (even: $\sum_\mu x_\mu$ even) and orange sites (odd) form two sublattices.
-Nearest-neighbour hopping only connects even $\leftrightarrow$ odd sites, giving the
-block off-diagonal structure~\eqref{eq:block_D}.
-Each sublattice contains $V/2$ sites, and the Schur-complement system~\eqref{eq:schur}
-acts only on the even sublattice.}
-\label{fig:checkerboard}
-\end{figure}
-
-\subsubsection{Schur Complement}
-
-Applying the Schur decomposition to~\eqref{eq:block_D}:
-\begin{equation}
-  \hat{D} \;=\; D_{ee} - D_{eo}\,D_{oo}^{-1}\,D_{oe}.
-  \label{eq:schur}
-\end{equation}
-Since $D_{oo}$ is diagonal, $D_{oo}^{-1}$ is trivially computed in $O(V/2)$.
-
-\subsubsection{Reduced System}
-
-The full solve $D_W \psi = b$ reduces to solving the \emph{half-size} system:
-\begin{equation}
-  \hat{D}\,\psi_e = b_e - D_{eo}D_{oo}^{-1}b_o \;\eqqcolon\; \hat{b}_e,
-  \label{eq:reduced}
-\end{equation}
-followed by the trivial recovery of the odd-site solution:
-\begin{equation}
-  \psi_o = D_{oo}^{-1}(b_o - D_{oe}\,\psi_e).
-\end{equation}
-
-% ----------------------------------------------------------
-\subsection{The Bridge++ Code Set}
-\label{sec:bridgepp}
-
-All numerical work is based on \textbf{Bridge++}~\cite{Bridge,Akahoshi2022},
-a general-purpose Lattice QCD code set designed for portability, readability,
-and performance across diverse HPC architectures.
-
-\subsubsection{Design and GPU Backends}
-
-Bridge++ is written in C++ with an object-oriented architecture.
-Version 2.0~\cite{Akahoshi2022} introduced machine-dependent optimization
-modules enabling flexible data layouts, SIMD vectorization, and GPU offloading.
-Two GPU backends are available:
-\begin{itemize}
-  \item \textbf{OpenACC/OpenMP offload:} directive-based, portable across
-        NVIDIA and AMD GPUs.
-  \item \textbf{CUDA:} API-based, enables detailed hardware tuning.
-\end{itemize}
-A performance comparison of the two approaches is reported in~\cite{Chen2025}:
-CUDA achieves higher peak performance; OpenACC approaches it at large volumes.
-
-\subsubsection{Data Layout: AoSoA with Packing Width NWP}
-
-The spinor field uses an \textbf{Array-of-Structures-of-Arrays (AoSoA)} layout
-with packing width $\NWP = 32$ (matching the NVIDIA warp size):
-\begin{equation}
-  \mathrm{index}(\mathtt{ri},\, c,\, d,\, s,\, \mathtt{site})
-  = (\mathtt{site}\;\%\;\NWP)
-  + \NWP \times
-  \bigl(\mathtt{ri} + 2(c + \Nc(d + \Nd(s + \Ns\,(\mathtt{site}/\NWP))))\bigr),
-  \label{eq:bridge_index}
-\end{equation}
-where $\mathtt{ri} \in \{0,1\}$ indexes real/imaginary parts.
-The $\NWP$ innermost sites form the warp unit; all 32 threads access
-consecutive memory locations in a single coalesced transaction.
-This layout is the starting point for DW/TW spinor extensions
-in Section~\ref{sec:layout}.
-
-\subsubsection{Available Solvers}
-
-\begin{table}[H]
-\centering
-\caption{Iterative solvers in Bridge++ relevant to this work.}
-\begin{tabular}{llll}
-\toprule
-\textbf{Solver} & \textbf{Applicable to} & \textbf{SpMV/iter} & \textbf{Notes} \\
-\midrule
-CG              & SPD matrices only       & 1  & Inapplicable to $D_W$ or $D_{\mathrm{DW}}$ \\
-BiCGStab        & General non-Hermitian   & 2  & Standard for Wilson fermions \\
-CGNE            & Non-SPD via $D^\dagger D$ & 2  & Standard for DWF \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsubsection{Related Precision Work on Bridge++}
-
-Two companion papers directly motivate the present work.
-Kanamori et al.~\cite{Kanamori2026} implement FP16 mixed-precision BiCGStab
-for Wilson fermions on the A64FX (Fugaku), achieving near-FP64 convergence
-with a per-iteration rescaling strategy analogous to QDW/QTW normalization.
-Chen et al.~\cite{Chen2026} implement Neff's modified DWF operator~\cite{Neff2015}
-in Bridge++, which algebraically reduces $\kappa(D_{\mathrm{DW}}^\dagger D_{\mathrm{DW}})$
-and complements the arithmetic precision increase provided by QDW/QTW.
-
-
-% ##########################################################
 % CHAPTER 3: COMBINING MULTIWORD ARITHMETIC WITH LATTICE QCD
 % ##########################################################
 
@@ -1198,8 +1201,8 @@ and complements the arithmetic precision increase provided by QDW/QTW.
 \section{Multi-Word Arithmetic in Lattice QCD Solvers}
 \label{sec:application}
 
-This chapter combines the arithmetic framework of Chapter~1 with the
-Lattice QCD operators described in Chapter~2, and works out the
+This chapter combines the arithmetic framework of Chapter~2 with the
+Lattice QCD operators described in Chapter~1, and works out the
 concrete implementation decisions required to deploy QDW/QTW in Bridge++.
 Section~\ref{sec:cgne} presents the QDW/QTW CGNE algorithm with the
 critical normalization step.
