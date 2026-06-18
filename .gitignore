@@ -69,6 +69,12 @@ sweep_launch.log
 test_alt_amg_dw_GEMM/cinv_bench
 test_alt_amg_dw_GEMM/cinv_bench8
 
+# === sweep / analysis scratch scripts (local-only, not for the repo) ===
+**/run/*.sh
+**/run/*.summary
+**/compare_mgs_cgs2.sh
+**/mg_sweep.sh
+
 # === large data kept on disk but out of the repo ===
 # reference / built PDFs
 reference/*.pdf
