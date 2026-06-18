@@ -69,11 +69,22 @@ sweep_launch.log
 test_alt_amg_dw_GEMM/cinv_bench
 test_alt_amg_dw_GEMM/cinv_bench8
 
+# === run/ dirs are local scratch (canonical yamls live in test/) ===
+**/run/
+
 # === sweep / analysis scratch scripts (local-only, not for the repo) ===
-**/run/*.sh
-**/run/*.summary
 **/compare_mgs_cgs2.sh
 **/mg_sweep.sh
+
+# === HPC batch / job-submission / benchmark launch scripts (local-only) ===
+job_*.sh
+qlogin_*.sh
+acc_*.sh
+cuda_*.sh
+pinned_*.sh
+not_pinned_*.sh
+direct_cuda_*.sh
+makeconfig.sh
 
 # === large data kept on disk but out of the repo ===
 # reference / built PDFs

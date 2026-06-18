@@ -3,11 +3,11 @@
 Test_Spectrum:
   ## field_type = {double_eo, float_eo, double, float}
   field_type               : double_eo
-  ## gauge_config_status = {Continue,Cold_start,Hot_start}
+  ## gauge_config_status = {Continue,Continue,Continue}
   gauge_config_status      : Continue
   ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel}
-  gauge_config_type_input  : Text_4x4x4x8
-  config_filename_input    : ./conf_04040408.txt
+  gauge_config_type_input  : Text
+  config_filename_input     : ./conf_quench_12x12x12x12.txt
   ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library
   random_number_type       : Mseries
   seed_for_random_number   : 1234567UL
@@ -45,9 +45,9 @@ Fopr_ref:
   kernel_type             : Wilson
   ## gamma_matrix_type = {Chiral,Dirac}
   gamma_matrix_type       : Dirac
-  quark_mass              : 0.1
+  quark_mass              : 0.005
   quark_mass_PauliVillars : 1.0
-  domain_wall_height      : 1.6
+  domain_wall_height      : 1.0
   extent_of_5th_dimension : 8
   boundary_condition      : [1,1,1,-1]
   coefficient_b           : 1.5
@@ -63,9 +63,9 @@ Fopr:
   ## gamma_matrix_type = {Chiral,Dirac}
   gamma_matrix_type       : Dirac
   code_implementation     : 5d
-  quark_mass              : 0.1
+  quark_mass              : 0.005
   quark_mass_PauliVillars : 1.0
-  domain_wall_height      : 1.6
+  domain_wall_height      : 1.0
   extent_of_5th_dimension : 8
   boundary_condition      : [1,1,1,-1]
   coefficient_b           : 1.5
@@ -104,11 +104,11 @@ GaugeFixing:
 Solver:
   ## solver_type = {CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx}
   solver_type                         : CGNR
-  multiword_mode                      : DW
+  multiword_mode                      : FP
   maximum_number_of_iteration         : 100
   maximum_number_of_restart           : 40
 #  convergence_criterion_squared       : 1.0e-32
-  convergence_criterion_squared       : 1.0e-28
+  convergence_criterion_squared       : 1.0e-24
   # convergence_criterion_squared       : 1.0e-14
   ## additional parameters for each solver
   number_of_orthonormal_vectors       : 2
