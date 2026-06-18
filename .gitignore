@@ -4,6 +4,7 @@ build/
 *.o.d
 *.a
 *.elf
+*.elf.run
 *.so
 *.lo
 *.obj
@@ -67,3 +68,14 @@ sweep_launch.log
 # microbench binaries
 test_alt_amg_dw_GEMM/cinv_bench
 test_alt_amg_dw_GEMM/cinv_bench8
+
+# === large data kept on disk but out of the repo ===
+# reference / built PDFs
+reference/*.pdf
+docs/*.pdf
+# HMC test gauge-config fixtures (regenerable)
+**/ConfU/*.bin
+# regression baseline logs + scheduler job stdout dumps (*.sh.oNNNNN)
+*.ref
+*.ref[0-9]
+*.sh.o[0-9]*
