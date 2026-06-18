@@ -132,10 +132,6 @@ int main(int argc, char *argv[])
   timer->timestamp();
   timer->start();
 
-  //test_sap_mult::test();
-  //test_sap_solver::test();
-
-  //test_coarse::test();
   test_MG_solver::test();
 
   //- timestamp (end time)

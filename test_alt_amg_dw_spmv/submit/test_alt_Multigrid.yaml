@@ -25,7 +25,7 @@ Smearing:
   verbose_level : General
 
 TestType:
-  ## solver_type = {MG, Mixed_eo, BiCGStab}
+  ## solver_type = {MG, Mixed_eo}
   solver_type : MG
   #solver_type : Mixed_eo
 

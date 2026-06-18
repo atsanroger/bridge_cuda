@@ -25,9 +25,7 @@ using Bridge::vout;
 #include "lib/Tools/timer.h"
 #include "lib/Fopr/afopr.h"
 
-#include "lib_alt/Solver/asolver_BiCGStab.h"
-#include "lib_alt/Solver/asolver_FBiCGStab.h"
-#include "lib_alt/Solver/asolver_BiCGStab_Cmplx.h"
+#include "lib_alt/Solver/asolver.h"
 #include "lib_alt/Solver/MultiGrid.h"
 #include "lib_alt/Solver/aprecond.h"
 

@@ -14,31 +14,6 @@
 #ifndef TESTLIST_MG_INCLUDED
 #define TESTLIST_MG_INCLUDED
 
-namespace test_sap_mult {
-  int test(void);
-}
-
-namespace test_sap_solver {
-  int test(void);
-}
-
-//namespace test_afopr_coarse {
-//  int test(void);
-//  int test_parallel(void);
-//}
-
-namespace test_coarse {
-  int test(void);
-}
-
-namespace test_restrict {
-  int test(void);
-}
-
-namespace test_prolong {
-  int test(void);
-}
-
 namespace test_MG_solver {
   int test(void);
 }

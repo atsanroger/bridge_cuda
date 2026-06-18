@@ -875,13 +875,6 @@ void APrecond_MG_dw<AFIELD, AFIELD2>::mult_as_setup(AFIELD2& v,
   }
 
   mult_single(v, w);
-  //mult_single(m_v, w);
-  //  AFopr_dd<AFIELD2> *fopr_PV=dynamic_cast<AFopr_dd<AFIELD2> *>(m_PV_solver->get_fopr());
-  //v.set(0.0);
-  //m_fine_v.set(0.0);
-  //fopr_PV->mult_sap(v, m_v, 0);
-  //fopr_PV->mult_sap(m_fine_v, m_v, 1);
-  //axpy(v, 1.0, m_fine_v);
 #pragma omp barrier
 }
 

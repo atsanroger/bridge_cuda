@@ -49,17 +49,9 @@ const Impl IMPL = ACCEL;
 #endif
 
 #include "lib_alt/Solver/asolver.h"
-#include "lib_alt/Solver/asolver_BiCGStab.h"
-#include "lib_alt/Solver/asolver_CG.h"
-#include "lib_alt/Solver/asolver_CGNR.h"
-#include "lib_alt/Solver/aprecond_Mixedprec.h"
-#include "lib_alt/Solver/asolver_BiCGStab_Precond.h"
 #include "lib_alt/Measurements/Fermion/fprop_alt_Standard_eo_Richardson.h"
 
 #include "asolver_MG_dw.h"
-
-#include "asolver_SAP_dw.h"
-#include "asolver_SAP_MINRES_dw.h"
 
 
 //====================================================================
@@ -91,28 +83,6 @@ namespace {
 
   typedef AField<double, IMPL>   AFIELD_d;
   typedef AField<float, IMPL>    AFIELD_f;
-
-
-//====================================================================
-  int run_bicgstab(AFIELD_d& ax, const AFIELD_d& ab,
-                   Field_G *U,
-                   const Parameters params_fopr,
-                   const Parameters params_outer_solver)
-  {
-    vout.general("running BiCGstab (Cmplx) solver\n");
-    return 0;
-  }
-
-
-//====================================================================
-  int run_mixed(AFIELD_d& ax, const AFIELD_d& ab,
-                Field_G *U,
-                const Parameters params_fopr,
-                const Parameters params_outer_solver)
-  {
-    vout.general("running mixed solver with FBiCGStab\n");
-    return 0;
-  }
 
 
 //====================================================================
@@ -637,9 +607,7 @@ int Test_MG_Solver::test()
   ab.scal(sqrt(1.0 / n2));
 
 
-  if (solver_type == "BiCGStab") {
-    run_bicgstab(ax, ab, U.get(), params_fopr, params_MG_solver);
-  } else if (solver_type == "Mixed_eo") {
+  if (solver_type == "Mixed_eo") {
     run_mixed_eo(ax, ab, U.get(), params_fopr, params_MG_solver);
   }  else if (solver_type == "MG") {
     run_MG(ax, ab, U.get(), params_fopr, params_MG_solver, params_all);

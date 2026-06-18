@@ -46,9 +46,6 @@ class ASolver_MG_dw : public ASolver<AFIELD>
   //using FoprCoarse_t = AFopr_Clover_coarse<AFIELD_f >;
 
   // solver types: should be given in the .cpp file
-  //using OuterSolver_t  = ASolver_FBiCGStab<AFIELD>;
-  //using CoarseSolver_t = ASolver_BiCGStab_Cmplx< AFIELD_f>;
-  //using Smoother_t     = ASolver_SAP<AFIELD_f>;
 
 
   // index

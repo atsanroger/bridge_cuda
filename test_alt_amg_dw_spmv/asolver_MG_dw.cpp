@@ -52,14 +52,8 @@ typedef AField<double, ACCEL>  AField_d;
 
 #include "MultiGrid_Domainwall.h"
 
-#include "lib_alt/Solver/asolver_Richardson.h"
 #include "lib_alt/Solver/asolver_GMRES_m_Cmplx.h"
 #include "lib_alt/Solver/asolver_FGMRES.h"
-#include "lib_alt/Solver/asolver_CGNR.h"
-#include "asolver_SAP_MINRES_dw.h"
-#include "asolver_SAP_MINRES_dw2.h"
-#include "asolver_SAP_dw.h"
-#include "asolver_SAP_dw2.h"
 #include "asolver_PVexact_dw.h"
 
 // multigrid
@@ -79,24 +73,14 @@ using FoprCoarse_t = AFopr_Domainwall_coarse<AField_f>;
 // A-Galerkin coarse). FGMRES (flexible) is required because the V-cycle is a
 // non-constant preconditioner. The consistency baseline (no precond, ~2221
 // double iters) is the GMRES_m_Cmplx line kept below for comparison.
-//using OuterSolver_t  = ASolver_FBiCGStab<AField_d>;
 using OuterSolver_t  = ASolver_FGMRES<AField_d>;
 //using OuterSolver_t  = ASolver_GMRES_m_Cmplx<AField_d>;
-//using OuterSolver_t  = ASolver_Richardson<AField_d>;
 
-//using CoarseSolver_t = ASolver_BiCGStab_Cmplx<AField_f>;
 using CoarseSolver_t = ASolver_GMRES_m_Cmplx<AField_f>;  // V2: GMRES coarse (BiCGStab breaks down -> nan)
-// SAP smoother (DD-alphaAMG for DWF): block SAP solve + PV solver.
-// CGNR-on-bare-D smoother diverges at small mq/M0=1.0 (near-critical D^dag D),
-// which is exactly the DWF pathology the PV-preconditioned MG is meant to avoid.
-// Sweep binaries prebuilt in sweep_bins/: v1=SAP+BiCGStab, v2=SAP+GMRES,
-// v3=GMRES smoother+GMRES coarse, v4=CGNR smoother+GMRES coarse.
-// Source left in the recommended state: SAP smoother + GMRES coarse (=v2).
-#define USE_SAP_FOR_SMOOTHER
-using Smoother_t = ASolver_SAP_dw<AField_f>;
-//using Smoother_t = ASolver_SAP_dw2<AField_f>;
-//using Smoother_t = ASolver_GMRES_m_Cmplx<AField_f>;
-//using Smoother_t = ASolver_CGNR<AField_f>;
+// Smoother = GMRES-on-A, built directly in asolver_MG_dw-tmpl.h (fixed-iteration
+// GMRES(m) on the float A operator). The CGNR-on-bare-D smoother diverges at
+// small mq/M0=1.0 (near-critical D^dag D), the DWF pathology the PV-preconditioned
+// MG avoids.
 
 
 #include "asolver_MG_dw-tmpl.h"
