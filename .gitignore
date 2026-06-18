@@ -14,8 +14,9 @@ sample_hmc/conf_hmc_*
 sample_hmc/conf_output*
 **/conf_real16.txt
 # gauge configs copied into test run/ dirs (regenerable, large)
-**/run/conf*.txt
-**/nandbg/conf*.txt
+# (also the -000NN thermalized snapshots, e.g. conf_quench_12x12x12x12.txt-000075)
+**/run/conf*.txt*
+**/nandbg/conf*.txt*
 
 # === Editor / tool backups ===
 *.orig
@@ -45,6 +46,9 @@ tmp_*.log
 # test run binaries + run/sweep logs (regenerable)
 **/run/exe
 **/run/*.log
+**/run/*.out
+# one-off driver/rerun scratch (fp_dw_tw_driver.out, fp_dw_tw_rerun.sh/.summary)
+**/run/fp_dw_tw_*
 **/nandbg/*.log
 run_*.log
 sweep_launch.log
@@ -57,6 +61,8 @@ sweep_launch.log
 # === editor / tooling litter (keep out of source tree) ===
 .progress_count
 *.txtopttopt
+# Claude Code local config (keep local-only)
+.claude/
 
 # microbench binaries
 test_alt_amg_dw_GEMM/cinv_bench
