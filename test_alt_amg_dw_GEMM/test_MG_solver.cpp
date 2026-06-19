@@ -52,6 +52,7 @@ const Impl IMPL = ACCEL;
 #include "lib_alt/Measurements/Fermion/fprop_alt_Standard_eo_Richardson.h"
 
 #include "asolver_MG_dw.h"
+#include "gpu_mem_probe.h"     // source-level GPU peak-memory sampler
 #include "mrhs_block_live.h"   // dev8 MRHS batched-operator kernels (fineD_mrhs)
 #include "block_fgmres_dw.h"   // dev8 block-GMRES driver (block smoother)
 
@@ -769,6 +770,8 @@ namespace {
       const double prop_tol = use_double_refine ? 1.0e-4 : 2.0e-3;
       vout.general(vl, "RESULT_BLOCK_PROP_2pt: worst phys ||D psi - eta||/||eta|| = %.3e  %s\n",
                    worst_prop, (worst_prop < prop_tol) ? "PASS" : "FAIL");
+      gpu_mem_probe::sample();                          // end-of-2pt-solve high-water
+      gpu_mem_probe::report("RESULT_BLOCK_PROP_2pt");
 
       // ---- PASS 2: reverse psi_all -> x5, project to the 4d propagators ----
       for (int ispin = 0; ispin < Nd; ++ispin) {

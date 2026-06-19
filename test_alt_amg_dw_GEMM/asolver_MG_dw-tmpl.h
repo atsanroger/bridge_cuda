@@ -15,6 +15,7 @@
 #include "lib/ResourceManager/threadManager.h"
 #include "lib/Tools/randomNumberManager.h"
 #include "lib_alt/Solver/asolver_GMRES_m_Cmplx.h"
+#include "gpu_mem_probe.h"     // source-level GPU peak-memory sampler
 #include "mrhs_block_live.h"   // dev8-local MRHS / tensor-core transfer kernels
 #include "block_fgmres_dw.h"   // dev8-local flexible block-GMRES driver
 #include "lib_alt_Accel/Fopr/afopr_Domainwall_PVprec.h"  // batched A inner ops
@@ -1212,6 +1213,8 @@ void ASolver_MG_dw<AFIELD>::verify_block_fgmres(int s, bool do_ab)
   const ABRun& tc = ab[0];
   vout.general("RESULT_BLOCK_FGMRES: s=%d  worst_relres=%.3e  vcycles=%d  %s\n",
                s, tc.worst, tc.vcycles, (tc.worst < 1.0e-4) ? "PASS" : "FAIL");
+  gpu_mem_probe::sample();                       // catch end-of-solve high-water
+  gpu_mem_probe::report("RESULT_BLOCK_FGMRES");
 
   if (do_ab) {
     // A/B comparison verdict (only when the FP32 leg was actually run).
@@ -1243,6 +1246,8 @@ void ASolver_MG_dw<AFIELD>::apply_vcycle_block(std::vector<AFIELD_f>& v,
 {
   using AF     = AFIELD_f;
   using real_f = typename AFIELD_f::real_t;
+
+  gpu_mem_probe::sample();   // running peak: once per (batched) V-cycle
 
   const int s      = (int)w.size();
   const int nvec   = m_nvec;
