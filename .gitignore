@@ -18,6 +18,9 @@ sample_hmc/conf_output*
 # (also the -000NN thermalized snapshots, e.g. conf_quench_12x12x12x12.txt-000075)
 **/run/conf*.txt*
 **/nandbg/conf*.txt*
+# HMC run output dirs (gauge configs, ~GBs each; regenerable) e.g. run_hmc_16/
+run_hmc_*/
+**/run_hmc_*/
 
 # === Editor / tool backups ===
 *.orig

@@ -715,11 +715,17 @@ namespace {
       // OOMs a 10 GB card.  prop_chunk=4 fits the 3080; set it to Nc*Nd (=12, full
       // batch) on an A100/H100 for peak throughput.  Clamped to [1, Nprop].
       int prop_chunk = 4;
-      if (params_all.is_set("TestType"))
+      // inner block-FGMRES restart params (dominant memory knob): yaml-overridable.
+      int inner_restart_len = 4, inner_max_restart = 3;
+      if (params_all.is_set("TestType")) {
         params_all.lookup("TestType").fetch_int("prop_chunk", prop_chunk);
+        params_all.lookup("TestType").fetch_int("inner_restart_len", inner_restart_len);
+        params_all.lookup("TestType").fetch_int("inner_max_restart", inner_max_restart);
+      }
       if (prop_chunk < 1)      prop_chunk = 1;
       if (prop_chunk > Nprop)  prop_chunk = Nprop;
       const int PROP_CHUNK = prop_chunk;
+      asolver_mg->set_inner_restart(inner_restart_len, inner_max_restart);
       vout.general(vl, "\n");
       vout.general(vl, "Hadron 2pt: %d quark propagators through A (batched AMG, chunk=%d):\n",
                    Nprop, PROP_CHUNK);

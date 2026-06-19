@@ -197,6 +197,13 @@ class ASolver_MG_dw : public ASolver<AFIELD>
   //! x <- S(b).  dev8-local; used inside apply_vcycle_block.
   void block_smooth(std::vector<AFIELD_f>& x, const std::vector<AFIELD_f>& b);
 
+  //! POLY_SMOOTHER prototype: fit the frozen power-basis MR polynomial p(A)~=A^{-1}
+  //! ONCE from a probe vector (least squares min ||b - A p(A) b|| over real coeffs).
+  void build_poly_coeffs(const AFIELD_f& bprobe);
+  //! POLY_SMOOTHER prototype: apply x = p(A) b (frozen polynomial, Horner) to all s
+  //! columns -- GPU-only (apply_A_block + batched axpy), NO Krylov basis.
+  void apply_poly_smoother(std::vector<AFIELD_f>& x, const std::vector<AFIELD_f>& b);
+
   //! solve s propagator columns x = D^{-1} b through the block-FGMRES inner
   //! solver wrapped in the SAME double iterative-refinement on the physical
   //! residual as the production 2pt; compare to the single-RHS production
@@ -238,6 +245,12 @@ class ASolver_MG_dw : public ASolver<AFIELD>
 
   //! float A operator for the clean two-grid V-cycle (smoother + residual).
   void set_fopr_A(AFopr<AFIELD_f> *foprA) { m_afopr_A_F = foprA; }
+
+  //! inner block-FGMRES restart params for solve_block_propagator (the dominant
+  //! memory knob: basis = (2*restart_len+1)*s fine 5d fields).  Default (4,3)
+  //! keeps ~12 V-cycles in a 4-block basis.  Set from yaml TestType before solve.
+  void set_inner_restart(int restart_len, int max_restart)
+  { m_inner_restart_len = restart_len; m_inner_max_restart = max_restart; }
 
   void set_lattice(const vector<int>& sap_block_size);
 
@@ -309,6 +322,21 @@ class ASolver_MG_dw : public ASolver<AFIELD>
   int m_vc_rt_s = -1;
   std::vector<double> m_vc_crel;                    //!< coarse-solve relres scratch
   std::vector<double> m_smooth_rr;                  //!< smoother relres scratch (persistent)
+
+  //! ---- POLY_SMOOTHER prototype (env POLY_SMOOTHER) ----  a frozen power-basis MR
+  //! polynomial p(A) ~= A^{-1} (degree m_poly_deg-1) replaces the GMRES smoother.
+  //! Coefficients fit ONCE (least squares) from the first residual probe; applied
+  //! via Horner with apply_A_block + batched axpy -> NO Krylov basis (drops the
+  //! smoother's ~13/column field cost).  A/B against the GMRES smoother.
+  //! inner block-FGMRES restart params (solve_block_propagator); yaml-overridable.
+  int m_inner_restart_len = 4;
+  int m_inner_max_restart = 3;
+
+  std::vector<float>    m_poly_c;                   //!< fit coefficients c_0..c_{deg-1}
+  int                   m_poly_deg = 0;             //!< polynomial term count (= niter)
+  bool                  m_poly_ready = false;       //!< coefficients fit yet?
+  std::vector<AFIELD_f> m_poly_acc, m_poly_tmp;     //!< Horner block scratch (s each)
+  int                   m_poly_s = -1;              //!< cached column count
 
   unique_ptr<Timer> m_timer_gramschmidt;
   unique_ptr<Timer> m_timer_generate_coarse_op;

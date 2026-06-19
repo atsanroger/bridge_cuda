@@ -1457,6 +1457,113 @@ void ASolver_MG_dw<AFIELD>::apply_A_block(std::vector<AFIELD_f>& out,
 
 
 //====================================================================
+// POLY_SMOOTHER prototype: fit the frozen power-basis MR polynomial coefficients
+// ONCE.  We want p(A) ~= A^{-1} (degree d-1) so that x = sum_{k=0}^{d-1} c_k A^k b.
+// Minimise ||b0 - A x|| = ||b0 - sum_k c_k K_k|| with K_k = A^{k+1} b0; the real
+// normal equations G c = g (G[j][k]=<K_j,K_k>, g[k]=<b0,K_k>) are a tiny d x d SPD
+// solve on the host (d = m_smoother_niter ~ 4).  The coefficients are fit to the
+// ACTUAL operator action -> correct for the non-normal A (no spectrum/eigenvalues).
+template<typename AFIELD>
+void ASolver_MG_dw<AFIELD>::build_poly_coeffs(const AFIELD_f& bprobe)
+{
+  using AF = AFIELD_f;
+  const int Nin  = m_afopr_A_F->field_nin();
+  const int Nvol = m_afopr_A_F->field_nvol();
+  const int Nex  = m_afopr_A_F->field_nex();
+  const int d    = m_smoother_niter;
+
+  AF b0;  b0.reset(Nin, Nvol, Nex);  copy(b0, bprobe);
+  AF cur; cur.reset(Nin, Nvol, Nex);  copy(cur, b0);
+  std::vector<AF> K(d);
+  for (int k = 0; k < d; ++k) {
+    K[k].reset(Nin, Nvol, Nex);
+    m_afopr_A_F->mult(K[k], cur);                 // K[k] = A cur = A^{k+1} b0 (single col)
+    copy(cur, K[k]);
+  }
+
+  // real normal equations (dot() returns the real Euclidean inner product)
+  std::vector<double> G(d * d), g(d);
+  for (int j = 0; j < d; ++j) {
+    g[j] = (double)dot(K[j], b0);
+    for (int k = j; k < d; ++k) {
+      double v = (double)dot(K[j], K[k]);
+      G[j * d + k] = v;  G[k * d + j] = v;
+    }
+  }
+  // host Cholesky solve  G c = g  (d x d SPD)
+  std::vector<double> L(d * d, 0.0), y(d), c(d);
+  for (int j = 0; j < d; ++j) {
+    double s = G[j * d + j];
+    for (int p = 0; p < j; ++p) s -= L[j * d + p] * L[j * d + p];
+    if (s < 1e-300) s = 1e-300;
+    L[j * d + j] = std::sqrt(s);
+    for (int i = j + 1; i < d; ++i) {
+      double t = G[i * d + j];
+      for (int p = 0; p < j; ++p) t -= L[i * d + p] * L[j * d + p];
+      L[i * d + j] = t / L[j * d + j];
+    }
+  }
+  for (int i = 0; i < d; ++i) { double t = g[i]; for (int p = 0; p < i; ++p) t -= L[i*d+p]*y[p]; y[i] = t / L[i*d+i]; }
+  for (int i = d-1; i >= 0; --i) { double t = y[i]; for (int p = i+1; p < d; ++p) t -= L[p*d+i]*c[p]; c[i] = t / L[i*d+i]; }
+
+  m_poly_c.resize(d);
+  for (int k = 0; k < d; ++k) m_poly_c[k] = (float)c[k];
+  m_poly_deg   = d;
+  m_poly_ready = true;
+  vout.general("%s: POLY_SMOOTHER coeffs fit (deg=%d):", class_name.c_str(), d);
+  for (int k = 0; k < d; ++k) vout.general(" c[%d]=%.4e", k, m_poly_c[k]);
+  vout.general("\n");
+}
+
+
+//====================================================================
+// POLY_SMOOTHER prototype: apply x = p(A) b = sum_{k=0}^{d-1} c_k A^k b to all s
+// columns via Horner.  EVERY op is on-device: apply_A_block (MRHS Domainwall chain)
+// for the matvecs, mrhs_live::block_copy/scal/axpy (the batched BLAS-1 kernels) for
+// the vector updates.  Coefficients are real scalar kernel args; nothing round-
+// trips to the host.  Scratch = acc,tmp (s each); no Krylov basis.
+template<typename AFIELD>
+void ASolver_MG_dw<AFIELD>::apply_poly_smoother(std::vector<AFIELD_f>& x,
+                                                const std::vector<AFIELD_f>& b)
+{
+  using AF     = AFIELD_f;
+  using real_f = typename AFIELD_f::real_t;
+  const int s    = (int)b.size();
+  const int Nin  = m_afopr_A_F->field_nin();
+  const int Nvol = m_afopr_A_F->field_nvol();
+  const int Nex  = m_afopr_A_F->field_nex();
+  const int d    = m_poly_deg;
+
+  if (m_poly_s != s) {                            // Horner scratch: alloc once per s
+    m_poly_acc.resize(s); m_poly_tmp.resize(s);
+    for (int c = 0; c < s; ++c) {
+      m_poly_acc[c].reset(Nin, Nvol, Nex); m_poly_acc[c].set(real_f(0.0));
+      m_poly_tmp[c].reset(Nin, Nvol, Nex); m_poly_tmp[c].set(real_f(0.0));
+    }
+    m_poly_s = s;
+  }
+  const long nflt = (long)Nin * const_cast<AF&>(b[0]).nvol_pad() * Nex;
+  std::vector<float*> bp(s), ap(s), tp(s), xp(s);
+  for (int c = 0; c < s; ++c) {
+    bp[c] = const_cast<AF&>(b[c]).ptr(0);
+    ap[c] = m_poly_acc[c].ptr(0);
+    tp[c] = m_poly_tmp[c].ptr(0);
+    xp[c] = x[c].ptr(0);
+  }
+
+  // Horner:  acc = c[d-1] b;  acc = A acc + c[k] b  for k = d-2 .. 0
+  mrhs_live::block_copy(ap.data(), bp.data(), s, nflt);             // acc = b
+  mrhs_live::block_scal(ap.data(), m_poly_c[d - 1], s, nflt);       // acc = c[d-1] b
+  for (int k = d - 2; k >= 0; --k) {
+    apply_A_block(m_poly_tmp, m_poly_acc);                          // tmp = A acc (GPU)
+    mrhs_live::block_copy(ap.data(), tp.data(), s, nflt);           // acc = A acc
+    mrhs_live::block_axpy(ap.data(), bp.data(), m_poly_c[k], s, nflt); // acc += c[k] b
+  }
+  mrhs_live::block_copy(xp.data(), ap.data(), s, nflt);             // x = acc
+}
+
+
+//====================================================================
 // Batched fine smoother: m_smoother_niter block-GMRES-on-A steps (batched MRHS
 // A, no preconditioner), zero start, all s columns at once.  x <- S(b).
 template<typename AFIELD>
@@ -1464,6 +1571,18 @@ void ASolver_MG_dw<AFIELD>::block_smooth(std::vector<AFIELD_f>& x,
                                          const std::vector<AFIELD_f>& b)
 {
   using AF = AFIELD_f;
+  // POLY_SMOOTHER prototype (env POLY_SMOOTHER): frozen power-basis MR polynomial
+  // replaces the GMRES smoother -> drops its Krylov basis.  A/B knob.
+  static const bool poly = (std::getenv("POLY_SMOOTHER") != nullptr);
+  if (poly) {
+    if (!m_poly_ready) {
+      build_poly_coeffs(b[0]);
+      vout.general("%s: POLY_SMOOTHER on -- GMRES smoother Krylov basis dropped\n",
+                   class_name.c_str());
+    }
+    apply_poly_smoother(x, b);
+    return;
+  }
   const int Nin  = m_afopr_A_F->field_nin();
   const int Nvol = m_afopr_A_F->field_nvol();
   const int Nex  = m_afopr_A_F->field_nex();
@@ -1709,9 +1828,12 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
   // MEMORY: the block-FGMRES Krylov basis is (restart_len+1+restart_len)*s fine
   // 5d vectors (~16 MB each at s=12) -- at restart_len=12 that is ~300 vectors
   // ~4.8 GB, which OOMs a 10 GB card alongside the operators/smoother/scratch.
-  // restart_len=4 + max_restart=3 keeps the SAME ~12 V-cycles but only a 4-block
-  // basis (~1.7 GB): restarts reuse the basis instead of growing it.
-  bsolver.set_parameters(/*restart_len=*/4, /*max_restart=*/3, /*stop_cond_sq=*/1.0e-6);
+  // restart_len + max_restart are yaml-overridable (TestType.inner_restart_len /
+  // inner_max_restart) via set_inner_restart(); default (4,3) keeps ~12 V-cycles in
+  // a 4-block basis.  This is the dominant memory knob for the prop_chunk sweep.
+  bsolver.set_parameters(m_inner_restart_len, m_inner_max_restart, /*stop_cond_sq=*/1.0e-6);
+  vout.general("%s: inner block-FGMRES restart_len=%d max_restart=%d\n",
+               class_name.c_str(), m_inner_restart_len, m_inner_max_restart);
 
   // The physical-residual refinement maps between the A_F system and the
   // physical D system via the PVprec operator's "leftprec" (b' = P_L r) and
