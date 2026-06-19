@@ -1,0 +1,9 @@
+--------------------------------------------------------------------------
+mpirun was unable to launch the specified application as it could not access
+or execute an executable:
+
+Executable: ../../../build/cuda-ampere-mpi/bridge_test_alt_amg_dw_GEMM
+Node: as13
+
+while attempting to start process rank 0.
+--------------------------------------------------------------------------
