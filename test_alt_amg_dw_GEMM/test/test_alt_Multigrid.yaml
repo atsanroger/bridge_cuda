@@ -7,7 +7,7 @@ Gauge:
 #  gauge_config_type_input  : Text_4x4x4x8
 #  config_filename_input    : ./conf_quench_12x12x12x12.txt
   gauge_config_type_input  : Text
-  config_filename_input    : ./conf_quench_12x12x12x12.txt
+  config_filename_input    : ../../run_hmc_16/conf_output.dat
   #config_filename_input    : ./conf_quench_12x12x12x12.txt
 
 Smearing:
@@ -37,7 +37,7 @@ TestType:
   ## are solved prop_chunk at a time. Larger = faster (more columns per batched
   ## block-FGMRES/V-cycle, setup amortised) but more GPU memory. 4 fits a 10 GB
   ## 3080; set to 12 (full batch) on an A100/H100. Clamped to [1, Nc*Nd].
-  prop_chunk : 4
+  prop_chunk : 6
   ## run the single-RHS reference MG solve before the 2pt? It is a diagnostic
   ## (its result is not used by the 2pt) and its fixed-iteration smoother prints
   ## a "not converged" line per sweep. false = skip it (quiet); true = keep it.
@@ -76,12 +76,12 @@ MGSolver:
   maximum_number_of_iteration : 600
   maximum_number_of_restart   : 600
   convergence_criterion_squared: 1e-26
-  number_of_orthonormal_vectors: 30
+  number_of_orthonormal_vectors: 15
   verbose_level : Crucial
   MultiGrid_Level1:
-    sap_block : [3,3,3,3]
+    sap_block : [4,4,4,4]
     setup_number_of_vectors: 8
-    setup_number_of_step   : 0
+    setup_number_of_step   : 1
     maximum_number_of_iteration : 2
     maximum_number_of_restart : 1
     convergence_criterion_squared: 1.0e-2
@@ -104,7 +104,7 @@ Fopr:
   coefficient_c           : 0.5
   ## Moebius/Neff alpha-form (arXiv:2602.14454). 4D pion 2pt is alpha-invariant
   ## (validation lever); flows into the Galerkin coarse op via the fine operator.
-  parameter_alpha         : 0.5
+  parameter_alpha         : 1.0
   ## verbose_level = {Crucial,General,Detailed,Paranoiac}
   verbose_level      : General
 

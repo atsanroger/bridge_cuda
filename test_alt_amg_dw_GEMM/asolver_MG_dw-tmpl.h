@@ -1724,26 +1724,31 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
                class_name.c_str(), use_double_refine ? "double (m_afopr_fineD)"
                                                       : "float (m_afopr_A_F)");
 
+  // MEMORY: only B,X (block solve), psi (accumulated output) and rphys (carried
+  // across refine iterations) must be size-s.  bprime/delta/Dx were size-s but are
+  // each used ONLY within a single c-iteration (never read across columns) -> one
+  // shared double scratch (dtmp).  The float-path converts need two distinct float
+  // scratch fields (ftmp1 = mult input, ftmp2 = its output); rphys_f reuses ftmp1.
+  // Collapsing these 6 s-arrays to 1 double + 2 float fields saves ~3(s-1) double +
+  // ~3(s-1) float fine 5d vectors (~1.6 GB at s=12) that otherwise OOM the card.
   std::vector<AF>     B(s), X(s);
-  std::vector<AFIELD> bprime(s), delta(s), rphys(s), Dx(s);
-  std::vector<AF>     rphys_f(s), psi_f(s), Dx_f(s);   // float scratch (float path)
+  std::vector<AFIELD> rphys(s);
+  AFIELD              dtmp;                 // shared double scratch (bprime/delta/Dx)
+  AF                  ftmp1, ftmp2;         // shared float scratch (float refine path)
   std::vector<double> eta2(s);
+  dtmp.reset(Nin, Nvol, Nex);
+  if (!use_double_refine) {
+    ftmp1.reset(Nin, Nvol, Nex);
+    ftmp2.reset(Nin, Nvol, Nex);
+  }
   for (int c = 0; c < s; ++c) {
     B[c].reset(Nin, Nvol, Nex);
     X[c].reset(Nin, Nvol, Nex);
-    bprime[c].reset(Nin, Nvol, Nex);
-    delta[c].reset(Nin, Nvol, Nex);
     rphys[c].reset(Nin, Nvol, Nex);
-    Dx[c].reset(Nin, Nvol, Nex);
     psi[c].reset(Nin, Nvol, Nex);
     psi[c].set(real_d(0.0));
     copy(rphys[c], eta[c]);                 // psi = 0 -> r_phys = eta
     eta2[c] = eta[c].norm2();
-    if (!use_double_refine) {
-      rphys_f[c].reset(Nin, Nvol, Nex);
-      psi_f[c].reset(Nin, Nvol, Nex);
-      Dx_f[c].reset(Nin, Nvol, Nex);
-    }
   }
   nref.assign(s, 0);
   phys_res.assign(s, 1.0);
@@ -1756,11 +1761,11 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
   for (int it = 0; it < max_refine; ++it) {
     for (int c = 0; c < s; ++c) {
       if (use_double_refine) {
-        m_afopr_fineD->mult(bprime[c], rphys[c], "leftprec"); // b' = P_L r_phys (double)
-        copy(B[c], bprime[c]);                                // float <- double
+        m_afopr_fineD->mult(dtmp, rphys[c], "leftprec");      // b' = P_L r_phys (double)
+        copy(B[c], dtmp);                                     // float <- double
       } else {
-        copy(rphys_f[c], rphys[c]);                           // float <- double
-        m_afopr_A_F->mult(B[c], rphys_f[c], "leftprec");      // b' = P_L r_phys (float)
+        copy(ftmp1, rphys[c]);                                // float <- double
+        m_afopr_A_F->mult(B[c], ftmp1, "leftprec");           // b' = P_L r_phys (float)
       }
     }
     std::vector<double> relres; int vcy = 0;
@@ -1769,17 +1774,17 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
 
     double worst2 = 0.0;
     for (int c = 0; c < s; ++c) {
-      copy(delta[c], X[c]);                                  // double <- float
-      axpy(psi[c], real_d(1.0), delta[c]);                   // psi += delta
+      copy(dtmp, X[c]);                                     // double <- float (delta)
+      axpy(psi[c], real_d(1.0), dtmp);                      // psi += delta
       if (use_double_refine) {
-        m_afopr_fineD->mult(Dx[c], psi[c], "physicalD");      // D psi (double)
+        m_afopr_fineD->mult(dtmp, psi[c], "physicalD");      // D psi (double)
       } else {
-        copy(psi_f[c], psi[c]);                               // float <- double
-        m_afopr_A_F->mult(Dx_f[c], psi_f[c], "physicalD");    // D psi (float)
-        copy(Dx[c], Dx_f[c]);                                 // double <- float
+        copy(ftmp1, psi[c]);                                 // float <- double
+        m_afopr_A_F->mult(ftmp2, ftmp1, "physicalD");        // D psi (float)
+        copy(dtmp, ftmp2);                                   // double <- float
       }
       copy(rphys[c], eta[c]);
-      axpy(rphys[c], real_d(-1.0), Dx[c]);                   // r_phys = eta - D psi
+      axpy(rphys[c], real_d(-1.0), dtmp);                   // r_phys = eta - D psi
       res2[c] = rphys[c].norm2() / eta2[c];
       ++nref[c];
       // NaN-safe: nan>worst2 is false, so guard against a NaN slipping through.
