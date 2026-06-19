@@ -1,0 +1,32 @@
+# this is a sample parameter file
+
+Test_FFT:
+  ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library
+  random_number_type       : Mseries
+  seed_for_random_number   : 1234567UL
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level   : General
+  expected_result : 1.0
+
+FFT:
+  ## FFT_direction = {Forward,Backward}
+  FFT_direction : Forward
+  ## FFT_type = {FFT_xyz_3dim,FFT_xyz_1dim}
+  FFT_type      : FFT_xyz_1dim
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level : General
+
+Source:
+  ## source_type = {Local,Exponential,MomentumWall,Random,Wall}
+  source_type     : Wall
+  ## source_position = [x,y,z,t], x = {0,...,Lx-1}
+  source_position : [0,0,0,0]
+  ## exp(- slope * r^(power)) for Exponential
+  slope           : 0.25
+  power           : 2.0
+  ## source_momentum = [nx,ny,nz,nt], p = (2 \pi / L) n for MomentumWall and Random
+  source_momentum : [1,1,1, 0]
+  ## noise_type = {Gaussian,U1,Z2} for Random
+  noise_type      : Z2
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level   : General

@@ -1,0 +1,39 @@
+# FP (single precision) spectrum of the Pauli-Villars + site-diagonal
+# preconditioned Moebius domain-wall operator:
+#     A = (D_PV C_PV^{-1})^dagger C^{-1} D
+# Target operator for multigrid, cf. Kanamori, Chen, Matsufuru,
+# PoS(LATTICE2024)414.
+
+Test_Eigensolver:
+  ## gauge_config_status = {Continue,Cold_start,Hot_start}
+  gauge_config_status      : Continue
+  ## gauge_config_type = {Text,Binary,ILDG,...}
+  gauge_config_type_input  : Text
+  config_filename_input    : ./conf_quench_16x16x16x16.txt
+  random_number_type       : Mseries
+  seed_for_random_number   : 1234567UL
+  verbose_level            : General
+
+Fopr:
+  fermion_type            : Domainwall_PVprec
+  kernel_type             : Wilson
+  gamma_matrix_type       : Dirac
+  quark_mass              : 0.01
+  quark_mass_PauliVillars : 1.0
+  domain_wall_height      : 1.0
+  extent_of_5th_dimension : 8
+  boundary_condition      : [1,1,1,-1]
+  coefficient_b           : 1.5
+  coefficient_c           : 0.5
+  verbose_level           : General
+
+Eigensolver:
+  eigensolver_type               : IRArnoldi
+  fermion_mult_mode              : D
+  eigensolver_mode               : abs_ascending
+  number_of_wanted_eigenvectors  : 8
+  number_of_working_eigenvectors : 40
+  convergence_criterion_squared  : 1.0e-6
+  maximum_number_of_iteration    : 300
+  threshold_value                : 0.02
+  verbose_level                  : Detailed

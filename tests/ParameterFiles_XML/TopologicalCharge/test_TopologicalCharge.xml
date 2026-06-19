@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <!-- # this is a sample parameter file -->
+    <Test_TopologicalCharge>
+        <!--   ## gauge_config_status = {Continue,Cold_start,Hot_start} -->
+        <gauge_config_status>Continue</gauge_config_status>
+        <!--   ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel} -->
+        <gauge_config_type_input>Text</gauge_config_type_input>
+        <config_filename_input>./conf_04040408.txt</config_filename_input>
+        <!--   ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library -->
+        <random_number_type>Mseries</random_number_type>
+        <seed_for_random_number>1234567UL</seed_for_random_number>
+        <number_of_max_smearing>30</number_of_max_smearing>
+        <number_of_measurement_step>1</number_of_measurement_step>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <expected_result>-4.53170078830395e-04</expected_result>
+    </Test_TopologicalCharge>
+    <TopologicalCharge>
+        <!--   ## filename_output = {stdout, or "filename"} -->
+        <filename_output>stdout</filename_output>
+        <c_plaq>5.0/3.0</c_plaq>
+        <c_rect>-1.0/12.0</c_rect>
+        <max_momentum>1</max_momentum>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </TopologicalCharge>
+    <Projection>
+        <!--   ## projection_type = {Maximum_SU_N,Stout_SU3} -->
+        <projection_type>Maximum_SU_N</projection_type>
+        <maximum_number_of_iteration>1000</maximum_number_of_iteration>
+        <convergence_criterion>1.0e-14</convergence_criterion>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Projection>
+    <Smear>
+        <!--   ## smear_type = {APE,HYP} -->
+        <smear_type>APE</smear_type>
+        <rho_uniform>0.1</rho_uniform>
+        <!--   #smear_type    : HYP -->
+        <!--   #alpha1        : 0.95 -->
+        <!--   #alpha2        : 0.76 -->
+        <!--   #alpha3        : 0.38 -->
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Smear>
+</Parameters>

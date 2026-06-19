@@ -1,0 +1,38 @@
+# this is a sample parameter file
+
+Test_Eigensolver:
+  ## gauge_config_status = {Continue,Cold_start,Hot_start}
+  gauge_config_status      : Continue
+  ## gauge_config_type = {Text,Binary,etc.)
+  gauge_config_type_input  : Text_4x4x4x8
+  config_filename_input    : ./conf_04040408.txt
+#  config_filename_input    : ./conf_$$$$.txt
+  ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library
+  random_number_type       : Mseries
+  seed_for_random_number   : 1234567UL
+  data_filename_output     : ./Data/eigenvalue_$$$$.txt
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level            : General
+  expected_result          : 1.01813701055947   # 16x4x4x8
+
+Fopr:
+  fermion_type       : Staggered
+  quark_mass         : 0.1
+  chemical_potential : 0.1
+  boundary_condition : [1,1,1,-1]
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General
+
+Eigensolver:
+  eigensolver_type               : IRArnoldi
+  fermion_mult_mode              : D
+# following are parameters of eigensolver
+  eigensolver_mode               : abs_ascending
+  number_of_wanted_eigenvectors  : 30
+  number_of_working_eigenvectors : 30
+  convergence_criterion_squared  : 1.0e-27
+  maximum_number_of_iteration    : 100
+  threshold_value                : 2.2
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+#  verbose_level                  : General
+  verbose_level                  : Detailed

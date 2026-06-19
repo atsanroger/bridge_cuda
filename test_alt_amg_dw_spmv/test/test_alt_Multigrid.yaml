@@ -1,0 +1,104 @@
+# this is a sample parameter file
+
+Gauge:
+  ## gauge_config_status = {Continue,Continue,Hot_start}
+  #gauge_config_status      : Hot_start
+  gauge_config_status      : Continue
+#  gauge_config_type_input  : Text_4x4x4x8
+#  config_filename_input    : ./conf_quench_12x12x12x12.txt
+  gauge_config_type_input  : Text
+  config_filename_input    : ./conf_quench_12x12x12x12.txt
+  #config_filename_input    : ./conf_quench_12x12x12x12.txt
+
+Smearing:
+  ## projection_type = {Maximum_SU_N,Stout_SU3}
+  projection_type : Stout_SU3
+  ## smear_type = {APE,HYP}
+  smear_type    : None
+  rho_uniform   : 0.1
+  #smear_type    : HYP
+  #alpha1        : 0.95
+  #alpha2        : 0.76
+  #alpha3        : 0.38
+  number_of_smearing  : 0
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level : General
+
+TestType:
+  ## solver_type = {MG, Mixed_eo, BiCGStab}
+  solver_type : MG
+  #solver_type : Mixed_eo
+
+# temporal implementation by HM
+Fprop:
+  fprop_type : Multigrid
+  testvector_type : eigenvector
+  Eigen_params :
+    fopr_mode : D
+#    fopr_mode : D_prec
+    filename_base : testvector
+    eigensolver_type : IRArnoldi_block
+#    eigensolver_type : IRArnoldi
+    eigensolver_mode : abs_ascending
+#    number_of_wanted_eigenvectors : 20
+#    number_of_working_eigenvectors : 16
+    number_of_wanted_eigenvectors : 40
+    number_of_working_eigenvectors : 20
+    maximum_number_of_iteration : 200
+    convergence_criterion_squared : 1.e-26
+    threshold_value : 10.0
+    verbose_level : Detailed
+
+# Outer = FGMRES on A, preconditioned by the two-grid V-cycle. FGMRES semantics
+# (asolver_FGMRES-tmpl.h): maximum_number_of_iteration = TOTAL preconditioned
+# iterations (each = 1 V-cycle); it restarts (and assembles the solution) every
+# number_of_orthonormal_vectors steps. maximum_number_of_restart is IGNORED by
+# FGMRES. So max_iter MUST be >= N_M or the solution is never constructed.
+MGSolver:
+  maximum_number_of_iteration : 600
+  maximum_number_of_restart:     600
+  convergence_criterion_squared: 1e-26
+  number_of_orthonormal_vectors: 30
+  verbose_level : Detailed
+  MultiGrid_Level1:  
+    sap_block : [3,3,3,3]
+    setup_number_of_vectors: 8
+    setup_number_of_step  : 0
+    maximum_number_of_iteration : 2
+    maximum_number_of_restart : 1
+    convergence_criterion_squared: 1.0e-2
+    number_of_orthonormal_vectors: 5
+    smoother_number_of_iteration : 4
+    smoother_convergence_criterion_squared: 1.0e-3
+    verbose_level : Detailed
+
+Fopr:
+  fermion_type            : Domainwall_5din
+  kernel_type             : Wilson
+  ## gamma_matrix_type = {Chiral,Dirac}
+  gamma_matrix_type  : Dirac
+  quark_mass              : 0.005
+  quark_mass_PauliVillars : 1.0
+  domain_wall_height      : 1.0
+  extent_of_5th_dimension : 8
+  boundary_condition      : [1,1,1,-1]
+  coefficient_b           : 1.5
+  coefficient_c           : 0.5
+  ## Moebius/Neff alpha-form: match the GEMM/CGNE runs (alpha=0.5) for the
+  ## mass-scaling comparison.
+  parameter_alpha         : 0.5
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General
+
+# Hadron 2pt measurement through the AMG solve (same setup as the spectrum
+# CGNE / GMRES-on-A tests, so the C_PP and m_res cross-check directly).
+Source:
+  ## source_type = {Local,Exponential,MomentumWall,Wall}
+  source_type     : Local
+  ## source_position = [x,y,z,t]
+  source_position : [0,0,0,0]
+  verbose_level   : General
+
+Corr2pt_4spinor:
+  filename_output : stdout
+  verbose_level   : General

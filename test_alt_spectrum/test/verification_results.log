@@ -1,0 +1,375 @@
+Bridge++ 2.0.0
+
+input filename : main.yaml
+
+file = main.yaml
+
+Lattice parameters:
+  Lx = 32,  Ly = 8,  Lz = 8,  Lt = 12,
+  Nx = 32,  Ny = 8,  Nz = 8,  Nt = 12,
+  NPEx = 1,  NPEy  = 1,  NPEz  = 1,  NPEt  = 1,
+  Lvol = 24576,  Nvol = 24576,  NPE = 1,
+  Ndim = 4
+  Nc   = 3
+  Nd   = 4
+
+ThreadManager: initialization
+Warning at ThreadManager: Nthread(env) != Nthread(input)
+  Number of threads(env)   = 2
+  Number of threads(input) = 1
+  reset Nthread = Nthread(input).
+  Number of threads = 1
+Main: input parameters
+  lattice_size     = [32, 8, 8, 12]
+  grid_size        = [1, 1, 1, 1]
+  number of thread = 1
+  number of color  = 3
+  logfile          = stdout
+  ildg_logfile     = stdout
+  vlevel           = General
+
+Alt_Accel code is being setup.
+DeviceManager_CUDA: being initialized.
+  process_id = 0
+  number of devices = 1
+  device_id = 0  is used on process = 0
+------------------------------------------------
+Alt_Accel: Factory entries
+------------------------------------------------
+AFopr<double, ACCEL> >(void):
+AFopr<double, ACCEL>(Parameters&):
+	Clover
+	CloverTerm
+	Clover_dd
+	Domainwall
+	Domainwall_5din
+	Domainwall_5din_dd
+	Domainwall_5din_eo
+	Domainwall_eo
+	Wilson
+	Wilson_dd
+AFopr<double, ACCEL>(Fopr*):
+	Domainwall
+AFopr<double, ACCEL>(Fopr*, Director*):
+AFopr<float, ACCEL> >(void):
+AFopr<float, ACCEL>(Parameters&):
+	Clover
+	CloverTerm
+	Clover_dd
+	Domainwall
+	Domainwall_5din
+	Domainwall_5din_dd
+	Domainwall_5din_eo
+	Domainwall_eo
+	Wilson
+	Wilson_dd
+AFopr<float, ACCEL>(Fopr*):
+	Domainwall
+AFopr<float, ACCEL>(Fopr*, Director*):
+AEigensolver<AField<float, ACCEL> >, Afopr>(Fopr*):
+	IRArnoldi
+	IRLanczos
+------------------------------------------------
+Timer: timestamp: 2026/02/05 21:18:33 +0900
+
+--------------------------------------------------------------------
+test name: Spectrum_Wilson_althadron_2ptFunction
+test file: test_alt_Spectrum_Wilson_Hadron2ptFunction.yaml
+test mode: double
+file = test_alt_Spectrum_Wilson_Hadron2ptFunction.yaml
+  vlevel       = General
+ Random number init: ndelay =   1234567
+
+Configuration setup:
+  gconf_status = Continue
+  gconf_read   = Text_4x4x4x8
+  readfile     = ./conf_04040408.txt
+  plaq = 0.597969
+
+Gauge fixing:
+  Gauge fixing type = None
+
+gmset_type   = Dirac
+Gamma matrix: dirac representation.
+Imp::Fopr_Wilson: construction
+  Gauge group implementation: SU(3)
+  Imp::Fopr_Wilson: input parameters
+    gamma-matrix type = Dirac
+    kappa  =   0.12000000
+    boundary[0] = -1
+    boundary[1] = -1
+    boundary[2] = -1
+    boundary[3] = -1
+Imp::Fopr_Wilson: construction finished.
+
+Check of fermion operator
+  sizeof(real_t) = 8
+norm of source vector: 1.000000
+AFopr_Wilson<AField<double,ACCEL> >: construction
+  do_comm[0] = 0
+  do_comm[1] = 0
+  do_comm[2] = 0
+  do_comm[3] = 0
+Parameters of AFopr_Wilson<AField<double,ACCEL> >:
+  gamma-matrix type = Dirac
+  kappa =   0.1200
+  boundary[0] = -1
+  boundary[1] = -1
+  boundary[2] = -1
+  boundary[3] = -1
+AFopr_Wilson<AField<double,ACCEL> >: construction finished.
+ nin = 24  nvol = 24576  nex = 1
+convert not required.
+b norm2 = 1.000000e+00
+abq norm2 = 1.000000e+00
+mult_wilson_D_dirac: use_qtw = 1
+
+norm2(ref) = 8.702661
+norm2(alt) = 1.953601
+norm2(alt) = 1.957323
+diff2 = 10.679121
+Fprop_alt_Standard_lex<Afield<double,ACCEL> >: construction (without link smearing).
+AFopr_Wilson<AField<double,ACCEL> >: construction
+  do_comm[0] = 0
+  do_comm[1] = 0
+  do_comm[2] = 0
+  do_comm[3] = 0
+Parameters of AFopr_Wilson<AField<double,ACCEL> >:
+  gamma-matrix type = Dirac
+  kappa =   0.1200
+  boundary[0] = -1
+  boundary[1] = -1
+  boundary[2] = -1
+  boundary[3] = -1
+AFopr_Wilson<AField<double,ACCEL> >: construction finished.
+  use_qtw: true
+ASolver_BiCGStab<Afield<double,ACCEL> >:
+  Precision: double
+  Niter     = 4000
+  Stop_cond =   1.00000000e-32
+  init_guess_mode: 0
+  Omega_tolerance = 7.00e-01
+Fprop_alt_Standard_lex<Afield<double,ACCEL> >: construction finished.
+
+Fprop_alt_Standard_lex<Afield<double,ACCEL> >: mult performance:
+  mult mode = D
+  Number of mult =                 20
+  Elapsed time   =       0.024222 sec
+  Flop(Fopr)     =           33619968
+  Flop(total)    =          672399360
+  Performance    =      27.760 GFlops
+
+Fprop_alt_Standard_lex<Afield<double,ACCEL> >: mult performance:
+  mult mode = D
+  Number of mult =               1000
+  Elapsed time   =       1.114660 sec
+  Flop(Fopr)     =           33619968
+  Flop(total)    =        33619968000
+  Performance    =      30.162 GFlops
+source_type  = Local
+Source for spinor field - local:
+  source_position[0] = 0
+  source_position[1] = 0
+  source_position[2] = 0
+  source_position[3] = 0
+
+Solving quark propagator:
+  color spin   Nconv      diff           diff2
+    0    0      113     1.4409e-16     9.0837e-03
+    1    0      113     1.4409e-16     2.0091e+00
+    2    0      111     1.0152e-16     2.0091e+00
+    0    1      111     1.0152e-16     2.0091e+00
+    1    1      113     1.1310e-16     2.0089e+00
+    2    1      113     1.1310e-16     2.0089e+00
+    0    2      113     1.3372e-16     2.0089e+00
+    1    2      113     1.3372e-16     2.0089e+00
+    2    2      111     1.1903e-16     2.0091e+00
+    0    3      111     1.1903e-16     2.0091e+00
+    1    3      114     1.6349e-16     2.0090e+00
+    2    3      114     1.6349e-16     2.0090e+00
+Fprop_alt_Standard_lex<Afield<double,ACCEL> >: solver performance:
+  Elapsed time =       2.508266 sec
+  Flop(total)  =        54451372032
+  Performance  =      21.709 GFlops
+
+2-point correlator:
+PS <-- PS correlator:
+     0    1.466985322152e+01   -3.851859888774e-34
+     1    1.216664831680e+00   -9.629649721936e-35
+     2    1.281752566901e-01   -3.009265538105e-36
+     3    1.659030140753e-02   -7.523163845263e-37
+     4    2.319170091073e-03   -4.701977403289e-38
+     5    3.220979013124e-04    0.000000000000e+00
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+V1 <-- V1 correlator:
+     0    2.131419486202e-04   -1.734723475977e-18
+     1    5.342180484032e-04    1.084202172486e-19
+     2    1.343833684560e-04   -2.303929616532e-19
+     3    5.900593679062e-06    5.082197683526e-21
+     4   -2.626730595564e-06    1.694065894509e-21
+     5   -4.676073588337e-07    2.646977960170e-23
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+V2 <-- V2 correlator:
+     0   -5.126881302529e-04   -3.903127820948e-18
+     1   -5.874716156523e-04    8.673617379884e-19
+     2   -1.151689682844e-04    1.355252715607e-20
+     3   -1.752527133385e-05    0.000000000000e+00
+     4    3.322260397813e-06   -1.694065894509e-21
+     5    1.729046586004e-06   -2.117582368136e-22
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+V3 <-- V3 correlator:
+     0   -1.502194454611e-02    1.618806800809e-18
+     1    4.706135507548e-03    1.685209257229e-18
+     2   -1.603285349496e-03   -6.601234836247e-20
+     3   -1.945808338329e-04   -1.055076647292e-21
+     4    5.269415320181e-05    4.644535343038e-22
+     5    1.740882773445e-05   -8.255087621879e-23
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+A4 <-- PS correlator:
+     0   -1.091857607875e+01   -3.851859888774e-34
+     1   -8.745654239776e-01    9.629649721936e-35
+     2   -9.195033008406e-02    0.000000000000e+00
+     3   -1.203838860394e-02    7.523163845263e-37
+     4   -1.658265694332e-03   -4.701977403289e-38
+     5   -2.492916022806e-04    1.175494350822e-38
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+PS <-- A4 correlator:
+     0    9.186773152734e-04   -1.925929944387e-34
+     1   -1.238901083347e-03   -9.629649721936e-35
+     2   -4.591219005304e-04    3.009265538105e-36
+     3   -1.611398318868e-04    7.523163845263e-37
+     4   -3.608765081715e-05   -4.701977403289e-38
+     5   -4.379355298676e-06    1.175494350822e-38
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+S <-- S correlator:
+     0   -7.679371492992e-03    1.734723475977e-18
+     1   -2.113262954213e-03   -2.168404344971e-19
+     2    2.524651947950e-04    2.032879073410e-20
+     3    1.458710490795e-05    6.776263578034e-21
+     4    3.028483646432e-05   -4.658681209899e-21
+     5    7.298521552471e-07    1.058791184068e-22
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+GAMMA51 <-- GAMMA51 correlator:
+     0   -5.022483381879e-02    1.301042606983e-18
+     1   -1.055396158424e-02   -2.059984127722e-18
+     2   -1.371484892046e-03    5.421010862428e-20
+     3   -4.111747918338e-04   -1.694065894509e-20
+     4   -5.766392720486e-05   -2.223461486543e-21
+     5    5.694826088366e-06   -3.441071348221e-22
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+GAMMA52 <-- GAMMA52 correlator:
+     0    5.259942159383e-03   -6.288372600416e-18
+     1   -1.808116376800e-04    6.505213034913e-19
+     2    1.001317431571e-05    1.524659305058e-19
+     3   -5.546428575703e-06    2.710505431214e-20
+     4   -4.606640331494e-06   -2.541098841763e-21
+     5    4.283234608220e-07    1.058791184068e-22
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+GAMMA53 <-- GAMMA53 correlator:
+     0   -3.535020095328e-02    4.336808689942e-18
+     1   -3.453457741656e-02    1.084202172486e-19
+     2   -2.361027535897e-03   -1.355252715607e-20
+     3    2.426812374705e-04   -2.710505431214e-20
+     4    2.375375018822e-05   -4.764560328305e-21
+     5   -6.084211777360e-06    7.940933880509e-22
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+SIGMA12 <-- SIGMA12 correlator:
+     0   -9.266513003915e-07   -2.385244779468e-18
+     1    2.764122912656e-04   -3.794707603699e-19
+     2   -3.144380991100e-04   -8.131516293641e-20
+     3    5.171459861739e-06    6.776263578034e-21
+     4    6.676053134769e-06    1.694065894509e-21
+     5    1.070861677906e-06   -1.786710123115e-22
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+SIGMA23 <-- SIGMA23 correlator:
+     0    2.693015085706e-04   -1.409462824231e-18
+     1    5.735132480420e-04    4.878909776185e-19
+     2   -1.539585472448e-04   -4.065758146821e-20
+     3   -2.388295769137e-05    2.879912020665e-20
+     4   -1.461826934579e-06    1.694065894509e-21
+     5   -3.726095694718e-09    2.646977960170e-23
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+SIGMA31 <-- SIGMA31 correlator:
+     0    1.010272610876e-05    2.168404344971e-19
+     1    2.879566644998e-04    4.065758146821e-19
+     2    4.530786896724e-05    6.098637220231e-20
+     3   -6.385402119640e-05   -2.456395547037e-20
+     4   -8.824440173130e-06    7.411538288475e-22
+     5   -2.959996242884e-07   -5.029258124322e-22
+     6    0.000000000000e+00    0.000000000000e+00
+     7    0.000000000000e+00    0.000000000000e+00
+     8    0.000000000000e+00    0.000000000000e+00
+     9    0.000000000000e+00    0.000000000000e+00
+    10    0.000000000000e+00    0.000000000000e+00
+    11    0.000000000000e+00    0.000000000000e+00
+Elapsed time: Spectrum_Wilson_althadron_2ptFunction: total         0.09 sec, count    1, average         0.09 sec
+
+check test data
+check precision = 1.0e-11
+result: 1.46698532215248e+01  expected: 1.45449619163833e+01
+test result: incorrect! (T_T)
+diff: expected - result = 8.58656804050172e-03
+
+Test result for Accel = 1
+Elapsed time: Main: total         4.21 sec, count    1, average         4.21 sec
+Timer: timestamp: 2026/02/05 21:18:37 +0900

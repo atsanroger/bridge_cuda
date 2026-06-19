@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <Test_IO_GaugeConfig>
+        <!--   ## gauge_config_status = {Continue,Cold_start,Hot_start} -->
+        <gauge_config_status>Continue</gauge_config_status>
+        <!--   ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel} -->
+        <gauge_config_type_input>Text</gauge_config_type_input>
+        <config_filename_input>./conf_04040408.txt</config_filename_input>
+        <gauge_config_type_output>ILDG</gauge_config_type_output>
+        <config_filename_output>conf_ildg.dat</config_filename_output>
+        <!--   ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library -->
+        <random_number_type>Mseries</random_number_type>
+        <seed_for_random_number>1234567UL</seed_for_random_number>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <expected_result>0</expected_result>
+    </Test_IO_GaugeConfig>
+</Parameters>

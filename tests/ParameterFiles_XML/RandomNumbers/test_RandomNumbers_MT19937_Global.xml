@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <Test_RandomNumbers>
+        <int_seed>1</int_seed>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <expected_result>0.0</expected_result>
+    </Test_RandomNumbers>
+</Parameters>

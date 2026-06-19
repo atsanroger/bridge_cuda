@@ -1,0 +1,841 @@
+Bridge++ 2.0.0
+
+input filename : main.yaml
+
+file = main.yaml
+
+Lattice parameters:
+  Lx = 4,  Ly = 4,  Lz = 4,  Lt = 8,
+  Nx = 4,  Ny = 4,  Nz = 4,  Nt = 8,
+  NPEx = 1,  NPEy  = 1,  NPEz  = 1,  NPEt  = 1,
+  Lvol = 512,  Nvol = 512,  NPE = 1,
+  Ndim = 4
+  Nc   = 3
+  Nd   = 4
+
+ThreadManager: initialization
+  Number of threads = 2
+Main: input parameters
+  lattice_size     = [4, 4, 4, 8]
+  grid_size        = [1, 1, 1, 1]
+  number of thread = 2
+  number of color  = 3
+  logfile          = stdout
+  ildg_logfile     = stdout
+  vlevel           = General
+
+Alt_Accel code is being setup.
+DeviceManager_CUDA: being initialized.
+  process_id = 0
+  number of devices = 1
+  device_id = 0  is used on process = 0
+------------------------------------------------
+Alt_Accel: Factory entries
+------------------------------------------------
+AFopr<double, ACCEL> >(void):
+AFopr<double, ACCEL>(Parameters&):
+	Clover
+	CloverTerm
+	Clover_dd
+	Domainwall
+	Domainwall_5din
+	Domainwall_5din_dd
+	Domainwall_5din_eo
+	Domainwall_eo
+	Wilson
+	Wilson_dd
+AFopr<double, ACCEL>(Fopr*):
+	Domainwall
+AFopr<double, ACCEL>(Fopr*, Director*):
+AFopr<float, ACCEL> >(void):
+AFopr<float, ACCEL>(Parameters&):
+	Clover
+	CloverTerm
+	Clover_dd
+	Domainwall
+	Domainwall_5din
+	Domainwall_5din_dd
+	Domainwall_5din_eo
+	Domainwall_eo
+	Wilson
+	Wilson_dd
+AFopr<float, ACCEL>(Fopr*):
+	Domainwall
+AFopr<float, ACCEL>(Fopr*, Director*):
+AEigensolver<AField<float, ACCEL> >, Afopr>(Fopr*):
+	IRArnoldi
+	IRLanczos
+------------------------------------------------
+Timer: timestamp: 2026/01/28 23:17:57 +0900
+
+--------------------------------------------------------------------
+test name: Spectrum_Domainwall_alt.hadron_2ptFunction
+test file: test_alt_Spectrum_Domainwall_5din_Hadron2ptFunction.yaml
+test mode: float_eo
+file = test_alt_Spectrum_Domainwall_5din_Hadron2ptFunction.yaml
+  vlevel       = General
+  source_type  = Local
+Smearing parameters (assumes APE-Stout):
+   proj_type:  Stout_SU3
+   smear_type: APE
+   rho_uniform: 0.100000
+   number_of_smearing: 3
+  vlevel       = General
+
+Configuration setup:
+  gconf_status = Continue
+  gconf_read   = Text_4x4x4x8
+  readfile     = ./conf_04040408.txt
+  plaq = 0.625130
+
+Gauge fixing:
+  Gauge fixing type = None
+Parameters: get_string: key 'filename_output' not found.
+Elapsed time: calc_plqauette: total         0.00 sec, count    1, average         0.00 sec
+plaquette (before smearing):       0.625129946974942
+applying smearing
+Smear_APE:
+  rho =   0.1000
+Director_Smear:
+  Nsmear = 3
+Parameters: get_string: key 'filename_output' not found.
+Elapsed time: calc_plqauette: total         0.00 sec, count    1, average         0.00 sec
+Elapsed time: smearig: total         0.01 sec, count    1, average         0.01 sec
+plaquette (after smearing):        0.968666538331826
+  gmset_type   = Dirac
+Gamma matrix: dirac representation.
+Fopr_Domainwall: construction
+  Imp::Fopr_Wilson: construction
+    Gauge group implementation: SU(3)
+    Imp::Fopr_Wilson: input parameters
+      gamma-matrix type = Dirac
+      kappa  =   0.16666667
+      boundary[0] =  1
+      boundary[1] =  1
+      boundary[2] =  1
+      boundary[3] = -1
+  Imp::Fopr_Wilson: construction finished.
+  Fopr_Domainwall: input parameters
+    mq   =   0.1000
+    M0   =   1.0000
+    Ns   =    8
+    boundary[0] =  1
+    boundary[1] =  1
+    boundary[2] =  1
+    boundary[3] = -1
+    coefficients:
+    b[ 0] =     1.5000000000  c[ 0] =     0.5000000000
+    b[ 1] =     1.5000000000  c[ 1] =     0.5000000000
+    b[ 2] =     1.5000000000  c[ 2] =     0.5000000000
+    b[ 3] =     1.5000000000  c[ 3] =     0.5000000000
+    b[ 4] =     1.5000000000  c[ 4] =     0.5000000000
+    b[ 5] =     1.5000000000  c[ 5] =     0.5000000000
+    b[ 6] =     1.5000000000  c[ 6] =     0.5000000000
+    b[ 7] =     1.5000000000  c[ 7] =     0.5000000000
+Fopr_Domainwall: construction finished.
+Fopr_Domainwall: input parameters
+  mq   =   0.1000
+  M0   =   1.0000
+  Ns   =    8
+  boundary[0] =  1
+  boundary[1] =  1
+  boundary[2] =  1
+  boundary[3] = -1
+  coefficients:
+  b[ 0] =     1.5000000000  c[ 0] =     0.5000000000
+  b[ 1] =     1.5000000000  c[ 1] =     0.5000000000
+  b[ 2] =     1.5000000000  c[ 2] =     0.5000000000
+  b[ 3] =     1.5000000000  c[ 3] =     0.5000000000
+  b[ 4] =     1.5000000000  c[ 4] =     0.5000000000
+  b[ 5] =     1.5000000000  c[ 5] =     0.5000000000
+  b[ 6] =     1.5000000000  c[ 6] =     0.5000000000
+  b[ 7] =     1.5000000000  c[ 7] =     0.5000000000
+Imp::Fopr_Wilson: construction
+  Gauge group implementation: SU(3)
+  Imp::Fopr_Wilson: input parameters
+    gamma-matrix type = Dirac
+    kappa  =   0.16666667
+    boundary[0] =  1
+    boundary[1] =  1
+    boundary[2] =  1
+    boundary[3] = -1
+Imp::Fopr_Wilson: construction finished.
+Source for spinor field - local:
+  source_position[0] = 0
+  source_position[1] = 0
+  source_position[2] = 0
+  source_position[3] = 0
+
+Check of fermion operator (even-odd)
+norm of source vector: 1.000000
+AFopr_Domainwall_5din_eo<AField<float,ACCEL> >: construction
+  do_comm[0] = 0
+  do_comm[1] = 0
+  do_comm[2] = 0
+  do_comm[3] = 0
+  AFopr_Domainwall_5din_eo<AField<float,ACCEL> >: input parameters
+    gamma matrix repr.:  Dirac
+    code implementation: 5d
+    mq   =   0.1000
+    M0   =   1.0000
+    Ns   =    8
+    boundary[0] =  1
+    boundary[1] =  1
+    boundary[2] =  1
+    boundary[3] = -1
+    coefficients:
+      b[ 0] =     1.5000000000  c[ 0] =     0.5000000000
+      b[ 1] =     1.5000000000  c[ 1] =     0.5000000000
+      b[ 2] =     1.5000000000  c[ 2] =     0.5000000000
+      b[ 3] =     1.5000000000  c[ 3] =     0.5000000000
+      b[ 4] =     1.5000000000  c[ 4] =     0.5000000000
+      b[ 5] =     1.5000000000  c[ 5] =     0.5000000000
+      b[ 6] =     1.5000000000  c[ 6] =     0.5000000000
+      b[ 7] =     1.5000000000  c[ 7] =     0.5000000000
+    alpha =   1.0000
+convert required.
+convert performed.
+
+[D check]
+norm2(abq) = 1.000000
+norm2(y5)  = 169.375267
+norm2(z5)  = 169.375270
+norm2(axq) = 169.375259
+diff2 = 0.000000
+Elapsed time: afopr_Domainwall_5din_eo: Deo & dagger   : total         0.00 sec, count    2, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: Dee_inv & dag  : total         0.00 sec, count   18, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: clear          : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: pack           : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: bulk           : total         0.00 sec, count    2, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: boundary       : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm           : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_recv_wait : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_send_wait : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_recv_start: total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_send_start: total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_test_all  : total         0.00 sec, count    0, average         0.00 sec
+
+Fprop_alt_Standard_eo<Afield<float,ACCEL> >: being setup (without link smearing).
+  AFopr_Domainwall_5din_eo<AField<float,ACCEL> >: construction
+    do_comm[0] = 0
+    do_comm[1] = 0
+    do_comm[2] = 0
+    do_comm[3] = 0
+    AFopr_Domainwall_5din_eo<AField<float,ACCEL> >: input parameters
+      gamma matrix repr.:  Dirac
+      code implementation: 5d
+      mq   =   0.1000
+      M0   =   1.0000
+      Ns   =    8
+      boundary[0] =  1
+      boundary[1] =  1
+      boundary[2] =  1
+      boundary[3] = -1
+      coefficients:
+        b[ 0] =     1.5000000000  c[ 0] =     0.5000000000
+        b[ 1] =     1.5000000000  c[ 1] =     0.5000000000
+        b[ 2] =     1.5000000000  c[ 2] =     0.5000000000
+        b[ 3] =     1.5000000000  c[ 3] =     0.5000000000
+        b[ 4] =     1.5000000000  c[ 4] =     0.5000000000
+        b[ 5] =     1.5000000000  c[ 5] =     0.5000000000
+        b[ 6] =     1.5000000000  c[ 6] =     0.5000000000
+        b[ 7] =     1.5000000000  c[ 7] =     0.5000000000
+      alpha =   1.0000
+  ASolver_CGNR<Afield<float,ACCEL> >:
+  ASolver_CG<Afield<float,ACCEL> >:
+    Precision: float
+    Niter     = 4000
+    Stop_cond =   9.99999982e-15
+    init_guess_mode: 0
+Fprop_alt_Standard_eo<Afield<float,ACCEL> >: setup finished.
+
+Fprop_alt_Standard_eo<Afield<float,ACCEL> >: mult performance:
+  mult mode = Dee_inv
+  Number of mult =                400
+  Elapsed time   =       0.022063 sec
+  Flop(Fopr)     =             491520
+  Flop(total)    =          196608000
+  Performance    =       8.911 GFlops
+
+Fprop_alt_Standard_eo<Afield<float,ACCEL> >: mult performance:
+  mult mode = Doe
+  Number of mult =                400
+  Elapsed time   =       0.027908 sec
+  Flop(Fopr)     =            3047424
+  Flop(total)    =         1218969600
+  Performance    =      43.678 GFlops
+
+Fprop_alt_Standard_eo<Afield<float,ACCEL> >: mult performance:
+  mult mode = D
+  Number of mult =                400
+  Elapsed time   =       0.123383 sec
+  Flop(Fopr)     =            7127040
+  Flop(total)    =         2850816000
+  Performance    =      23.105 GFlops
+
+Fprop_alt_Standard_eo<Afield<float,ACCEL> >: mult performance:
+  mult mode = Ddag
+  Number of mult =                400
+  Elapsed time   =       0.139856 sec
+  Flop(Fopr)     =            7127040
+  Flop(total)    =         2850816000
+  Performance    =      20.384 GFlops
+
+Fprop_alt_Standard_eo<Afield<float,ACCEL> >: mult performance:
+  mult mode = DdagD
+  Number of mult =                400
+  Elapsed time   =       0.273390 sec
+  Flop(Fopr)     =           14254080
+  Flop(total)    =         5701632000
+  Performance    =      20.855 GFlops
+
+Solving quark propagator:
+  color spin   Nconv      diff           diff2
+    0    0       75     2.4675e-15     6.2581e-14
+    1    0       75     1.8754e-15     5.3563e-14
+    2    0       75     2.4357e-15     6.1986e-14
+    0    1       75     2.0354e-15     5.4391e-14
+    1    1       75     1.9078e-15     5.1956e-14
+    2    1       75     1.8887e-15     5.4046e-14
+    0    2       75     2.3955e-15     6.4231e-14
+    1    2       75     2.2500e-15     5.9518e-14
+    2    2       75     2.8503e-15     6.1079e-14
+    0    3       75     1.9673e-15     5.6014e-14
+    1    3       75     2.3247e-15     6.8035e-14
+    2    3       75     2.8876e-15     6.3731e-14
+
+Fprop_alt_Standard_eo<Afield<float,ACCEL> >: solver performance:
+  Elapsed time =       1.043839 sec
+  Flop(total)  =        13748797440
+  Performance  =      13.171 GFlops
+
+2-point correlator:
+PS <-- PS correlator:
+     0    2.167934091971e-01   -3.924351621105e-20
+     1    9.272308071754e-02    6.412379071754e-20
+     2    3.137319518148e-02    1.365516863786e-20
+     3    1.679236162845e-02   -2.704092196527e-21
+     4    1.760123508317e-02   -5.167487759498e-21
+     5    3.063079242674e-02   -3.764990106218e-21
+     6    4.410319717162e-02    2.565655766198e-21
+     7    9.634923573086e-02   -4.604294084623e-21
+V1 <-- V1 correlator:
+     0    7.414976448040e-02   -2.710505431214e-19
+     1    6.200286564143e-02   -1.490777987168e-19
+     2    1.826131674832e-02    1.084202172486e-19
+     3    8.215745606290e-03    6.776263578034e-21
+     4    6.800870286242e-03   -5.421010862428e-20
+     5    1.097887683121e-02    1.084202172486e-19
+     6    2.078080335992e-02   -1.084202172486e-19
+     7    6.103858360495e-02    0.000000000000e+00
+V2 <-- V2 correlator:
+     0    6.838616273688e-02    3.930232875260e-19
+     1    6.385008119438e-02   -5.963111948670e-19
+     2    1.919788962295e-02    0.000000000000e+00
+     3    8.482377388608e-03    1.016439536705e-19
+     4    6.733402427483e-03    0.000000000000e+00
+     5    1.130659666748e-02   -1.084202172486e-19
+     6    2.159028097978e-02   -2.168404344971e-19
+     7    6.283819175859e-02    4.336808689942e-19
+V3 <-- V3 correlator:
+     0    7.389963844707e-02    1.565165305679e-20
+     1    5.668869700087e-02    7.391499838136e-20
+     2    1.364135534216e-02    8.210387965048e-21
+     3    5.016865041962e-03   -7.632639465684e-22
+     4    2.602048067783e-03   -4.290999427619e-21
+     5    2.474026837229e-03   -4.167749516348e-21
+     6    1.019849035065e-02   -9.301645988159e-22
+     7    5.495040647480e-02   -2.316932895761e-20
+A4 <-- PS correlator:
+     0    2.898421558151e-03    4.436738311793e-21
+     1   -1.851677523007e-02    3.760869712791e-20
+     2   -8.064378706889e-03    5.162640998097e-22
+     3   -3.473785005625e-03    2.879708941362e-21
+     4   -2.155591790737e-04   -3.138271545238e-21
+     5    4.583464124929e-03   -2.673861330078e-21
+     6    1.210370788634e-02   -2.098557214047e-21
+     7    2.409722454644e-02    1.058170798608e-20
+PS <-- A4 correlator:
+     0   -2.487029606115e-03   -2.634260058252e-21
+     1   -2.129515058588e-02    5.766599167534e-20
+     2   -1.001543507340e-02   -4.720635745309e-21
+     3   -4.284947021082e-03    3.912060234190e-21
+     4    4.574558126644e-04   -1.564276086520e-22
+     5    6.039944967386e-03   -9.449763016594e-22
+     6    1.153545896612e-02    1.436021732544e-20
+     7    2.005004723336e-02   -1.873869110283e-20
+S <-- S correlator:
+     0   -1.974159359654e-01   -1.897353801850e-19
+     1   -7.812410700820e-02    0.000000000000e+00
+     2   -2.190933978715e-02   -2.168404344971e-19
+     3   -9.857061560401e-03   -1.084202172486e-19
+     4   -9.432523788141e-03   -1.626303258728e-19
+     5   -1.579368475235e-02    3.252606517457e-19
+     6   -2.474387750418e-02    0.000000000000e+00
+     7   -7.592313465132e-02    3.252606517457e-19
+GAMMA51 <-- GAMMA51 correlator:
+     0    6.522689784792e-02   -1.084202172486e-19
+     1    5.625367729066e-02    1.626303258728e-19
+     2    1.574431895134e-02   -6.776263578034e-20
+     3    7.016930171981e-03    6.098637220231e-20
+     4    5.082087925292e-03    0.000000000000e+00
+     5    6.956463505540e-03   -5.421010862428e-20
+     6    1.436391136515e-02    1.626303258728e-19
+     7    5.294262075006e-02   -4.336808689942e-19
+GAMMA52 <-- GAMMA52 correlator:
+     0    5.722212674629e-02    1.626303258728e-19
+     1    5.579366340458e-02   -2.168404344971e-19
+     2    1.504305915856e-02   -8.131516293641e-20
+     3    6.220685047895e-03    0.000000000000e+00
+     4    4.698404012321e-03    0.000000000000e+00
+     5    7.819550944135e-03    0.000000000000e+00
+     6    1.605517062246e-02    2.168404344971e-19
+     7    5.403310007546e-02   -1.084202172486e-19
+GAMMA53 <-- GAMMA53 correlator:
+     0    6.462770017774e-02    1.084202172486e-19
+     1    5.105100744633e-02   -1.084202172486e-19
+     2    1.152918385239e-02    2.710505431214e-20
+     3    4.493468812200e-03   -5.421010862428e-20
+     4    1.836371491889e-03    2.168404344971e-19
+     5   -1.117132962145e-03    1.084202172486e-19
+     6    3.319281485396e-03    2.710505431214e-20
+     7    4.576586776783e-02   -8.131516293641e-20
+SIGMA12 <-- SIGMA12 correlator:
+     0    7.224704955388e-02    0.000000000000e+00
+     1   -3.662312763712e-02    2.168404344971e-19
+     2   -1.111104738501e-02    0.000000000000e+00
+     3   -5.170824495437e-03    0.000000000000e+00
+     4   -3.383128378190e-03    2.710505431214e-20
+     5   -5.411106176962e-03    5.421010862428e-20
+     6   -1.173193708871e-02    0.000000000000e+00
+     7   -3.490814665362e-02    1.626303258728e-19
+SIGMA23 <-- SIGMA23 correlator:
+     0    7.068919656187e-02    1.084202172486e-19
+     1   -3.295504089692e-02    1.626303258728e-19
+     2   -8.326032901931e-03    6.098637220231e-20
+     3   -4.251831789818e-03   -5.421010862428e-20
+     4   -3.626312710369e-03   -5.421010862428e-20
+     5   -4.367184683456e-03   -2.168404344971e-19
+     6   -8.191589333255e-03   -2.439454888092e-19
+     7   -3.264234083813e-02   -8.809142651445e-20
+SIGMA31 <-- SIGMA31 correlator:
+     0    6.204474217468e-02    5.421010862428e-20
+     1   -3.349858250167e-02   -1.355252715607e-19
+     2   -8.446155287282e-03   -5.421010862428e-20
+     3   -4.166393529931e-03    0.000000000000e+00
+     4   -3.020146000246e-03    2.710505431214e-20
+     5   -2.488378447913e-03    0.000000000000e+00
+     6   -5.626642751580e-03   -1.084202172486e-19
+     7   -3.126993315388e-02    3.388131789017e-20
+Elapsed time: Spectrum_Domainwall_alt.hadron_2ptFunction: total         1.07 sec, count    1, average         1.07 sec
+ alt code.
+
+check test data
+check precision = 1.0e-11
+result: 2.16793409197105e-01  expected: 4.35052428395750e-01
+test result: incorrect! (T_T)
+diff: expected - result = -5.01684406184037e-01
+
+Elapsed time: afopr_Domainwall_5din_eo: Deo & dagger   : total         0.58 sec, count 7344, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: Dee_inv & dag  : total         0.32 sec, count 7372, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: clear          : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: pack           : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: bulk           : total         0.27 sec, count 7344, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: boundary       : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm           : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_recv_wait : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_send_wait : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_recv_start: total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_send_start: total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_test_all  : total         0.00 sec, count    0, average         0.00 sec
+
+--------------------------------------------------------------------
+test name: Spectrum_Domainwall_alt.hadron_2ptFunction
+test file: test_alt_Spectrum_Domainwall_5din_Hadron2ptFunction.yaml
+test mode: double_eo
+file = test_alt_Spectrum_Domainwall_5din_Hadron2ptFunction.yaml
+  vlevel       = General
+  source_type  = Local
+Smearing parameters (assumes APE-Stout):
+   proj_type:  Stout_SU3
+   smear_type: APE
+   rho_uniform: 0.100000
+   number_of_smearing: 3
+  vlevel       = General
+
+Configuration setup:
+  gconf_status = Continue
+  gconf_read   = Text_4x4x4x8
+  readfile     = ./conf_04040408.txt
+  plaq = 0.625130
+
+Gauge fixing:
+  Gauge fixing type = None
+Parameters: get_string: key 'filename_output' not found.
+Elapsed time: calc_plqauette: total         0.00 sec, count    1, average         0.00 sec
+plaquette (before smearing):       0.625129946974942
+applying smearing
+Smear_APE:
+  rho =   0.1000
+Director_Smear:
+  Nsmear = 3
+Parameters: get_string: key 'filename_output' not found.
+Elapsed time: calc_plqauette: total         0.00 sec, count    1, average         0.00 sec
+Elapsed time: smearig: total         0.01 sec, count    1, average         0.01 sec
+plaquette (after smearing):        0.968666538331826
+  gmset_type   = Dirac
+Gamma matrix: dirac representation.
+Fopr_Domainwall: construction
+  Imp::Fopr_Wilson: construction
+    Gauge group implementation: SU(3)
+    Imp::Fopr_Wilson: input parameters
+      gamma-matrix type = Dirac
+      kappa  =   0.16666667
+      boundary[0] =  1
+      boundary[1] =  1
+      boundary[2] =  1
+      boundary[3] = -1
+  Imp::Fopr_Wilson: construction finished.
+  Fopr_Domainwall: input parameters
+    mq   =   0.1000
+    M0   =   1.0000
+    Ns   =    8
+    boundary[0] =  1
+    boundary[1] =  1
+    boundary[2] =  1
+    boundary[3] = -1
+    coefficients:
+    b[ 0] =     1.5000000000  c[ 0] =     0.5000000000
+    b[ 1] =     1.5000000000  c[ 1] =     0.5000000000
+    b[ 2] =     1.5000000000  c[ 2] =     0.5000000000
+    b[ 3] =     1.5000000000  c[ 3] =     0.5000000000
+    b[ 4] =     1.5000000000  c[ 4] =     0.5000000000
+    b[ 5] =     1.5000000000  c[ 5] =     0.5000000000
+    b[ 6] =     1.5000000000  c[ 6] =     0.5000000000
+    b[ 7] =     1.5000000000  c[ 7] =     0.5000000000
+Fopr_Domainwall: construction finished.
+Fopr_Domainwall: input parameters
+  mq   =   0.1000
+  M0   =   1.0000
+  Ns   =    8
+  boundary[0] =  1
+  boundary[1] =  1
+  boundary[2] =  1
+  boundary[3] = -1
+  coefficients:
+  b[ 0] =     1.5000000000  c[ 0] =     0.5000000000
+  b[ 1] =     1.5000000000  c[ 1] =     0.5000000000
+  b[ 2] =     1.5000000000  c[ 2] =     0.5000000000
+  b[ 3] =     1.5000000000  c[ 3] =     0.5000000000
+  b[ 4] =     1.5000000000  c[ 4] =     0.5000000000
+  b[ 5] =     1.5000000000  c[ 5] =     0.5000000000
+  b[ 6] =     1.5000000000  c[ 6] =     0.5000000000
+  b[ 7] =     1.5000000000  c[ 7] =     0.5000000000
+Imp::Fopr_Wilson: construction
+  Gauge group implementation: SU(3)
+  Imp::Fopr_Wilson: input parameters
+    gamma-matrix type = Dirac
+    kappa  =   0.16666667
+    boundary[0] =  1
+    boundary[1] =  1
+    boundary[2] =  1
+    boundary[3] = -1
+Imp::Fopr_Wilson: construction finished.
+Source for spinor field - local:
+  source_position[0] = 0
+  source_position[1] = 0
+  source_position[2] = 0
+  source_position[3] = 0
+
+Check of fermion operator (even-odd)
+norm of source vector: 1.000000
+AFopr_Domainwall_5din_eo<AField<double,ACCEL> >: construction
+  do_comm[0] = 0
+  do_comm[1] = 0
+  do_comm[2] = 0
+  do_comm[3] = 0
+  AFopr_Domainwall_5din_eo<AField<double,ACCEL> >: input parameters
+    gamma matrix repr.:  Dirac
+    code implementation: 5d
+    mq   =   0.1000
+    M0   =   1.0000
+    Ns   =    8
+    boundary[0] =  1
+    boundary[1] =  1
+    boundary[2] =  1
+    boundary[3] = -1
+    coefficients:
+      b[ 0] =     1.5000000000  c[ 0] =     0.5000000000
+      b[ 1] =     1.5000000000  c[ 1] =     0.5000000000
+      b[ 2] =     1.5000000000  c[ 2] =     0.5000000000
+      b[ 3] =     1.5000000000  c[ 3] =     0.5000000000
+      b[ 4] =     1.5000000000  c[ 4] =     0.5000000000
+      b[ 5] =     1.5000000000  c[ 5] =     0.5000000000
+      b[ 6] =     1.5000000000  c[ 6] =     0.5000000000
+      b[ 7] =     1.5000000000  c[ 7] =     0.5000000000
+    alpha =   1.0000
+convert required.
+convert performed.
+
+[D check]
+norm2(abq) = 1.000000
+norm2(y5)  = 169.375267
+norm2(z5)  = 169.375267
+norm2(axq) = 169.375267
+diff2 = 0.000000
+
+[Ddag check]
+norm2(abq) = 1.000000
+norm2(y5)  = 170.813958
+norm2(z5)  = 170.813958
+norm2(axq) = 170.813958
+diff2 = 0.000000
+Elapsed time: afopr_Domainwall_5din_eo: Deo & dagger   : total         0.00 sec, count    4, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: Dee_inv & dag  : total         0.00 sec, count   20, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: clear          : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: pack           : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: bulk           : total         0.00 sec, count    4, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: boundary       : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm           : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_recv_wait : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_send_wait : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_recv_start: total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_send_start: total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_test_all  : total         0.00 sec, count    0, average         0.00 sec
+
+Fprop_alt_Standard_eo<Afield<double,ACCEL> >: being setup (without link smearing).
+  AFopr_Domainwall_5din_eo<AField<double,ACCEL> >: construction
+    do_comm[0] = 0
+    do_comm[1] = 0
+    do_comm[2] = 0
+    do_comm[3] = 0
+    AFopr_Domainwall_5din_eo<AField<double,ACCEL> >: input parameters
+      gamma matrix repr.:  Dirac
+      code implementation: 5d
+      mq   =   0.1000
+      M0   =   1.0000
+      Ns   =    8
+      boundary[0] =  1
+      boundary[1] =  1
+      boundary[2] =  1
+      boundary[3] = -1
+      coefficients:
+        b[ 0] =     1.5000000000  c[ 0] =     0.5000000000
+        b[ 1] =     1.5000000000  c[ 1] =     0.5000000000
+        b[ 2] =     1.5000000000  c[ 2] =     0.5000000000
+        b[ 3] =     1.5000000000  c[ 3] =     0.5000000000
+        b[ 4] =     1.5000000000  c[ 4] =     0.5000000000
+        b[ 5] =     1.5000000000  c[ 5] =     0.5000000000
+        b[ 6] =     1.5000000000  c[ 6] =     0.5000000000
+        b[ 7] =     1.5000000000  c[ 7] =     0.5000000000
+      alpha =   1.0000
+  ASolver_CGNR<Afield<double,ACCEL> >:
+  ASolver_CG<Afield<double,ACCEL> >:
+    Precision: double
+    Niter     = 4000
+    Stop_cond =   1.00000000e-28
+    init_guess_mode: 0
+Fprop_alt_Standard_eo<Afield<double,ACCEL> >: setup finished.
+
+Fprop_alt_Standard_eo<Afield<double,ACCEL> >: mult performance:
+  mult mode = Dee_inv
+  Number of mult =                400
+  Elapsed time   =       0.022627 sec
+  Flop(Fopr)     =             491520
+  Flop(total)    =          196608000
+  Performance    =       8.689 GFlops
+
+Fprop_alt_Standard_eo<Afield<double,ACCEL> >: mult performance:
+  mult mode = Doe
+  Number of mult =                400
+  Elapsed time   =       0.043434 sec
+  Flop(Fopr)     =            3047424
+  Flop(total)    =         1218969600
+  Performance    =      28.065 GFlops
+
+Fprop_alt_Standard_eo<Afield<double,ACCEL> >: mult performance:
+  mult mode = D
+  Number of mult =                400
+  Elapsed time   =       0.183794 sec
+  Flop(Fopr)     =            7127040
+  Flop(total)    =         2850816000
+  Performance    =      15.511 GFlops
+
+Fprop_alt_Standard_eo<Afield<double,ACCEL> >: mult performance:
+  mult mode = Ddag
+  Number of mult =                400
+  Elapsed time   =       0.146989 sec
+  Flop(Fopr)     =            7127040
+  Flop(total)    =         2850816000
+  Performance    =      19.395 GFlops
+
+Fprop_alt_Standard_eo<Afield<double,ACCEL> >: mult performance:
+  mult mode = DdagD
+  Number of mult =                400
+  Elapsed time   =       0.331289 sec
+  Flop(Fopr)     =           14254080
+  Flop(total)    =         5701632000
+  Performance    =      17.210 GFlops
+
+Solving quark propagator:
+  color spin   Nconv      diff           diff2
+    0    0      117     1.5891e-30     1.1691e-28
+    1    0      117     1.8000e-30     1.2245e-28
+    2    0      117     2.3138e-30     1.4784e-28
+    0    1      117     2.2218e-30     1.3753e-28
+    1    1      117     1.7230e-30     1.2428e-28
+    2    1      117     1.2414e-30     9.4156e-29
+    0    2      117     1.4589e-30     1.0928e-28
+    1    2      117     1.7839e-30     1.2031e-28
+    2    2      117     2.1128e-30     1.4291e-28
+    0    3      117     2.1699e-30     1.3387e-28
+    1    3      117     1.5304e-30     1.1297e-28
+    2    3      117     1.2884e-30     9.9106e-29
+
+Fprop_alt_Standard_eo<Afield<double,ACCEL> >: solver performance:
+  Elapsed time =       1.694582 sec
+  Flop(total)  =        21205352448
+  Performance  =      12.514 GFlops
+
+2-point correlator:
+PS <-- PS correlator:
+     0    2.167933997192e-01   -2.597630763921e-19
+     1    9.272308472596e-02    3.904026566672e-20
+     2    3.137319811504e-02    1.634014063106e-20
+     3    1.679236196592e-02    3.937168909273e-21
+     4    1.760123377738e-02   -4.437653711029e-21
+     5    3.063079066748e-02   -1.415763405135e-21
+     6    4.410319537957e-02    6.338134535078e-21
+     7    9.634922818627e-02   -1.260536272994e-19
+V1 <-- V1 correlator:
+     0    7.414976169094e-02   -5.963111948670e-19
+     1    6.200286987125e-02   -5.014435047745e-19
+     2    1.826132053676e-02    1.897353801850e-19
+     3    8.215747034081e-03    0.000000000000e+00
+     4    6.800870485561e-03    0.000000000000e+00
+     5    1.097887610744e-02    0.000000000000e+00
+     6    2.078080144275e-02    0.000000000000e+00
+     7    6.103857698129e-02    1.084202172486e-19
+V2 <-- V2 correlator:
+     0    6.838616052971e-02    2.710505431214e-19
+     1    6.385008534975e-02   -2.710505431214e-20
+     2    1.919789172765e-02    1.897353801850e-19
+     3    8.482377047252e-03   -6.776263578034e-21
+     4    6.733400181983e-03    1.355252715607e-19
+     5    1.130659361820e-02   -2.168404344971e-19
+     6    2.159027711249e-02    0.000000000000e+00
+     7    6.283818293266e-02   -5.421010862428e-20
+V3 <-- V3 correlator:
+     0    7.389963964832e-02    5.423144422667e-20
+     1    5.668869876227e-02    4.900270041106e-20
+     2    1.364135642375e-02    1.278165636379e-20
+     3    5.016864587996e-03    1.940384936281e-22
+     4    2.602047534693e-03    4.639133895652e-21
+     5    2.474027220065e-03   -2.122669181435e-21
+     6    1.019849096901e-02    1.442464086993e-20
+     7    5.495040215637e-02   -1.496307761673e-19
+A4 <-- PS correlator:
+     0    2.898421769973e-03   -1.337246681061e-19
+     1   -1.851677720552e-02   -1.866925617515e-19
+     2   -8.064378210752e-03   -2.653196582690e-21
+     3   -3.473784180081e-03   -3.211081539189e-21
+     4   -2.155591430234e-04    3.510610260586e-21
+     5    4.583464967745e-03   -5.255353404644e-21
+     6    1.210370868236e-02    1.075342293097e-20
+     7    2.409722474524e-02    1.838826325577e-20
+PS <-- A4 correlator:
+     0   -2.487038761268e-03    1.373875343935e-19
+     1   -2.129515596857e-02   -1.557368417806e-19
+     2   -1.001543849575e-02   -6.464720419139e-21
+     3   -4.284949343628e-03   -8.973015293041e-21
+     4    4.574552962370e-04   -3.803918399185e-22
+     5    6.039946444059e-03   -6.394566537210e-21
+     6    1.153545738101e-02    3.641264119853e-21
+     7    2.005004230946e-02    4.488169025151e-21
+S <-- S correlator:
+     0   -1.974159234576e-01   -2.981555974335e-19
+     1   -7.812410844531e-02   -4.336808689942e-19
+     2   -2.190934144184e-02   -1.084202172486e-19
+     3   -9.857061398502e-03   -5.421010862428e-20
+     4   -9.432523203711e-03    2.168404344971e-19
+     5   -1.579368347703e-02   -7.589415207399e-19
+     6   -2.474387385541e-02   -2.168404344971e-19
+     7   -7.592312415553e-02    0.000000000000e+00
+GAMMA51 <-- GAMMA51 correlator:
+     0    6.522689235611e-02    4.336808689942e-19
+     1    5.625368026592e-02   -1.084202172486e-19
+     2    1.574432284315e-02   -1.897353801850e-19
+     3    7.016932107843e-03   -4.743384504624e-20
+     4    5.082087284516e-03   -2.710505431214e-20
+     5    6.956459501796e-03   -1.084202172486e-19
+     6    1.436390494159e-02   -5.421010862428e-20
+     7    5.294261074920e-02   -2.168404344971e-19
+GAMMA52 <-- GAMMA52 correlator:
+     0    5.722212036033e-02   -1.626303258728e-19
+     1    5.579366478415e-02   -8.131516293641e-20
+     2    1.504306045906e-02   -1.084202172486e-19
+     3    6.220685120694e-03    0.000000000000e+00
+     4    4.698402539500e-03   -2.168404344971e-19
+     5    7.819547811361e-03   -2.168404344971e-19
+     6    1.605516528031e-02    0.000000000000e+00
+     7    5.403308789542e-02    3.252606517457e-19
+GAMMA53 <-- GAMMA53 correlator:
+     0    6.462769746237e-02   -9.757819552370e-19
+     1    5.105100668532e-02    5.421010862428e-20
+     2    1.152918363171e-02    4.065758146821e-20
+     3    4.493467198826e-03   -1.084202172486e-19
+     4    1.836369765555e-03    2.168404344971e-19
+     5   -1.117135111544e-03   -1.084202172486e-19
+     6    3.319278304099e-03    2.710505431214e-19
+     7    4.576585970460e-02    2.168404344971e-19
+SIGMA12 <-- SIGMA12 correlator:
+     0    7.224704773860e-02    1.084202172486e-19
+     1   -3.662312954810e-02    5.421010862428e-20
+     2   -1.111104856438e-02    1.084202172486e-19
+     3   -5.170824384742e-03    1.084202172486e-19
+     4   -3.383125886933e-03    5.421010862428e-20
+     5   -5.411100405376e-03    5.421010862428e-20
+     6   -1.173192949500e-02    5.421010862428e-20
+     7   -3.490813548509e-02   -1.084202172486e-19
+SIGMA23 <-- SIGMA23 correlator:
+     0    7.068919250634e-02    1.084202172486e-19
+     1   -3.295504183502e-02   -5.421010862428e-20
+     2   -8.326034749012e-03    2.371692252312e-20
+     3   -4.251832794228e-03    2.710505431214e-20
+     4   -3.626313247431e-03   -1.897353801850e-19
+     5   -4.367185446002e-03    5.421010862428e-20
+     6   -8.191588899800e-03    5.421010862428e-20
+     7   -3.264233259370e-02   -2.303929616532e-19
+SIGMA31 <-- SIGMA31 correlator:
+     0    6.204473969292e-02    0.000000000000e+00
+     1   -3.349858136727e-02    1.626303258728e-19
+     2   -8.446154639630e-03    1.219727444046e-19
+     3   -4.166392095521e-03   -1.626303258728e-19
+     4   -3.020144299365e-03    2.303929616532e-19
+     5   -2.488375597164e-03    0.000000000000e+00
+     6   -5.626637776026e-03    0.000000000000e+00
+     7   -3.126992349364e-02   -6.776263578034e-20
+Elapsed time: Spectrum_Domainwall_alt.hadron_2ptFunction: total         1.71 sec, count    1, average         1.71 sec
+ alt code.
+
+check test data
+check precision = 1.0e-11
+result: 2.16793399719228e-01  expected: 4.35052428395750e-01
+test result: incorrect! (T_T)
+diff: expected - result = -5.01684427969635e-01
+
+Elapsed time: afopr_Domainwall_5din_eo: Deo & dagger   : total         0.95 sec, count 9360, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: Dee_inv & dag  : total         0.42 sec, count 9388, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: clear          : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: pack           : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: bulk           : total         0.50 sec, count 9360, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: boundary       : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm           : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_recv_wait : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_send_wait : total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_recv_start: total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_send_start: total         0.00 sec, count    0, average         0.00 sec
+Elapsed time: afopr_Domainwall_5din_eo: comm_test_all  : total         0.00 sec, count    0, average         0.00 sec
+Test result for Accel = 2
+Elapsed time: Main: total         4.42 sec, count    1, average         4.42 sec
+Timer: timestamp: 2026/01/28 23:18:01 +0900

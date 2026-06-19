@@ -1,0 +1,38 @@
+nvcc -ccbin mpic++ -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80 -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt -I/home/wlchenhome/Bridge/with_alpha/build/include/bridge/lib_alt_Accel  -I./ -c -o main.o main.cpp
+----------------------------------------------------------------
+Compilation Environment Summary
+
+Options:
+  target              = CUDA ( CUDA )
+  use_mpi             = yes
+  use_thread          = omp
+  use_opt_code        = yes
+  use_opt_level       = high
+  use_static          = no
+  use_debug           = no
+  use_gauge_group     = su3
+  use_complex         = std
+  use_cpp11           = yes
+  use_testmanager     = no
+  use_lime_library    = no
+  use_sfmt_library    = no
+  use_ntl_library     = no
+  use_fftw_library    = no
+  use_yamlcpp_library = no
+  use_tinyxml2_library= no
+  use_qws_library     = no
+
+Compiler and options:
+  CXX         = nvcc -ccbin mpic++
+  CXXFLAGS    = -Xcompiler -fopenmp -std=c++11 -O3 -gencode=arch=compute_80,code=sm_80
+  LD          = nvcc -ccbin mpic++
+  LDFLAGS     = -Xcompiler -fopenmp -gencode=arch=compute_80,code=sm_80
+  LDLIBS      = -lm -lnvidia-ml -lcuda -lcudart
+  CXXDEP      = nvcc -ccbin mpic++
+  CXXDEPFLAGS = -MM
+  CPPFLAGS    = -DUSE_STRDUP -DNDEBUG -DCUDA -DUSE_MPI -DUSE_IMP -DUSE_GROUP_SU3 -DUSE_OPENMP -DUSE_STD_COMPLEX -DLIB_CPP11 -DUSE_FACTORY -DUSE_ALT_CODE -DUSE_ALT_ACCEL -DUSE_ACCEL_CUDA
+----------------------------------------------------------------
+make: nvcc: Not a directory
+make: *** [Makefile:28: main.o] Error 127
+make: *** Waiting for unfinished jobs....
+✅ Build complete! Output: bridge.elf

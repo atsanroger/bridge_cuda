@@ -1,0 +1,57 @@
+# this is a sample parameter file
+
+Test_Mult_Overlap:
+  ## gauge_config_status = {Continue,Cold_start,Hot_start}
+  gauge_config_status      : Continue
+  ## gauge_config_type = {Text,Binary,Binary_Distributed,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel,None}
+  gauge_config_type_input  : Text
+  config_filename_input    : ./conf_04040408.txt
+  ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library
+  random_number_type       : Mseries
+  seed_for_random_number   : 1234567UL
+  number_of_mult           : 1
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level            : General
+  expected_result          : 3.34317732744080e+02
+  tolerance                : 1.0e-12
+
+Fopr_Wilson:
+  ## gamma_matrix_type = {Chiral,Dirac}
+  gamma_matrix_type  : Dirac
+  hopping_parameter  : 0.5 / (4.0 - 1.6)
+  ## bondary_condition = [bc_x,bc_y,bc_z,bc_t], 1:periodic,0:Dirichlet,-1:antiperiodic
+  boundary_condition : [1,1,1,1]
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General
+
+Fopr_Overlap:
+  quark_mass                    : 0.2
+  domain_wall_height            : 1.6
+  number_of_poles               : 16
+  lower_bound                   : 0.01
+  upper_bound                   : 8.0
+  maximum_number_of_iteration   : 1000
+  convergence_criterion_squared : 1.0e-24
+  ## bondary_condition = [bc_x,bc_y,bc_z,bc_t], 1:periodic,0:Dirichlet,-1:antiperiodic
+  boundary_condition            : [1,1,1,1]
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level                 : General
+
+Eigensolver:
+  eigensolver_mode               : abs_ascending
+  number_of_wanted_eigenvectors  : 20
+  number_of_working_eigenvectors : 50
+  convergence_criterion_squared  : 1.0e-24
+  maximum_number_of_iteration    : 500
+  threshold_value                : 0.15
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level                  : General
+#
+#  eigensolver_mode               : abs_descending
+#  number_of_wanted_eigenvectors  : 20
+#  number_of_working_eigenvectors : 20
+#  convergence_criterion_squared  : 1.0e-26
+#  maximum_number_of_iteration    : 500
+#  threshold_value                : 10.0
+#  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+#  verbose_level                  : General

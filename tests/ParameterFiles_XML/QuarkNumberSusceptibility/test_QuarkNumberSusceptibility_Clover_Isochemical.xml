@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <!-- # this is a sample parameter file -->
+    <Test_QuarkNumSuscept_Clover_Isochemical>
+        <!--   ## gauge_config_status = {Continue,Cold_start,Hot_start} -->
+        <gauge_config_status>Continue</gauge_config_status>
+        <!--   ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel} -->
+        <gauge_config_type_input>Text</gauge_config_type_input>
+        <config_filename_input>./conf_04040408.txt</config_filename_input>
+        <!--   ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library -->
+        <random_number_type>Mseries</random_number_type>
+        <seed_for_random_number>1234567UL</seed_for_random_number>
+        <int_seed_for_noise>200000</int_seed_for_noise>
+        <number_of_noises>10</number_of_noises>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <expected_result>133.66770331376816</expected_result>
+    </Test_QuarkNumSuscept_Clover_Isochemical>
+    <Fopr_Clover_Isochemical>
+        <!--   ## gamma_matrix_type = {Chiral,Dirac} -->
+        <gamma_matrix_type>Dirac</gamma_matrix_type>
+        <hopping_parameter>0.12</hopping_parameter>
+        <clover_coefficient>1.0</clover_coefficient>
+        <isospin_chemical_potential>0.3</isospin_chemical_potential>
+        <boundary_condition type="sequence">
+            <x>1</x>
+            <y>1</y>
+            <z>1</z>
+            <t>-1</t>
+        </boundary_condition>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr_Clover_Isochemical>
+    <Projection>
+        <!--   ## projection_type = {Maximum_SU_N,Stout_SU3} -->
+        <projection_type>Stout_SU3</projection_type>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Projection>
+    <Smear>
+        <!--   ## smear_type = {APE,HYP} -->
+        <smear_type>APE</smear_type>
+        <rho_uniform>0.1</rho_uniform>
+        <!--   #smear_type    : HYP -->
+        <!--   #alpha1        : 0.95 -->
+        <!--   #alpha2        : 0.76 -->
+        <!--   #alpha3        : 0.38 -->
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Smear>
+    <Director_Smear>
+        <number_of_smearing>1</number_of_smearing>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Director_Smear>
+    <Solver>
+        <!--   ## solver_type = {CG,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx} -->
+        <solver_type>BiCGStab_L_Cmplx</solver_type>
+        <maximum_number_of_iteration>100</maximum_number_of_iteration>
+        <maximum_number_of_restart>40</maximum_number_of_restart>
+        <convergence_criterion_squared>1.0e-28</convergence_criterion_squared>
+        <use_initial_guess>false</use_initial_guess>
+        <!--   ## additional parameters for BiCGStab series -->
+        <Omega_tolerance>0.60</Omega_tolerance>
+        <!--   ## additional parameters for each solver -->
+        <number_of_orthonormal_vectors>2</number_of_orthonormal_vectors>
+        <tolerance_for_DynamicSelection_of_L>0.1</tolerance_for_DynamicSelection_of_L>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Solver>
+</Parameters>

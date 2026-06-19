@@ -1,0 +1,1 @@
+../../sample_hmc/conf_quench_16x16x16x16.txt

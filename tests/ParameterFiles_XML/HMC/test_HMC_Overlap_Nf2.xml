@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <!-- # this is a sample parameter file -->
+    <Test_HMC_Overlap>
+        <!--   ## gauge_config_status = {Continue,Cold_start,Hot_start} -->
+        <gauge_config_status>Continue</gauge_config_status>
+        <!--   ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel,None} -->
+        <gauge_config_type_input>Text</gauge_config_type_input>
+        <config_filename_input>./conf_04040408.txt</config_filename_input>
+        <gauge_config_type_output>None</gauge_config_type_output>
+        <config_filename_output>./conf_output.dat</config_filename_output>
+        <!--   ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library -->
+        <random_number_type>Mseries</random_number_type>
+        <seed_for_random_number>1234567UL</seed_for_random_number>
+        <trajectory_number>200000</trajectory_number>
+        <trajectory_number_step>1</trajectory_number_step>
+        <save_config_interval>100</save_config_interval>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <!--   expected_result          : 0.628049202642012  # trial value obtained with Metropolis_test=0 -->
+    </Test_HMC_Overlap>
+    <HMC_Leapfrog>
+        <step_size>0.02</step_size>
+        <number_of_steps>5</number_of_steps>
+        <order_of_exp_iP>8</order_of_exp_iP>
+        <Metropolis_test>true</Metropolis_test>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </HMC_Leapfrog>
+    <Action_G>
+        <action_type>Action_G_Rectangle</action_type>
+        <beta>2.3</beta>
+        <c_plaq>3.648</c_plaq>
+        <c_rect>-0.331</c_rect>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Action_G>
+    <Fopr>
+        <fermion_type>Wilson</fermion_type>
+        <!--   ## gamma_matrix_type = {Chiral,Dirac} -->
+        <gamma_matrix_type>Dirac</gamma_matrix_type>
+        <hopping_parameter>0.5 / (4.0 - 1.6)</hopping_parameter>
+        <boundary_condition type="sequence">
+            <x>1</x>
+            <y>1</y>
+            <z>1</z>
+            <t>1</t>
+        </boundary_condition>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr>
+    <Fopr_Overlap>
+        <quark_mass>0.2</quark_mass>
+        <domain_wall_height>1.6</domain_wall_height>
+        <number_of_poles>16</number_of_poles>
+        <lower_bound>0.01</lower_bound>
+        <upper_bound>8.0</upper_bound>
+        <maximum_number_of_iteration>1000</maximum_number_of_iteration>
+        <convergence_criterion_squared>1.0e-20</convergence_criterion_squared>
+        <boundary_condition type="sequence">
+            <x>1</x>
+            <y>1</y>
+            <z>1</z>
+            <t>1</t>
+        </boundary_condition>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr_Overlap>
+    <Eigensolver>
+        <eigensolver_mode>abs_ascending</eigensolver_mode>
+        <number_of_wanted_eigenvectors>20</number_of_wanted_eigenvectors>
+        <number_of_working_eigenvectors>50</number_of_working_eigenvectors>
+        <convergence_criterion_squared>1.0e-22</convergence_criterion_squared>
+        <maximum_number_of_iteration>500</maximum_number_of_iteration>
+        <threshold_value>0.15</threshold_value>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Eigensolver>
+    <Solver_MD>
+        <!--   ## solver_type = {CG,CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx} -->
+        <solver_type>CG</solver_type>
+        <maximum_number_of_iteration>100</maximum_number_of_iteration>
+        <maximum_number_of_restart>40</maximum_number_of_restart>
+        <convergence_criterion_squared>1.0e-24</convergence_criterion_squared>
+        <use_initial_guess>false</use_initial_guess>
+        <!--   ## additional parameters for BiCGStab series -->
+        <Omega_tolerance>0.7</Omega_tolerance>
+        <!--   ## additional parameters for each solver -->
+        <number_of_orthonormal_vectors>2</number_of_orthonormal_vectors>
+        <tolerance_for_DynamicSelection_of_L>0.1</tolerance_for_DynamicSelection_of_L>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Solver_MD>
+    <Solver_H>
+        <!--   ## solver_type = {CG,CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx} -->
+        <solver_type>CG</solver_type>
+        <maximum_number_of_iteration>100</maximum_number_of_iteration>
+        <maximum_number_of_restart>40</maximum_number_of_restart>
+        <convergence_criterion_squared>1.0e-24</convergence_criterion_squared>
+        <use_initial_guess>false</use_initial_guess>
+        <!--   ## additional parameters for BiCGStab series -->
+        <Omega_tolerance>0.7</Omega_tolerance>
+        <!--   ## additional parameters for each solver -->
+        <number_of_orthonormal_vectors>2</number_of_orthonormal_vectors>
+        <tolerance_for_DynamicSelection_of_L>0.1</tolerance_for_DynamicSelection_of_L>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Solver_H>
+</Parameters>

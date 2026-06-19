@@ -1,0 +1,323 @@
+/*!
+        @file    test_Spectrum_CRSMatrix_Overlap5d.cpp
+
+        @brief
+
+        @author  Hideo Matsufuru  (matsufuru)
+                 $LastChangedBy: matufuru $
+
+        @date    $LastChangedDate: 2013-01-22 22:08:29 #$
+
+        @version $LastChangedRevision: 2359 $
+*/
+
+#include "test.h"
+
+#include "Fopr/fopr_CRS.h"
+#include "Fopr/fopr_Wilson.h"
+#include "Fopr/fopr_Overlap.h"
+
+#include "IO/gaugeConfig.h"
+
+#include "Measurements/Fermion/source.h"
+
+#include "Solver/solver_CG.h"
+
+//====================================================================
+//! Test of CRS matrix format.
+
+/*!
+    This class generates and tests the CRS matrix format data.
+    Matrix data in CRS format are generated for the following
+    fermion operators together with sample source and solution
+    vectors.
+
+    The egenrated data can be tested using the function
+    CRSsolver() whether really solved result satisfy the linear
+    equation.
+                                [24 Dec 2011 H.Matsufuru]
+    (Coding history will be recovered from trac.)
+    YAML is implemented.        [14 Nov 2012 Y.Namekawa]
+    unique_ptr is introduced to avoid memory leaks
+                                [21 Mar 2015 Y.Namekawa]
+ */
+
+namespace Test_Spectrum_CRSMatrix {
+  //- test-private parameters
+  namespace {
+    const std::string filename_input  = "test_Spectrum_CRSMatrix_Overlap5d.yaml";
+    const std::string filename_output = "stdout";
+  }
+
+  //- prototype declaration
+  int overlap_5d(void);
+
+  int CRSsolver(
+    const string& solution,
+    const string& matrix,
+    const string& source,
+    double& result       /* return value */
+    );
+
+  void write_text(const Field& f, const string& filename);
+  void read_text(Field& f, const string& filename);
+
+
+#ifdef USE_TESTMANAGER_AUTOREGISTER
+#ifdef USE_MPI
+  // this test runs only in single-node environment.
+#else
+  //- NB. CRS test is skipped, because it is time-consuming.
+#if 0
+  namespace {
+    static const bool is_registered = TestManager::RegisterTest(
+      "Spectrum.CRSMatrix.Overlap5d",
+      overlap_5d
+      );
+  }
+#endif
+#endif
+#endif
+
+  //====================================================================
+  int overlap_5d(void)
+  {
+    // ####  parameter setup  ####
+    const int Nc   = CommonParameters::Nc();
+    const int Nd   = CommonParameters::Nd();
+    const int Nvol = CommonParameters::Nvol();
+    const int Ndim = CommonParameters::Ndim();
+
+    const Parameters params_all = ParameterManager::read(filename_input);
+
+    const Parameters params_test = params_all.lookup("Test_Spectrum_CRSMatrix");
+
+    const string str_gconf_read = params_test.get_string("gauge_config_type_input");
+    const string readfile       = params_test.get_string("config_filename_input");
+    const string matrix_file    = params_test.get_string("matrix_output");
+    const string source_file    = params_test.get_string("source_output");
+    const string solution_file  = params_test.get_string("solution_output");
+    const string str_vlevel     = params_test.get_string("verbose_level");
+
+    const bool   do_check        = params_test.is_set("expected_result");
+    const double expected_result = do_check ? params_test.get_double("expected_result") : 0.0;
+
+    const Bridge::VerboseLevel vl = vout.set_verbose_level(str_vlevel);
+
+    //- print input parameters
+    vout.general(vl, "  gconf_read      = %s\n", str_gconf_read.c_str());
+    vout.general(vl, "  readfile        = %s\n", readfile.c_str());
+    vout.general(vl, "  matrix_output   = %s\n", matrix_file.c_str());
+    vout.general(vl, "  source_output   = %s\n", source_file.c_str());
+    vout.general(vl, "  solution_output = %s\n", solution_file.c_str());
+    vout.general(vl, "  vlevel          = %s\n", str_vlevel.c_str());
+
+    //- input parameter check
+    int err = 0;
+    err += ParameterCheck::non_NULL(str_gconf_read);
+    err += ParameterCheck::non_NULL(readfile);
+    err += ParameterCheck::non_NULL(matrix_file);
+    err += ParameterCheck::non_NULL(source_file);
+    err += ParameterCheck::non_NULL(solution_file);
+
+    if (err) {
+      vout.crucial(vl, "Error: Test_Spectrum_CRSMatrix: input parameters have not been set\n");
+      exit(EXIT_FAILURE);
+    }
+
+
+    // ####  Set up a gauge configuration  ####
+    Field_G U(Nvol, Ndim);
+    GaugeConfig gconf_read(str_gconf_read);
+    gconf_read.read_file(U, readfile);
+
+    Field_G Ueo(Nvol, Ndim);
+    Index_eo            index_eo;
+    index_eo.convertField(Ueo, U);
+
+
+    // ####  object setup  #####
+    //- overlap parameters
+    const double     mq           = 0.2;
+    const double     M0           = 1.6;
+    const int        Np           = 4;
+    const double     x_min        = 0.10;
+    const double     x_max        = 8.0;
+    const double     Niter_ms     = 1000;
+    const double     Stop_cond_ms = 1.0e-28;
+    std::vector<int> boundary(Ndim);
+    boundary[0] = 1;
+    boundary[1] = 1;
+    boundary[2] = 1;
+    boundary[3] = -1;
+
+    const double kappa = 0.5 / (4.0 - M0);
+
+    Parameters params_w;
+    params_w.set_double("hopping_parameter", kappa);
+    params_w.set_int_vector("boundary_condition", boundary);
+
+    Parameters params_overlap;
+    params_overlap.set_double("quark_mass", mq);
+    params_overlap.set_double("domain_wall_height", M0);
+    params_overlap.set_int("number_of_poles", Np);
+    params_overlap.set_double("lower_bound", x_min);
+    params_overlap.set_double("upper_bound", x_max);
+    params_overlap.set_int("maximum_number_of_iteration", Niter_ms);
+    params_overlap.set_double("convergence_criterion_squared", Stop_cond_ms);
+    params_overlap.set_int_vector("boundary_condition", boundary);
+
+
+    unique_ptr<Fopr_Wilson_eo> fopr_w_eo(new Fopr_Wilson_eo("Dirac"));
+    fopr_w_eo->set_parameters(params_w);
+    fopr_w_eo->set_config(&U);
+
+    unique_ptr<Fopr_Overlap_5d> fopr_ov5d(new Fopr_Overlap_5d(fopr_w_eo.get()));
+    fopr_ov5d->set_parameters(params_overlap);
+    fopr_ov5d->set_mode("D_eo");
+
+    unique_ptr<Fopr_CRS> fopr_crs(new Fopr_CRS(fopr_ov5d.get()));
+    fopr_crs->write_matrix(matrix_file);
+
+
+    //- NB. fopr_ov is used only for check
+    unique_ptr<Fopr_Wilson> fopr_w(new Fopr_Wilson("Dirac"));
+    fopr_w->set_parameters(params_w);
+    fopr_w->set_config(&U);
+
+    unique_ptr<Fopr> fopr_ov(new Fopr_Overlap(fopr_w.get()));
+    fopr_ov->set_parameters(params_overlap);
+
+
+    const int                Niter_5d     = 100;
+    const int                Nrestart_5d  = 40;
+    const double             Stop_cond_5d = 1.0e-28;
+
+    unique_ptr<Solver> solver(new Solver_CG(fopr_ov5d.get()));
+    solver->set_parameters(Niter_5d, Nrestart_5d, Stop_cond_5d);
+
+    std::vector<int> source_position(Ndim);
+    source_position[0] = 0;
+    source_position[1] = 0;
+    source_position[2] = 0;
+    source_position[3] = 0;
+
+    Parameters params_source;
+    params_source.set_int_vector("source_position", source_position);
+
+    unique_ptr<Source> source(Source::New("Local", params_source));
+
+
+    // ####  Execution main part  ####
+    std::vector<Field_F> sq(Nc * Nd);
+    for (int idx = 0; idx < Nc * Nd; ++idx) {
+      sq[idx].set(0.0);
+    }
+
+    const int Nin   = fopr_ov5d->field_nin();
+    const int Nvol2 = fopr_ov5d->field_nvol();
+    const int Npl   = fopr_ov5d->field_nex();
+
+    double vv = 0.0L;
+
+    for (int ispin = 0; ispin < Nd; ++ispin) {
+      for (int icolor = 0; icolor < Nc; ++icolor) {
+        int idx = icolor + Nc * ispin;
+
+        Field_F b;
+        source->set(b, idx);
+
+        double snorm = 1.0 / b.norm2();
+
+        Field be(Nin, Nvol2, 1);
+        index_eo.convertField(be, b, 0);
+
+        Field bo(Nin, Nvol2, 1);
+        index_eo.convertField(bo, b, 1);
+
+        Field v(Nin, Nvol2, Npl);
+        v.set(0.0);
+        v.setpart_ex(2 * Np, be, 0);
+
+        Field t(Nin, Nvol2, Npl);
+        fopr_ov5d->LUprecond(t, v, 0);
+
+        v.set(0.0);
+        v.setpart_ex(2 * Np, bo, 0);
+
+        Field p(Nin, Nvol2, Npl);
+        fopr_ov5d->LUprecond(p, v, 1);
+        fopr_ov5d->Mopr_5d_eo(v, p, 0);
+        fopr_ov5d->LUprecond(p, v, 0);
+
+        axpy(t, -1, p);
+
+        //---
+        write_text(t, source_file);
+        //---
+
+        Field s(Nin, Nvol2, Npl);
+        fopr_ov5d->DD_5d_eo(s, t, -1);
+
+        fopr_ov5d->set_mode("DdagD_eo");
+        Field  x(Nin, Nvol2, Npl);
+        int    Nconv;
+        double diff;
+        solver->solve(x, s, Nconv, diff);
+
+        //---
+        write_text(x, solution_file);
+        //---
+
+
+        //- Solution
+        Field xq_e(Nin, Nvol2, 1);
+        xq_e.setpart_ex(0, x, 2 * Np);
+
+        v.set(0.0);
+        v.setpart_ex(2 * Np, bo, 0);
+        fopr_ov5d->LUprecond(p, v, 1);
+
+        Field xq_o(Nin, Nvol2, 1);
+        xq_o.setpart_ex(0, p, 2 * Np);
+
+        fopr_ov5d->Mopr_5d_eo(p, x, 1);
+        fopr_ov5d->LUprecond(t, p, 1);
+
+        Field xt(Nin, Nvol2, 1);
+        xt.setpart_ex(0, t, 2 * Np);
+
+        axpy(xq_o, -1, xt);
+
+        Field xq((Field)b);
+        index_eo.reverseField(xq, xq_e, 0);
+        index_eo.reverseField(xq, xq_o, 1);
+
+
+        //- Check
+        fopr_ov->set_mode("H");
+
+        Field v1(xq);
+        fopr_ov->mult(v1, xq);
+        axpy(v1, -1, b);
+        vv = v1.norm2();
+        vv = vv * snorm;
+        vout.general(vl, "  Diff(ov)  = %16.8e\n", vv);
+
+        sq[icolor + Nc * ispin] = (Field_F)xq;
+      }
+    }
+
+    double result = 0.0;
+
+    CRSsolver(solution_file, matrix_file, source_file, result);
+
+
+    if (do_check) {
+      return Test::verify(result, expected_result);
+    } else {
+      vout.detailed(vl, "check skipped: expected_result not set.\n\n");
+      return EXIT_SKIP;
+    }
+  }
+} // namespace Test_Spectrum_CRSMatrix

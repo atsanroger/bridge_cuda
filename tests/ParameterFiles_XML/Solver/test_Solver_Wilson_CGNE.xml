@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <!-- # this is a sample parameter file -->
+    <Test_Solver>
+        <!--   ## gauge_config_status = {Continue,Cold_start,Hot_start} -->
+        <gauge_config_status>Continue</gauge_config_status>
+        <!--   ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel} -->
+        <gauge_config_type_input>Text</gauge_config_type_input>
+        <config_filename_input>./conf_04040408.txt</config_filename_input>
+        <!--   ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library -->
+        <random_number_type>Mseries</random_number_type>
+        <seed_for_random_number>1234567UL</seed_for_random_number>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <expected_result>11.0</expected_result>
+    </Test_Solver>
+    <Solver>
+        <!--   ## solver_type = {CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx} -->
+        <solver_type>CGNE</solver_type>
+        <maximum_number_of_iteration>100</maximum_number_of_iteration>
+        <maximum_number_of_restart>40</maximum_number_of_restart>
+        <convergence_criterion_squared>1.0e-28</convergence_criterion_squared>
+        <use_initial_guess>false</use_initial_guess>
+        <!--   ## additional parameters for each solver -->
+        <number_of_orthonormal_vectors>2</number_of_orthonormal_vectors>
+        <tolerance_for_DynamicSelection_of_L>0.1</tolerance_for_DynamicSelection_of_L>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Solver>
+    <Fopr>
+        <fermion_type>Wilson</fermion_type>
+        <!--   ## gamma_matrix_type = {Chiral,Dirac} -->
+        <gamma_matrix_type>Dirac</gamma_matrix_type>
+        <hopping_parameter>0.12</hopping_parameter>
+        <boundary_condition type="sequence">
+            <x>-1</x>
+            <y>-1</y>
+            <z>-1</z>
+            <t>-1</t>
+        </boundary_condition>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr>
+    <Source>
+        <!--   ## source_type = {Local,Exponential,MomentumWall,Random,Wall} -->
+        <source_type>Local</source_type>
+        <!--   ## source_position = [x,y,z,t], x = {0,...,Lx-1} -->
+        <source_position type="sequence">
+            <x>0</x>
+            <y>0</y>
+            <z>0</z>
+            <t>0</t>
+        </source_position>
+        <!--   ## additional parameters for Exponential, exp(- slope * r^(power)) -->
+        <slope>0.25</slope>
+        <power>2.0</power>
+        <!--   ## additional parameters for MomentumWall, source_momentum = [nx,ny,nz,nt], p = (2 \pi / L) n -->
+        <source_momentum type="sequence">
+            <x>1</x>
+            <y>1</y>
+            <z>1</z>
+            <t>0</t>
+        </source_momentum>
+        <!--   ## additional parameters for Random -->
+        <!--   ## noise_type = {Gaussian,U1,Z2} -->
+        <noise_type>Z2</noise_type>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Source>
+    <GaugeFixing>
+        <!--   ## gauge_fixing_type = {Coulomb,Landau,None} -->
+        <gauge_fixing_type>None</gauge_fixing_type>
+        <maximum_number_of_iteration>5000</maximum_number_of_iteration>
+        <number_of_naive_iteration>50</number_of_naive_iteration>
+        <interval_of_measurement>10</interval_of_measurement>
+        <iteration_to_reset>1000</iteration_to_reset>
+        <convergence_criterion_squared>1.0e-24</convergence_criterion_squared>
+        <overrelaxation_parameter>1.6</overrelaxation_parameter>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </GaugeFixing>
+</Parameters>

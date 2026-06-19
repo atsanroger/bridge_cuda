@@ -1,0 +1,31 @@
+# this is a sample parameter file
+
+Test_Mult_Domainwall:
+  ## gauge_config_status = {Continue,Cold_start,Hot_start}
+  gauge_config_status      : Continue
+  ## gauge_config_type = {Text,Binary,Binary_Distributed,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel,None}
+  gauge_config_type_input  : Text
+  config_filename_input    : ./conf_04040408.txt
+  ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library
+  random_number_type       : Mseries
+  seed_for_random_number   : 1234567UL
+  number_of_mult           : 1
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level            : General
+  expected_result          : 1.02352320377108e+03
+  tolerance                : 1.0e-14
+
+Fopr_Domainwall:
+  kernel_type             : Wilson
+  ## gamma_matrix_type = {Chiral,Dirac}
+  gamma_matrix_type       : Dirac
+  quark_mass              : 0.1
+  quark_mass_PauliVillars : 1.0
+  domain_wall_height      : 1.6
+  extent_of_5th_dimension : 8
+  ## bondary_condition = [bc_x,bc_y,bc_z,bc_t], 1:periodic,0:Dirichlet,-1:antiperiodic
+  boundary_condition      : [1,1,1,-1]
+  coefficient_b           : 1.0
+  coefficient_c           : 0.0
+  ## verbose_level = {Crucial,General,Detailed,Paranoiac}
+  verbose_level      : General

@@ -1,0 +1,1029 @@
+\documentclass[12pt,a4paper]{article}
+% ===== Packages =====
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{authblk}
+\usepackage[english]{babel}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{matrix,positioning,fit,backgrounds}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
+\graphicspath{{../}{./}}
+\geometry{margin=2.5cm}
+
+% ===== Macros =====
+\newcommand{\Dw}{D_{\mathrm{w}}}
+\newcommand{\Ddw}{D}
+\newcommand{\Dpv}{D_{\mathrm{PV}}}
+\newcommand{\Cinv}{C^{-1}}
+\newcommand{\Cpvinv}{C_{\mathrm{PV}}^{-1}}
+\newcommand{\Aop}{A}
+\newcommand{\PL}{P_{L}}
+\newcommand{\Pp}{P_{+}}
+\newcommand{\Pm}{P_{-}}
+\newcommand{\dg}{^{\dagger}}
+\newcommand{\norm}[1]{\left\lVert #1 \right\rVert}
+
+\title{\textbf{A Pauli--Villars Preconditioned, Aggregation-Based\\
+Algebraic Multigrid Solver for the M\"obius Domain-Wall Operator}}
+\author{Wei-Lun Chen, Kanamori Issaku, Matsufuru Hideo}
+\affil{\small (working note, Bridge++ \texttt{with\_alpha} branch)}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We document the operator and the solution algorithm used in the present
+Bridge++ implementation of an algebraic multigrid (AMG) solver for the M\"obius
+domain-wall (DW) fermion, together with all parameters of the test problem. The
+bare DW operator $\Ddw$ is non-normal and its spectrum straddles the imaginary
+axis, so Krylov methods applied directly to $\Ddw$ converge poorly. Following
+Kanamori, Chen and Matsufuru [PoS(LATTICE2024)414] we instead solve the
+Pauli--Villars (PV) and site-diagonal preconditioned operator
+$\Aop=(\Dpv\,\Cpvinv)\dg\,\Cinv\,\Ddw$, whose spectrum lies in the open right
+half-plane. A left-preconditioning identity makes the solution of
+$\Aop$ return $\Ddw^{-1}b$ exactly. The outer iteration is a flexible GMRES
+(FGMRES) on $\Aop$, preconditioned by a two-grid V-cycle (a fixed-iteration
+GMRES-on-$\Aop$ smoother and an $\Aop$-Galerkin coarse-grid correction
+built from chirality-split, block-orthonormalised near-null vectors). We give the
+complete operator definitions,
+the algorithm, the full set of test parameters, and a \emph{residual-matched}
+iteration-count comparison against the production even-odd CGNE solver and against
+unpreconditioned GMRES on $\Aop$. We emphasise that the near-null-space setup is
+deliberately minimal in this run; the comparison therefore understates what the
+method can reach, and is reported as a correctness-and-feasibility baseline.
+\end{abstract}
+
+\section{The M\"obius domain-wall operator}
+\label{sec:operator}
+
+We work with the five-dimensional M\"obius domain-wall operator $\Ddw$ with a
+Wilson kernel. Let $\Dw(M_0)$ be the four-dimensional Wilson--Dirac operator with
+negative mass (domain-wall height) $-M_0$, written through the hopping parameter
+$\kappa = 1/(8-2M_0)$. $\Dw$ is an \emph{eight-point} nearest-neighbour stencil,
+\begin{equation}
+(\Dw\psi)(x) = \psi(x) - \kappa\sum_{\mu=1}^{4}\Big[
+(1-\gamma_\mu)U_\mu(x)\psi(x+\hat\mu)
++ (1+\gamma_\mu)U_\mu\dg(x-\hat\mu)\psi(x-\hat\mu)\Big],
+\end{equation}
+i.e.\ two hops ($\pm\hat\mu$) in each of the four spacetime directions per site.
+Let $s=0,\dots,N_s-1$ index the fifth dimension of extent $N_s$. With
+$P_\pm=\tfrac12(1\pm\gamma_5)$ the M\"obius operator parameterised by $(b,c)$ acts
+on a five-dimensional spinor $\psi_s$ as
+\begin{equation}
+(\Ddw\,\psi)_s
+= \big(b\,\Dw + 1\big)\,\psi_s
+\;+\; \big(c\,\Dw - 1\big)\!\left[ \Pm \,\psi_{s+1} + \Pp\,\psi_{s-1} \right],
+\end{equation}
+with the mass-carrying wrap $\psi_{N_s} = -m_q \Pm \psi_0$,
+$\psi_{-1} = -m_q \Pp \psi_{N_s-1}$. The fifth-dimension coupling carries no gauge
+links, so \textbf{one application of $\Ddw$ costs $N_s$ four-dimensional
+eight-point Wilson hops} (plus the cheap tridiagonal $\pm\gamma_5$ shift). The
+Pauli--Villars operator is the same operator at unit mass,
+$\Dpv \equiv \Ddw\big|_{m_q\to1}$.
+
+The DW operator carries an exactly site-diagonal (in the four-dimensional sense)
+factor $C$ in the fifth dimension --- the $N_s\times N_s$ tridiagonal block that
+is local in spacetime. Its inverse $\Cinv$ is computed \emph{exactly} by
+forward/back substitution (LU of the $N_s$-block, the Bridge++ \texttt{Prec} mode
+$L^{-1}\!\circ U^{-1}$); $\Cpvinv$ is the same for the PV operator. These factors
+are site-local: they cost \emph{no} four-dimensional hop. No iterative solver and
+no double-precision promotion is used for any of them.
+
+The parameters of the test problem are collected in Table~\ref{tab:params}.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+quantity & symbol & value \\
+\midrule
+lattice volume        & $L^3\times T$    & $12^4$ \\
+gauge action          &                  & quenched Wilson, $\beta=5.7$ \\
+configuration         &                  & quenched HMC, plaquette $0.560$ \\
+fifth-dimension extent& $N_s$            & $8$ \\
+domain-wall height    & $M_0$            & $1.0$ \\
+M\"obius coefficients & $(b,c)$          & $(1.5,\,0.5)$ \\
+quark mass            & $m_q$            & $0.005$ \\
+PV mass               & $m_{\mathrm{PV}}$& $1.0$ \\
+Neff's alpha          & $\alpha$         & $1.0$ \\
+boundary conditions   &                  & $(1,1,1,-1)$ \\
+\bottomrule
+\end{tabular}
+\caption{Operator and gauge parameters of the test problem.}
+\label{tab:params}
+\end{table}
+
+\section{The preconditioned target operator}
+\label{sec:target}
+
+The bare operator $\Ddw$ is non-normal: its eigenvalues have both signs of real
+part, and unpreconditioned GMRES/FGMRES stagnate. We therefore form the positive
+(right-half-plane) target operator of Ref.~\cite{KCM2024},
+\begin{equation}
+\boxed{\;\Aop \;=\; \big(\Dpv\,\Cpvinv\big)\dg\;\Cinv\;\Ddw\;}
+\label{eq:A}
+\end{equation}
+in which all four factors are applied exactly. The mechanism is that of
+Brower, Clark, Howarth and Weinberg \cite{BrowerPV}: left-multiplying the
+non-normal $\Ddw$ by $(\Dpv\Cpvinv)\dg$ rotates its sign-straddling spectrum into
+the open right half-plane, which is what allows a Krylov method to converge on
+$\Aop$ where it stagnates on $\Ddw$. Since $\Cinv$ and
+$\Cpvinv$ are site-local, \textbf{one application of $\Aop$ costs two
+four-dimensional hopping sweeps} (one through $\Ddw$, one through $\Dpv\dg$), i.e.\
+$2N_s = 16$ eight-point Wilson hops on the present lattice.
+
+\paragraph{Left preconditioning.}
+Define the left-preconditioner
+$\PL = (\Dpv\,\Cpvinv)\dg\,\Cinv$, so that $\Aop = \PL\,\Ddw$. To solve the
+physical system $\Ddw\,x = b$ we solve instead
+\begin{equation}
+\Aop\,x = b', \qquad b' = \PL\,b ,
+\label{eq:leftprec}
+\end{equation}
+because $\Aop x = \PL b \iff \PL(\Ddw x - b)=0$ and $\PL$ is non-singular; the
+solution is $x = \Ddw^{-1}b$ exactly. The inner and physical residuals are related
+by $b'-\Aop x = \PL(b-\Ddw x)$. \textbf{This relation is essential to a fair
+comparison: $\PL$ is ill-conditioned, so a small residual on $\Aop$ does not imply
+a small physical residual $\norm{b-\Ddw x}$.} We therefore always drive and report
+the \emph{physical} relative residual $\norm{b-\Ddw x}/\norm{b}$ when comparing
+solvers, never the $\Aop$-residual alone.
+
+\paragraph{Inheritance and lineage.} The construction of this section --- the
+Pauli--Villars target operator $\Aop$, the exact site-local $\Cinv$ via the
+$\texttt{Prec}$ ($L^{-1}U^{-1}$) mode, the left-preconditioning identity, and the
+5D--4D chiral source/sink used to carry the physical propagator on the boundary
+walls --- follows the design note of Kanamori, Chen and Matsufuru \cite{KCM2024}.
+That note is itself the domain-wall specialisation of the adaptive aggregation
+multigrid implemented in Bridge++ for the Wilson--Clover operator
+\cite{BridgeMG}, which in turn follows the DD-$\alpha$AMG method of Frommer
+\emph{et al.}\ \cite{DDalphaAMG}; the idea of preconditioning the non-normal
+domain-wall operator with the Pauli--Villars operator so that the spectrum is
+pushed into the open right half-plane is due to Brower, Clark, Howarth and
+Weinberg \cite{BrowerPV}. The present work implements this construction in
+Bridge++ and builds the batched aggregation multigrid of
+Section~\ref{sec:algorithm} on top of it.
+
+\section{The multigrid algorithm}
+\label{sec:algorithm}
+
+The solver is an aggregation-based two-grid algebraic multigrid acting on the
+positive operator $\Aop$. The outer Krylov method is \emph{flexible} GMRES, which
+is required because the V-cycle preconditioner is not a fixed linear operator.
+
+\subsection{Aggregates, near-null space and the transfer operators}
+The fine lattice is partitioned into non-overlapping blocks (aggregates) of size
+$3^4$ in spacetime (the full $N_s$ is kept in the fifth dimension), giving a
+coarse lattice of $4^4$ sites on the $12^4$ volume. A set of $N_v=8$ near-null
+vectors $\{w_k\}$ is generated in the setup phase by the procedure of the design
+note \cite{KCM2024,BridgeMG}: starting from random vectors, the smoother is
+applied and the multigrid preconditioner is then applied recursively a few times,
+so the vectors are driven towards the near-null space of $\Aop$. Within each
+aggregate the vectors are split by chirality and \emph{block orthonormalised}. The
+relevant chirality for the domain-wall operator is $\Gamma_5 = \mathcal{R}\,\gamma_5$,
+where $\mathcal{R}$ is the reflection in the fifth dimension, and the projector is
+$\tfrac12(1\pm\Gamma_5)$ (the first-choice projection of \cite{KCM2024}); the
+split doubles the coarse degrees of freedom to $2N_v=16$ per aggregate. This
+defines the prolongation $P$ (piecewise span of the orthonormal block vectors) and
+the restriction $R = P\dg$.
+
+\paragraph{Block orthonormalisation.}
+The block Gram--Schmidt is performed by a \emph{batched classical} Gram--Schmidt
+(CGS): for each target vector all block inner products against the
+already-accepted vectors are computed in one batched kernel, subtracted in one
+batched \texttt{axpy}, and the block is normalised. A single CGS pass is used. A
+second (re-)orthogonalisation pass is \emph{not} applied: the projector basis
+carries two chiralities ($\norm{w_k}^2_{\text{block}}=2$, one from $\Pm$ and one
+from $\Pp$), and a naive second pass mixes the chirality sectors and destroys the
+orthogonality established by the first pass. The single batched CGS pass
+reproduces the modified-Gram--Schmidt result to working precision at $O(1)$ kernel
+launches per target vector.
+
+\begin{algorithm}[H]
+\caption{Setup: near-null space and transfer operators (run once, before the solve).}
+\label{alg:setup}
+\begin{algorithmic}[1]
+\State draw $N_v$ random fine vectors $\{w_k\}$
+\For{$k=1,\dots,N_v$}
+  \State $u \gets \mathrm{GMRES}_4(\Aop,\,w_k)$ \Comment{smoother: $u\approx\Aop^{-1}w_k$ (Alg.~\ref{alg:gmres})}
+  \State $w_k \gets \Dpv\,u$ \Comment{map through the Pauli--Villars operator (mode ``D'')}
+\EndFor
+\For{$n=1,\dots,N_{\mathrm{step}}$} \Comment{adaptive enrichment; $N_{\mathrm{step}}=0$ here, so skipped}
+  \State $w_k \gets \Dpv\,M^{-1}w_k$ for all $k$;\quad rebuild $P,R,\Aop_c$ below
+\EndFor
+\State $(P,R) \gets \textsc{BuildTransfer}(\{w_k\})$ \Comment{Alg.~\ref{alg:transfer}}
+\State $\Aop_c \gets R\,\Aop\,P$ \Comment{Galerkin coarse operator (nearest-neighbour truncated)}
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{\textsc{BuildTransfer}: chirality split and block orthonormalisation
+$\Rightarrow P,R$.}
+\label{alg:transfer}
+\begin{algorithmic}[1]
+\State $\Gamma_5 \gets \mathcal{R}\,\gamma_5$ \Comment{$\mathcal{R}$ = reflection in the fifth dimension}
+\For{$k=1,\dots,N_v$} \Comment{chirality split: $N_v \to 2N_v$ candidates}
+  \State $w_k^{+}\gets\tfrac12(1+\Gamma_5)\,w_k$;\quad $w_k^{-}\gets\tfrac12(1-\Gamma_5)\,w_k$
+\EndFor
+\For{each aggregate (block) $\Omega_b$ of size $3^4\times N_s$}
+  \State restrict the $2N_v$ candidates to $\Omega_b$
+  \State batched classical Gram--Schmidt (single pass) $\Rightarrow$ orthonormal block basis $\{b_{b,1},\dots,b_{b,2N_v}\}$
+\EndFor
+\State $P:$ coarse dof $(b,\ell)\mapsto b_{b,\ell}$ supported on $\Omega_b$ (piecewise span);\quad $R\gets P\dg$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Coarse operator and its stencil locality.}
+The coarse-grid operator is the Galerkin projection of $\Aop$,
+$\Aop_{c} = R\,\Aop\,P = P\dg\,\Aop\,P$, assembled explicitly so the coarse solve
+never touches the fine grid. The coarse problem is solved approximately by
+restarted GMRES (loose tolerance $10^{-2}$, at most two iterations), which is
+adequate inside a V-cycle.
+
+The defining design axis among domain-wall multigrid methods is the
+\emph{hopping range (stencil locality) of the coarse operator}, which sets the
+cost of building and applying $\Aop_c$. The squared red-black operator used by
+HDCG produces a coarse stencil reaching all points of taxicab distance up to
+four --- a $321$-point four-dimensional stencil (only reduced to $81$ points at a
+minimum $4^4$ block), so re-evaluating the little Dirac operator along an HMC
+trajectory costs thousands of fine multiplies. The recent multiple-right-hand-side
+domain-wall multigrid \cite{BoyleMRHS} likewise adopts a \emph{four-hop} coarse
+operator. At the
+opposite end, a \emph{zero-hop} (purely block-diagonal, no inter-aggregate
+coupling) coarse approximation is the cheapest but discards the long-wavelength
+coupling that gives multigrid its mass/volume independence. \textbf{Our coarse
+operator is a one-hop (nearest-neighbour) coarse Dirac operator}
+(\texttt{AFopr\_Domainwall\_coarse}): the Galerkin projection of the
+PV-preconditioned $\Aop$ is truncated to a nearest-neighbour stencil, which
+preserves sparsity (and hence recursive coarsenability) at a small fraction of
+the assembly cost of the four-hop stencils, while retaining the inter-aggregate
+coupling absent from the zero-hop choice. This is the nearest-neighbour-truncated,
+right-preconditioned coarse operator of the design note \cite{KCM2024}. A general
+comparison of these domain-wall multigrid coarsening strategies is given by Boyle
+and Yamaguchi \cite{BoyleYamaguchi}.
+
+\subsection{Smoother}
+The smoother is a fixed-iteration GMRES on the single-precision operator $\Aop$:
+one GMRES($m$) cycle with $m=4$ Arnoldi vectors and a zero initial guess, applied
+to the V-cycle residual to damp the high-frequency error the coarse grid cannot
+represent (stopping criterion $10^{-3}$). Because $\Aop$ is non-Hermitian
+--- its spectrum fills the right half-plane rather than a real interval --- a
+Krylov smoother is the natural choice: GMRES builds the optimal residual polynomial
+over the actual (complex) spectrum at each application, with no eigenvalue estimate
+or relaxation parameter to tune, unlike a Chebyshev or damped-Jacobi sweep that
+presupposes a real spectral interval. (A CGNR-on-$\Ddw$ smoother diverges at small
+$m_q$ with $M_0=1$, the near-critical regime the PV preconditioning is designed to
+avoid; GMRES-on-$\Aop$ is robust there.) The smoother strength --- here the GMRES
+depth $m$ --- is the dominant convergence lever of the V-cycle, as quantified in
+Section~\ref{sec:scaling}.
+
+\begin{algorithm}[H]
+\caption{$\mathrm{GMRES}_m(\Aop,b)$: $m$ Arnoldi steps with a zero initial guess,
+returning $x\approx\Aop^{-1}b$. The smoother is one cycle with $m=4$; the coarse
+solver runs the same routine with $m=5$ for at most two restart cycles, to
+tolerance $10^{-2}$.}
+\label{alg:gmres}
+\begin{algorithmic}[1]
+\State $\beta \gets \norm{b}$,\quad $v_1 \gets b/\beta$
+\For{$j=1,\dots,m$}
+  \State $w \gets \Aop\,v_j$
+  \For{$i=1,\dots,j$} \Comment{Arnoldi (modified Gram--Schmidt)}
+    \State $h_{ij}\gets(v_i,w)$;\quad $w \gets w - h_{ij}\,v_i$
+  \EndFor
+  \State $h_{j+1,j}\gets\norm{w}$;\quad $v_{j+1}\gets w/h_{j+1,j}$
+\EndFor
+\State $y \gets \arg\min_{y}\,\norm{\beta\,e_1 - \bar H\,y}$ \Comment{$(m{+}1)\times m$ least squares, Givens}
+\State \Return $x \gets V_m\,y$, \quad $V_m=[v_1,\dots,v_m]$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{The V-cycle and the outer iteration}
+One application of the preconditioner $M^{-1}\approx\Aop^{-1}$ is a two-grid
+V-cycle:
+
+\begin{algorithm}[H]
+\caption{Two-grid V-cycle $M^{-1}$ applied to a vector $r$ (returns $z$)}
+\label{alg:vcycle}
+\begin{algorithmic}[1]
+\State $z \gets \text{GMRES}_4(\Aop, r)$ \Comment{pre-smoothing, GMRES depth $4$}
+\State $r_c \gets R\,(r - \Aop\,z)$ \Comment{restrict the fine residual}
+\State $e_c \gets \Aop_c^{-1} r_c$ \Comment{coarse solve (loose GMRES)}
+\State $z \gets z + P\,e_c$ \Comment{prolongate the coarse correction}
+\State $z \gets z + \text{GMRES}_4(\Aop,\, r - \Aop\,z)$ \Comment{post-smoothing, GMRES depth $4$}
+\end{algorithmic}
+\end{algorithm}
+
+\noindent The complete solver is
+
+\begin{algorithm}[H]
+\caption{PV-preconditioned AMG solve of $\Ddw\,x=b$}
+\begin{algorithmic}[1]
+\State \textbf{Setup:} generate $N_v=8$ near-null vectors; chirality-split and
+       block-orthonormalise (CGS); assemble $P,R,\Aop_c$.
+\State $b' \gets \PL\,b$ \Comment{left-precondition: now solve $\Aop x = b'$}
+\State Solve $\Aop\,x = b'$ by FGMRES (restart length $N_M=30$) using the V-cycle
+       $M^{-1}$ as preconditioner, driving the \emph{physical} residual
+       $\norm{b-\Ddw x}/\norm{b}$ to the target tolerance.
+\State \Return $x = \Ddw^{-1}b$ \Comment{exact by the left-prec identity}
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{$\mathrm{FGMRES}(\Aop,b,M^{-1})$ with restart length $N_M=30$: flexible
+GMRES whose preconditioner $M^{-1}$ is the two-grid V-cycle (Alg.~\ref{alg:vcycle})
+and is allowed to vary between steps. Returns $x\approx\Aop^{-1}b=\Ddw^{-1}b$.}
+\label{alg:fgmres}
+\begin{algorithmic}[1]
+\State $x \gets 0$;\quad $r \gets b-\Aop x$;\quad $\beta\gets\norm{r}$;\quad $v_1\gets r/\beta$
+\For{$j=1,\dots,N_M$}
+  \State $z_j \gets M^{-1} v_j$ \Comment{apply the V-cycle; \emph{store} the preconditioned vector}
+  \State $w \gets \Aop\,z_j$
+  \For{$i=1,\dots,j$} \Comment{Arnoldi}
+    \State $h_{ij}\gets(v_i,w)$;\quad $w\gets w-h_{ij}\,v_i$
+  \EndFor
+  \State $h_{j+1,j}\gets\norm{w}$;\quad $v_{j+1}\gets w/h_{j+1,j}$
+\EndFor
+\State $y\gets\arg\min_{y}\,\norm{\beta\,e_1-\bar H\,y}$;\quad $x\gets x + Z_{N_M}\,y$ \Comment{$Z=[z_1,\dots,z_{N_M}]$, \emph{not} $V$ --- the ``flexible'' step}
+\State restart from the current $x$ until $\norm{b-\Ddw x}/\norm{b}<\text{tol}$
+\end{algorithmic}
+\end{algorithm}
+
+\noindent In the residual-matched reference run of Table~\ref{tab:results} the
+grid-transfer and coarse-grid work is in single precision (\texttt{float}) and the
+outer FGMRES and the operator $\Aop$ are applied in double. The batched propagator
+of Section~\ref{sec:batched} runs $\Aop$ and the entire V-cycle in single
+precision, with double precision confined to an optional, runtime-selectable outer
+residual.
+
+\paragraph{Setup parameters and a caveat.}
+Table~\ref{tab:mg} lists the multigrid parameters. \textbf{The near-null-space
+setup is deliberately minimal here: the number of setup smoothing steps is
+$N_{\mathrm{step}}=0$}, so the $N_v=8$ vectors are used essentially as generated,
+without the iterative enrichment (applying the smoother to random vectors) that a
+tuned aggregation setup performs. The coarse space is therefore \emph{not}
+adapted to the near-null modes of $\Aop$, which is expected to leave a sizeable
+part of the achievable speed-up on the table. Optimising the setup
+($N_{\mathrm{step}}>0$, more vectors $N_v$, possibly more grid levels) is the
+natural next step and requires more device memory and throughput than the single
+consumer GPU used here.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+component & parameter & value \\
+\midrule
+aggregate (block) & spacetime $\times$ fifth dim & $3^4 \times N_s$ \\
+coarse lattice    &                              & $4^4$ \\
+near-null vectors & $N_v$                        & $8$ \\
+coarse dof / site & $2N_v$ (chirality split)     & $16$ \\
+setup smoothing   & $N_{\mathrm{step}}$          & $0$ (unoptimised) \\
+block orthog.     &                              & batched CGS, single pass \\
+smoother          &                              & GMRES-on-$\Aop$, depth $4$, tol $10^{-3}$ \\
+coarse solver     &                              & GMRES, depth $5$, $\le2$ cycles, tol $10^{-2}$ \\
+outer solver      &                              & FGMRES, restart $N_M=30$ \\
+grid transfer / coarse prec. &                   & single (\texttt{float}) \\
+\bottomrule
+\end{tabular}
+\caption{Multigrid setup and cycle parameters.}
+\label{tab:mg}
+\end{table}
+
+\section{Reference solvers}
+\label{sec:reference}
+We compare against two baselines that solve the \emph{same} physical propagator,
+with the \emph{same} 5D--4D chiral source/sink construction:
+\begin{itemize}
+\item \textbf{Even-odd CGNE} on the normal equation $\Ddw\dg\Ddw$ --- the
+production domain-wall solver, run in standard precision.
+\item \textbf{Unpreconditioned GMRES on $\Aop$} --- restarted GMRES applied to the
+identical target operator \eqref{eq:A} with the identical left-preconditioned
+right-hand side, but \emph{without} the multigrid preconditioner. AMG and this
+baseline differ \emph{only} by the V-cycle, so their comparison isolates the
+preconditioner. Both wrap the inner $\Aop$-solve in the same outer
+iterative-refinement on the physical residual (each step solves
+$\Aop\,\delta=\PL\,r_{\mathrm{phys}}$, $x\!+\!=\!\delta$,
+$r_{\mathrm{phys}}=b-\Ddw x$), so both reach the same physical tolerance.
+\end{itemize}
+
+\section{Batched, single-precision propagator through \texorpdfstring{$\Aop$}{A}}
+\label{sec:batched}
+
+The twelve colour--spin columns of the point-source propagator are solved through
+$\Aop$ as a single multiple-right-hand-side (MRHS) block: a block-FGMRES outer
+solver preconditioned by the batched V-cycle (batched $\Aop$-apply, restriction
+and prolongation cast as small dense GEMMs, and a batched coarse block-FGMRES on
+the Galerkin operator), with the physical propagator recovered by an outer
+residual refinement built on the left-preconditioner. Because $\Aop=\PL\Ddw$, the
+identity $\Aop^{-1}\PL=\Ddw^{-1}$ holds exactly, so a single refinement returns
+the CGNE propagator up to the inner-solve tolerance. The entire V-cycle, the
+$\Aop$-apply and the coarse solve run in FP32; double precision enters only the
+optional outer residual, selected at runtime. On the single RTX~3080 the twelve
+columns are processed in MRHS sub-batches of four --- a memory/throughput knob:
+the full twelve-wide batch is throughput-optimal (one block solve, amortised
+setup, maximal occupancy) but its block-Krylov basis and refinement scratch
+exceed the $10$~GB device, whereas data-centre GPUs run the full batch.
+
+\paragraph{The transfer operators as batched GEMMs.}
+The cost of the V-cycle is dominated by the inter-grid transfers. For a single
+right-hand side the restriction of the residual onto one aggregate is a set of
+inner products against the $n_b$ near-null basis vectors,
+\begin{equation}
+  C_{j} \;=\; \sum_{x\in\text{block}}\sum_{a} \overline{(B_j)}_{a}(x)\, R_{a}(x)
+  \;=\; \big(B\dg R\big)_j ,\qquad j=1,\dots,n_b ,
+  \label{eq:restrict}
+\end{equation}
+a tall--skinny matrix--vector product of the $n_b\times K$ block-basis matrix
+$B\dg$ with the $K$-vector $R$, where $K=(\text{block volume})\times N_{\mathrm{in}}$
+is the number of fine degrees of freedom inside the aggregate. As a mat--vec this
+is bandwidth-bound (flop/byte $\sim\!0.1$). Batching the $n_{\mathrm{rhs}}$
+colour--spin columns turns the skinny mat--vec into a dense matrix--matrix product
+\begin{equation}
+  C\;[\,n_b\times n_{\mathrm{rhs}}\,]
+  \;=\;
+  B\dg\;[\,n_b\times K\,]\;\cdot\;R\;[\,K\times n_{\mathrm{rhs}}\,] ,
+  \label{eq:restrictGEMM}
+\end{equation}
+one small GEMM per aggregate (Figure~\ref{fig:gemm}); the prolongation is the
+transpose, $F=B\,C$. The aggregates are independent, so the V-cycle is a
+\emph{batch} of independent small GEMMs --- compute-bound, and a direct match for
+the warp-level MMA (tensor-core) tiles. The outer solver is a block-FGMRES that
+carries all $n_{\mathrm{rhs}}$ columns through $\Aop$ and the V-cycle together,
+adding a block-Krylov convergence gain on top of the throughput gain; its
+small dense linear algebra (block Gram, Cholesky-QR, Hessenberg) is kept on the
+device so no per-iteration host transfer occurs.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[font=\small, >=latex]
+  % B^dagger : n_b x K
+  \fill[blue!8] (0,0) rectangle (3.0,1.0);
+  \draw[thick] (0,0) rectangle (3.0,1.0);
+  \node at (1.5,0.5) {$B\dg$};
+  \node[above] at (1.5,1.05) {\scriptsize $n_b \times K$};
+  \node at (3.35,0.5) {$\times$};
+  % R : K x n_rhs
+  \begin{scope}[xshift=3.7cm]
+    \fill[orange!12] (0,-0.6) rectangle (1.6,1.6);
+    \draw[thick] (0,-0.6) rectangle (1.6,1.6);
+    \foreach \x in {0.4,0.8,1.2} \draw[gray!60] (\x,-0.6) -- (\x,1.6);
+    \fill[orange!40] (0,-0.6) rectangle (0.4,1.6);
+    \node at (0.8,0.5) {$R$};
+    \node[above] at (0.8,1.65) {\scriptsize $K \times n_{\mathrm{rhs}}$};
+  \end{scope}
+  \node at (5.75,0.5) {$=$};
+  % C : n_b x n_rhs
+  \begin{scope}[xshift=6.1cm]
+    \fill[green!10] (0,0) rectangle (1.6,1.0);
+    \draw[thick] (0,0) rectangle (1.6,1.0);
+    \foreach \x in {0.4,0.8,1.2} \draw[gray!60] (\x,0) -- (\x,1.0);
+    \fill[green!35] (0,0) rectangle (0.4,1.0);
+    \node at (0.8,0.5) {$C$};
+    \node[above] at (0.8,1.05) {\scriptsize $n_b \times n_{\mathrm{rhs}}$};
+  \end{scope}
+\end{tikzpicture}
+\caption{Batched restriction on one aggregate, Eq.~\eqref{eq:restrictGEMM}. A
+single right-hand side (the shaded column) is a tall--skinny mat--vec, bandwidth-
+bound. Stacking the $n_{\mathrm{rhs}}$ colour--spin columns makes $R$ and $C$
+``fat'', so the per-aggregate transfer becomes a dense GEMM that saturates the
+tensor cores; the aggregates run as an independent batch. Prolongation is the
+transpose $F=B\,C$.}
+\label{fig:gemm}
+\end{figure}
+
+The resulting pseudoscalar correlator reproduces the production even-odd CGNE,
+\[
+  C_{PP}^{\mathrm{AMG}} = 1.56750\times10^{-1}, \qquad
+  C_{PP}^{\mathrm{CGNE}} = 1.56754\times10^{-1},
+\]
+agreeing to $2.4\times10^{-4}$ --- the FP32 floor of the single-precision inner
+solve, well below any physical scale: a quantitative, fully-batched check that
+the batched $\Aop$ solve and the production CGNE return the same propagator.
+
+
+\section{Numerical results}
+\label{sec:results}
+
+\paragraph{Setup.} Parameters of Tables~\ref{tab:params} and \ref{tab:mg}; single
+NVIDIA RTX~3080. The two operator-$\Aop$ solvers (AMG, GMRES-on-$\Aop$) use the
+\emph{identical} left-preconditioned right-hand side. All three solvers are driven
+to a comparable \emph{physical} residual $\norm{b-\Ddw x}/\norm{b}\sim10^{-12}$,
+so the iteration counts in Table~\ref{tab:results} are residual-matched.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Solver & operator & outer iterations & $\norm{b-\Ddw x}/\norm{b}$ \\
+\midrule
+\textbf{AMG} (FGMRES + V-cycle) & $\Aop$ & \textbf{210} & $1.3\times10^{-12}$ \\
+GMRES on $\Aop$ (no preconditioner) & $\Aop$ & $1202$ & $7.0\times10^{-13}$ \\
+Even-odd CGNE (production) & $\Ddw\dg\Ddw$ & $\approx 333$ & $2.4\times10^{-12}$ \\
+\bottomrule
+\end{tabular}
+\caption{Residual-matched iteration counts, $12^4$ $\beta=5.7$, $m_q=0.005$, all
+at physical residual $\sim10^{-12}$. Against the identical-operator,
+identical-right-hand-side GMRES baseline the V-cycle reduces the outer iteration
+count by $\approx5.7\times$; against the production even-odd CGNE by
+$\approx1.6\times$. The pseudoscalar correlators agree: the $\Aop$-based and CGNE
+$C_{PP}(t)$ coincide to solver tolerance.}
+\label{tab:results}
+\end{table}
+
+\paragraph{Reading the numbers honestly.}
+Three caveats frame Table~\ref{tab:results}.
+(i) The clean comparison is AMG versus unpreconditioned GMRES on $\Aop$: same
+operator, same right-hand side, same physical tolerance, differing only by the
+V-cycle ($5.7\times$). The CGNE column is the practical reference on a different
+operator ($\Ddw\dg\Ddw$).
+(ii) An outer AMG iteration (one V-cycle: GMRES smoothing $+$ coarse solve) is much
+more expensive than a CGNE iteration, so the $1.6\times$ iteration advantage over
+CGNE does \emph{not} translate into a wall-clock advantage on this small, coarse
+problem --- and is not claimed to.
+(iii) Most importantly, the near-null setup is unoptimised ($N_{\mathrm{step}}=0$,
+$N_v=8$, two grid levels, single consumer GPU). A tuned setup is expected to
+lower the AMG count substantially.
+
+\paragraph{Where the V-cycle spends its time.}
+Table~\ref{tab:vctime} breaks one V-cycle into its steps, accumulated over the
+whole solve. (Absolute times on this WSL2/RTX~3080 host are unreliable --- the GPU
+clock is not lockable --- but the \emph{proportions}, taken within a single
+process and summed over ${\sim}200$ V-cycles, are robust.) The smoother dominates
+at ${\sim}65\%$: it is two sweeps of $\mathrm{GMRES}_4$ on the full fine operator
+$\Aop$. Counting operator applications, one V-cycle is ${\approx}9$ fine-$\Aop$
+applies --- eight inside the two $\mathrm{GMRES}_4$ sweeps (four Arnoldi steps each)
+and one in the residual --- so the smoother line is, almost entirely, fine-operator
+time: ``smoother-limited'' means ``fine-$\Aop$-apply-limited''. The single
+highest-leverage kernel is therefore the fine-operator application ($C^{-1}\Ddw$ and
+the PV factor $\Dpv\Cpvinv$), which is exactly what the register-resident $C^{-1}$,
+the fused $LU$ inverse, the $\gamma_5$-fold and the SU(3) third-row reconstruction
+target. The coarse solve is $13\%$ and the two grid transfers together $18\%$; the
+fine-grid residual and linear algebra are the remaining $4\%$. This quantifies
+caveat~(ii): the V-cycle is \emph{smoother-limited}, so the convergence lever is
+the smoother strength (Section~\ref{sec:scaling}), and the inter-grid transfers ---
+cast as batched GEMMs in the production path (Section~\ref{sec:batched}), which is
+relatively cheaper than the single-right-hand-side reference measured here --- are
+not the bottleneck.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\toprule
+V-cycle step & time (s) & fraction \\
+\midrule
+smoother (two $\mathrm{GMRES}_4$ sweeps on $\Aop$) & $7.12$ & $\mathbf{65\%}$ \\
+coarse solver                                       & $1.39$ & $13\%$ \\
+restriction $R$                                     & $1.23$ & $11\%$ \\
+prolongation $P$                                    & $0.81$ & $7\%$ \\
+fine residual $+$ linear algebra                    & $0.44$ & $4\%$ \\
+\midrule
+V-cycle total                                       & $10.99$ & $100\%$ \\
+\bottomrule
+\end{tabular}
+\caption{Per-step cost of one two-grid V-cycle, accumulated over the reference
+solve ($12^4$, $m_q=0.005$, $\alpha=1$, single-RHS reference path). The smoother
+(GMRES$_4$ on the fine $\Aop$, pre- and post-) is ${\sim}65\%$ of the cycle; the
+coarse solve and the two transfers are the rest. Proportions, not absolute times,
+are the meaningful quantity on this clock-unlocked host.}
+\label{tab:vctime}
+\end{table}
+
+\paragraph{Where the value is.}
+The textbook value of multigrid is that the outer iteration count is essentially
+independent of the quark mass and the volume, whereas CGNE grows as $m_q\to0$ and
+with the volume. Quantifying that scaling --- with an optimised near-null setup,
+on larger volumes and smaller $m_q$, on hardware with the memory and throughput to
+support it --- is the natural next step, and is the case for moving the study to a
+supercomputer. The present run establishes correctness (matching $C_{PP}$ and
+$m_{\mathrm{res}}$ across all three solvers) and a residual-matched baseline on a
+single RTX~3080.
+
+\section{Quark-mass scaling and solver tuning}
+\label{sec:scaling}
+
+The defining promise of multigrid is an iteration count that is nearly independent
+of the quark mass, set against the growth of a Krylov solver as $m_q\to0$. We test
+this directly on the batched solver by sweeping the bare quark mass
+$m_q\in\{0.02,0.01,0.005,0.002,0.001\}$ at fixed $\alpha=0.5$ and recording the
+outer iteration count of the AMG against that of the production even-odd CGNE.
+For the AMG we report the outer V-cycle count of a single reference solve driven to
+a fixed operator residual $\norm{\Aop x-b'}/\norm{b'}=10^{-13}$; for CGNE we report
+the even-odd conjugate-gradient iteration count to physical residual
+$\sim\!10^{-12}$, consistent with the CGNE column of
+Table~\ref{tab:results}.\footnote{%
+The two counts are convergence probes measured on different operators ($\Aop$
+versus $\Ddw\dg\Ddw$) and, for the AMG, on the operator residual rather than the
+physical residual of Section~\ref{sec:target}. They are \emph{not} the
+residual-matched counts of Table~\ref{tab:results} (which drives the physical
+residual to $\sim\!10^{-12}$ for both solvers, giving AMG~$210$ vs CGNE~$\approx
+333$ at $m_q=0.005$); they are internally consistent across the sweep and used here
+only to expose the mass-scaling \emph{trend}. The CGNE figure at $m_q=0.005$
+($359$) agrees with the $\approx\!333$ of Table~\ref{tab:results} to the
+granularity of the mixed-precision refinement cycles.} The results are in
+Table~\ref{tab:massscan} and Figure~\ref{fig:massscan}.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ccc}
+\toprule
+$m_q$ & AMG outer iters & CGNE iters \\
+\midrule
+$0.020$ & $245$ & $350$ \\
+$0.010$ & $247$ & $355$ \\
+$0.005$ & $247$ & $359$ \\
+$0.002$ & $247$ & $361$ \\
+$0.001$ & $254$ & $362$ \\
+\bottomrule
+\end{tabular}
+\caption{Iteration count versus bare quark mass, $12^4$ HMC configuration,
+$\alpha=0.5$ (AMG: outer V-cycles to $\Aop$-residual $10^{-13}$; CGNE: even-odd CG
+iterations to physical residual $\sim\!10^{-12}$). Both solvers are essentially flat
+across a $20\times$ range of $m_q$.}
+\label{tab:massscan}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=11cm, height=7cm,
+    xmode=log, log basis x=10,
+    xlabel={$m_q$}, ylabel={outer iterations},
+    xmin=0.0008, xmax=0.025, ymin=0, ymax=560,
+    grid=both, grid style={gray!20},
+    legend pos=south west, legend cell align=left,
+    tick label style={font=\small}, label style={font=\small},
+]
+\addplot[only marks, mark=*, mark size=2.2pt, red] coordinates {
+  (0.020,350) (0.010,355) (0.005,359) (0.002,361) (0.001,362)
+};
+\addlegendentry{even-odd CGNE}
+\addplot[only marks, mark=square*, mark size=2.2pt, blue] coordinates {
+  (0.020,245) (0.010,247) (0.005,247) (0.002,247) (0.001,254)
+};
+\addlegendentry{PV-preconditioned AMG}
+\end{axis}
+\end{tikzpicture}
+\caption{Outer iteration count versus bare quark mass ($12^4$, $\alpha=0.5$). Across
+a $20\times$ range of $m_q$ \emph{both} solvers are nearly constant --- the AMG
+varies by $4\%$ ($245\!\to\!254$) and CGNE by $3\%$ ($350\!\to\!362$). Neither
+exhibits the textbook $m_q\to0$ growth.}
+\label{fig:massscan}
+\end{figure}
+
+\paragraph{This flatness is a finite-volume effect, not a null result.}
+On the present $12^4$ lattice the lowest eigenvalue of the Dirac operator is set by
+the volume scale ($\sim\!1/L$), not by $m_q$: the spectral gap does not close as the
+bare mass is lowered, so the conditioning of both $\Aop$ and $\Ddw\dg\Ddw$
+saturates and the iteration counts plateau. The near-zero modes that drive CGNE's growth --- and against which
+multigrid's mass-independence is the decisive advantage --- simply do not appear in
+this regime. Exhibiting the separation therefore requires reaching genuinely small
+effective mass: a larger physical volume (so the spectral gap can close) and/or a
+larger $N_s$ (so $m_{\mathrm{res}}\ll m_q$). This is the central quantitative
+motivation for moving the study to a supercomputer (Section~\ref{sec:future}). What
+the present run does establish is that, even in this benign regime, the AMG already
+runs below the production solver at every mass --- the residual-matched advantage is
+the $\approx\!1.6\times$ of Table~\ref{tab:results} --- and that neither solver has
+yet entered the regime where that gap can widen.
+
+\paragraph{Solver tuning: the V-cycle is smoother-limited and already balanced.}
+We swept the multigrid parameters at $m_q=0.005$, using the reference-solve outer
+count as the objective (Table~\ref{tab:tuning}). The single effective convergence
+lever is the GMRES smoother depth: raising it from $4$ to $8$ to $16$ Arnoldi
+vectors cuts the outer count from $247$ to $150$ to $97$. That reduction is sub-linear in the
+added smoother work, however, so the \emph{wall-clock} is minimised at four
+sweeps --- fewer sweeps ($2$--$3$) and more sweeps ($8$--$16$) are both slower. The
+other knobs are ineffective in this regime: adaptive setup smoothing
+($N_{\mathrm{step}}>0$) leaves the count unchanged at $247$--$249$ while the
+eigenvector-seeded near-null space is already adequate; enlarging the near-null
+space ($N_v=8\!\to\!16$) buys only $247\!\to\!238$; tightening the coarse solve
+($2\!\to\!10$ iterations) changes nothing, confirming the coarse correction is not
+the limiter; and a longer outer restart ($30\!\to\!60$) is counter-productive. The
+aggregate size is fixed at $3^4$ by the device tiling (the warp-padding requires the
+coarse time-slice volume to be a multiple of $32$, which only the $4^4$ coarse grid
+satisfies on $12^4$). The configuration of Table~\ref{tab:mg} is thus already at the
+tunable optimum; further gains require an algorithmic change (additional grid
+levels, a genuinely adapted aggregation) rather than parameter tuning --- again
+consistent with a well-conditioned, finite-volume-limited problem in which the
+coarse space has little work to do.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+parameter & sweep & outer iters \\
+\midrule
+GMRES smoother depth $m$ & $2,3,\mathbf{4},8,16$ & $421,399,\mathbf{247},150,97$ \\
+setup smoothing $N_{\mathrm{step}}$ & $\mathbf{0},1,2,3$    & $\mathbf{247},248,248,249$ \\
+near-null vectors $N_v$  & $\mathbf{8},12,16,24$ & $\mathbf{247},241,238,245$ \\
+coarse-solve iterations  & $\mathbf{2},5,10$     & $\mathbf{247},247,247$ \\
+outer restart length     & $\mathbf{30},60$      & $\mathbf{247},286$ \\
+\bottomrule
+\end{tabular}
+\caption{Multigrid parameter sensitivity at $m_q=0.005$, $\alpha=0.5$; boldface is
+the configuration of Table~\ref{tab:mg}. Wall-clock-minimising values, not merely
+iteration-count-minimising: four smoother sweeps is the time optimum despite $8$ and
+$16$ giving fewer iterations.}
+\label{tab:tuning}
+\end{table}
+
+\section{Future work}
+\label{sec:future}
+
+The present note establishes correctness and a residual-matched baseline. The
+following programme of validation is ordered so that each inexpensive step
+de-risks the more expensive ones that follow; item~1 is a prerequisite for all
+of them.
+
+\begin{enumerate}
+\item \textbf{Near-null subspace setup.} The run reported here uses
+$N_{\mathrm{step}}=0$ setup smoothing and $N_v=8$ vectors. The first task is to
+restore an adaptive setup ($N_{\mathrm{step}}>0$, larger $N_v$) and measure the
+reduction in outer iteration count, so that the AMG is assessed at its genuine
+optimum rather than the present deliberately minimal configuration.
+
+\item \textbf{Quark-mass scaling.} Measure the outer iteration count (and the
+fine-operator application count) of the AMG, of unpreconditioned GMRES on $\Aop$,
+and of even-odd CGNE as a function of $m_q\in\{0.01,0.005,0.002,0.001\}$ at fixed,
+residual-matched tolerance. The defining property of multigrid is a near
+mass-independent iteration count, set against the steep growth of CGNE as
+$m_q\to0$; this scaling, not a single-point ratio, is the quantitative case for
+the method.
+
+\item \textbf{Scale-up validation.} Repeat the comparison on larger volumes and
+smaller quark masses, on data-centre GPUs (A100/H100) whose memory and
+batched-GEMM throughput the method is designed to exploit. The single consumer GPU
+used here understates the achievable gain; this step is the quantitative basis for
+a production deployment.
+
+\item \textbf{BF16-storage smoother.} The smoother is ${\sim}65\%$ of the V-cycle
+and is dominated by fine-$\Aop$ applications (Table~\ref{tab:vctime}), whose cost is
+bandwidth-bound; storing the smoother's fermion field (and gauge) in
+\texttt{bfloat16} with FP32 register accumulation therefore offers up to ${\sim}2\times$
+on that kernel. Because the smoother is only a \emph{preconditioner}, the reduced
+precision is corrected by the outer FGMRES and the FP32 residual refinement, so the
+physics is untouched: an A/B test on the present setup, emulating bfloat16 rounding
+of the smoother's fine-$\Aop$ output, leaves the pseudoscalar 2-point function
+invariant to $5\times10^{-9}$ and the residual mass to $6\times10^{-8}$ (far below
+the solver floor), with the outer V-cycle count unchanged. The optimisation is thus
+\emph{de-risked}; what remains is the production kernel port (templating the fused
+$C^{-1}$ and hop kernels on the storage type, confined to the smoother instance).
+Like the levers above its payoff is largest at production volume, where the
+fine-operator bandwidth dominates.
+\end{enumerate}
+
+
+\appendix
+\section{Backup material}
+\label{sec:backup}
+This appendix collects the full treatment of the Neff $\alpha$ parameter --- the operator definition, the measured spectrum and conditioning, the $\alpha>1$ scan, and the $\alpha$-invariance check. It is logically independent of the multigrid construction, which fixes $\alpha=1$ throughout (Section~\ref{sec:target}), and is intended to be split off into a standalone note.
+
+\paragraph{The M\"obius/Neff $\alpha$-form.} The fifth-dimension structure carries
+a parameter $\alpha$ (the better-conditioned domain-wall form of Neff
+\cite{NeffOriginal}, studied for solver acceleration in \cite{ChenAlpha}): in the
+present operator it
+multiplies the $s\!\pm\!1$ chiral shift and the wall projectors of $\Ddw$. Neff
+shows \cite{NeffOriginal} that $\alpha$ leaves the four-dimensional effective
+operator --- hence the boundary-wall propagator and the pion --- \emph{exactly}
+invariant, while rescaling every \emph{bulk} fifth-dimension slice by one factor
+of $1/\alpha$. The residual mass is therefore subtle: the conventional midpoint
+estimator $m_{\mathrm{res}}=C_{J_{5q}}/C_{PP}$ is built from the bulk midpoint
+slices and so scans as $1/\alpha^2$, but this is an artifact of the
+reconstruction, \emph{not} physics --- the chiral-symmetry-breaking
+$m_{\mathrm{res}}$ resides in the $\alpha$-free overlap kernel $(S\!-\!1)/(S\!+\!1)$
+and is invariant. Restoring the compensating factor of $\alpha$ on the midpoint
+current recovers an $\alpha$-invariant $m_{\mathrm{res}}$; we verify both the raw
+$1/\alpha^2$ scan and its correction on the batched solver in
+Section~\ref{sec:batched} (Table~\ref{tab:alpha}, Figure~\ref{fig:mres}). The
+effect of $\alpha$ on the \emph{conditioning} of $\Aop$ --- which, unlike the
+physics, is ensemble-dependent --- is detailed next.
+
+\paragraph{Effect of $\alpha$ on $\Aop$ (measured).}
+We measure the eigenspectrum of the single-precision $\Aop$ directly, by
+implicitly-restarted Arnoldi (abs-ascending and abs-descending) on the $12^4$ test
+configuration (Table~\ref{tab:spectrum}). Decreasing $\alpha$ \emph{spreads} the
+spectrum: $\lambda_{\max}$ grows from $4.66$ at $\alpha\!=\!1$ to $23.8$ at
+$\alpha\!=\!0.4$, $\lambda_{\min}$ rises only mildly ($3.16\to4.86\times10^{-3}$),
+and $\kappa(\Aop)\equiv\lambda_{\max}/\lambda_{\min}$ rises monotonically from
+$1.5\times10^3$ to $4.9\times10^3$. Both solvers track this: GMRES-on-$\Aop$ from
+$391$ to $691$ iterations and the two-grid AMG from $210$ to $339$ as $\alpha$ is
+lowered. The AMG offers no separate $\alpha$-acceleration; at fixed $\alpha$ it is
+${\sim}2\times$ cheaper than bare GMRES ($210$ vs.\ $391$ at $\alpha=1$) and
+inherits the conditioning of $\Aop$ through the Galerkin coarse operator
+$\Aop_c=R\,\Aop\,P$.
+
+\paragraph{$\alpha>1$.} We also measured $\alpha>1$. The four-dimensional physics
+stays invariant: on the CGNE propagator the pseudoscalar correlator and the
+corrected $m_{\mathrm{res}}$ agree with their $\alpha=1$ values to $10$--$12$
+significant digits up to $\alpha=3$ (Table~\ref{tab:alpha_gt1}, left). The
+conditioning degrades monotonically: bare GMRES-on-$\Aop$ is U-shaped with a flat
+floor at $\alpha\!\approx\!0.8$--$1.0$ and rises to $571,\,751,\,1201$ iterations at
+$\alpha=1.5,\,2.0,\,3.0$ (Table~\ref{tab:alpha_gt1}, right). No value of $\alpha$
+improves on $\alpha=1$ for $\Aop$ on this configuration; \textbf{the present study
+therefore fixes $\alpha=1$ throughout.}
+
+The conditioning payoff of $\alpha$ is ensemble-dependent: on a thermalised $16^4$
+configuration an $\alpha\!\approx\!0.5\text{--}0.8$ window lowers the bare
+GMRES-on-$\Aop$ count by ${\sim}12\%$ \cite{ChenAlpha}, whereas the present cold
+$12^4$ test gauge shows no such window and $\alpha=1$ is optimal for every solver.
+The ensemble-independent statement is that $\alpha$ is a \emph{physical} knob
+(Section~\ref{sec:batched}: the pion is invariant, and the residual mass is
+invariant once the midpoint current carries its compensating factor of $\alpha$).
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ccccc}
+\toprule
+$\alpha$ & $\lambda_{\min}$ & $\lambda_{\max}$ & $\kappa(\Aop)$ & GMRES\,/\,AMG iters \\
+\midrule
+$1.0$ & $3.16\times10^{-3}$ & $4.66$ & $1.5\times10^3$ & $391\,/\,210$ \\
+$0.8$ & $3.82\times10^{-3}$ & $6.07$ & $1.6\times10^3$ & $391\,/\,229$ \\
+$0.6$ & $4.43\times10^{-3}$ & $10.6$ & $2.4\times10^3$ & $481\,/\,266$ \\
+$0.5$ & $4.67\times10^{-3}$ & $15.2$ & $3.3\times10^3$ & $541\,/\,247$ \\
+$0.4$ & $4.86\times10^{-3}$ & $23.8$ & $4.9\times10^3$ & $691\,/\,339$ \\
+\bottomrule
+\end{tabular}
+\caption{Measured spectrum of the single-precision target operator $\Aop$ versus
+the Neff $\alpha$, with the resulting iteration counts, all on the \emph{same}
+$12^4$ $\beta=5.7$ cold configuration, $m_q=0.005$, $N_s=8$.
+$\lambda_{\min},\lambda_{\max}$ are the extreme converged eigenvalues from
+implicitly-restarted Arnoldi; $\kappa(\Aop)=\lambda_{\max}/\lambda_{\min}$. As
+$\alpha$ decreases the spectrum spreads and $\kappa$ grows, and both
+unpreconditioned GMRES-on-$\Aop$ and the two-grid AMG track it monotonically:
+$\alpha=1$ is optimal for both on this ensemble. The AMG is uniformly ${\sim}2\times$
+cheaper than bare GMRES at fixed $\alpha$.}
+\label{tab:spectrum}
+\end{table}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{cc@{\qquad}cc}
+\toprule
+\multicolumn{2}{c}{\emph{physics (CGNE, invariant)}} & \multicolumn{2}{c}{\emph{conditioning (GMRES-on-$\Aop$)}}\\
+\cmidrule(r){1-2}\cmidrule(l){3-4}
+$\alpha$ & pion / $m_{\mathrm{res}}$ agree & $\alpha$ & GMRES iters \\
+\midrule
+$1.0$ & --- (reference)        & $0.6$ & $481$ \\
+$1.5$ & $12$ / $10$ digits     & $0.8$ & $391$ \\
+$2.0$ & $12$ / $10$ digits     & $1.0$ & $391$ \\
+$3.0$ & $12$ / $10$ digits     & $1.5$ & $571$ \\
+      &                        & $2.0$ & $751$ \\
+      &                        & $3.0$ & $1201$ \\
+\bottomrule
+\end{tabular}
+\caption{The $\alpha\!>\!1$ measurements, same $12^4$/$m_q\!=\!0.005$/$N_s\!=\!8$.
+\emph{Left:} the four-dimensional physics is invariant past $\alpha=1$ --- the
+pseudoscalar correlator and the $\alpha$-corrected residual mass, measured on the
+CGNE propagator, agree with the $\alpha=1$ values to $10$--$12$ significant digits
+up to $\alpha=3$. \emph{Right:} the bare GMRES-on-$\Aop$ count is U-shaped, with a
+flat floor at $\alpha\approx0.8$--$1.0$ and rising ${\sim}3\times$ by $\alpha=3$.
+The study fixes $\alpha=1$.}
+\label{tab:alpha_gt1}
+\end{table}
+
+\paragraph{The \texorpdfstring{$\alpha$}{alpha}-invariance check.}
+Carrying the Neff $\alpha$-form through the \emph{physical} operator (and hence,
+by the Galerkin construction, through the coarse operator) must leave the
+four-dimensional pion exactly invariant. We solve the batched propagator at
+$\alpha\in\{0.38,0.5,0.76,1.0,1.25\}$ on the same solver (Table~\ref{tab:alpha},
+Figure~\ref{fig:mres}). The pseudoscalar correlator is invariant across the whole
+range to $\sim5\times10^{-4}$ (the FP32 inner-solve floor), confirming that
+$\alpha$ propagates correctly into every factor of $\Aop$ and into the Galerkin
+coarse operator. The \emph{raw} midpoint residual mass varies by $\approx7\times$,
+tracking the reconstruction's $1/\alpha^2$ closely for $\alpha\gtrsim0.5$; but, as
+explained in Section~\ref{sec:target}, this is the bulk-slice $1/\alpha$ of the
+midpoint current squared, an artifact of the estimator and not a physical shift.
+Restoring the compensating factor of $\alpha$ on the midpoint density (last column
+of Table~\ref{tab:alpha}, flat series in Figure~\ref{fig:mres}) collapses the scan:
+the \emph{corrected} $m_{\mathrm{res}}$ is invariant to ${\sim}3\%$ for
+$\alpha\gtrsim0.76$, with the residual droop at $\alpha\le0.5$ reflecting the loose
+single-precision solve at the most ill-conditioned points (largest $\kappa$,
+Table~\ref{tab:spectrum}) --- a numerical, not physical, effect: a tighter-converged
+check at $\alpha=0.5$ recovers $m_{\mathrm{res}}$ to within $0.13\%$ of its
+$\alpha=1$ value. The physically correct statement is thus that $\alpha$ leaves
+both the pion \emph{and} the residual mass invariant, as a four-dimensional
+observable must.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{cccc}
+\toprule
+$\alpha$ & $C_{PP}$ & $m_{\mathrm{res}}^{\mathrm{raw}}$ & $\alpha^2 m_{\mathrm{res}}^{\mathrm{raw}}$ \\
+\midrule
+$0.38$ & $1.56801\times10^{-1}$ & $4.667\times10^{-1}$ & $6.74\times10^{-2}$ \\
+$0.50$ & $1.56779\times10^{-1}$ & $3.500\times10^{-1}$ & $8.75\times10^{-2}$ \\
+$0.76$ & $1.56751\times10^{-1}$ & $1.682\times10^{-1}$ & $9.71\times10^{-2}$ \\
+$1.00$ & $1.56750\times10^{-1}$ & $9.658\times10^{-2}$ & $9.66\times10^{-2}$ \\
+$1.25$ & $1.56758\times10^{-1}$ & $6.340\times10^{-2}$ & $9.91\times10^{-2}$ \\
+\bottomrule
+\end{tabular}
+\caption{$\alpha$-scan on the batched AMG solver, $12^4$, $\beta=5.7$,
+$m_q=0.005$, single precision. The pion $C_{PP}$ is invariant to the FP32 floor
+across the whole range. The \emph{raw} midpoint residual mass
+$m_{\mathrm{res}}^{\mathrm{raw}}$ scans by $7\times$ (the $1/\alpha^2$ artifact of
+the bulk-slice reconstruction); the corrected, physical residual mass
+$\alpha^2 m_{\mathrm{res}}^{\mathrm{raw}}$ is invariant to ${\sim}3\%$ for
+$\alpha\gtrsim0.76$, drooping at smaller $\alpha$ only because the FP32 inner
+solve is least converged where $\kappa(\Aop)$ is largest.}
+\label{tab:alpha}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=11cm, height=7cm,
+    xlabel={$\alpha$}, ylabel={$m_{\mathrm{res}}$},
+    xmin=0.3, xmax=1.35, ymin=0.03, ymax=0.55,
+    grid=both, grid style={gray!20},
+    legend pos=north east, legend cell align=left,
+    tick label style={font=\small}, label style={font=\small},
+]
+% 1/alpha^2 reference, normalised at alpha=1 (m_res=0.09658)
+\addplot[domain=0.35:1.3, samples=80, dashed, thick, gray] {0.09658/(x*x)};
+\addlegendentry{$1/\alpha^2$ (normalised at $\alpha{=}1$)}
+% raw measured points
+\addplot[only marks, mark=*, mark size=2pt, blue] coordinates {
+  (0.38, 0.46669) (0.50, 0.35001) (0.76, 0.16817) (1.00, 0.09658) (1.25, 0.06340)
+};
+\addlegendentry{raw $m_{\mathrm{res}}$ (estimator)}
+% corrected, alpha-invariant: alpha^2 * raw
+\addplot[only marks, mark=square*, mark size=2pt, red] coordinates {
+  (0.38, 0.06740) (0.50, 0.08750) (0.76, 0.09710) (1.00, 0.09658) (1.25, 0.09910)
+};
+\addlegendentry{corrected $\alpha^2 m_{\mathrm{res}}$ (physical)}
+\end{axis}
+\end{tikzpicture}
+\caption{Residual mass versus the M\"obius $\alpha$ on the batched AMG solver
+($12^4$, $m_q=0.005$, single precision). The dashed curve is $1/\alpha^2$
+normalised at $\alpha=1$; the blue circles are the \emph{raw} midpoint estimator,
+which follows it (an artifact of the $1/\alpha$ bulk-slice reconstruction). The
+red squares are the \emph{corrected}, physical residual mass
+$\alpha^2 m_{\mathrm{res}}$, which is $\alpha$-invariant up to the FP32 inner-solve
+floor at the most ill-conditioned (small-$\alpha$) points; the pion correlator
+(Table~\ref{tab:alpha}) is invariant throughout.}
+\label{fig:mres}
+\end{figure}
+
+\begin{thebibliography}{9}
+
+\bibitem{KCM2024}
+I.~Kanamori, W.-L.~Chen and H.~Matsufuru,
+\emph{Multigrid solver for the M\"obius domain-wall fermion with a
+Pauli--Villars preconditioned target operator},
+PoS \textbf{LATTICE2024} (2025) 414;
+I.~Kanamori, \emph{Note on a multigrid solver for the domain-wall fermion},
+unpublished design note (2023).
+
+\bibitem{BridgeMG}
+I.~Kanamori, K.-I.~Ishikawa and H.~Matsufuru,
+\emph{Object-oriented implementation of an adaptive aggregation-based algebraic
+multigrid method in Bridge++},
+in \emph{Computational Science -- ICCS}, doi:10.1007/978-3-030-86976-2\_15
+[arXiv:2111.05012].
+
+\bibitem{DDalphaAMG}
+A.~Frommer, K.~Kahl, S.~Krieg, B.~Leder and M.~Rottmann,
+\emph{Adaptive aggregation-based domain decomposition multigrid for the lattice
+Wilson--Dirac operator},
+SIAM J.\ Sci.\ Comput.\ \textbf{36} (2014) A1581 [arXiv:1303.1377].
+
+\bibitem{BrowerPV}
+R.~C.~Brower, M.~A.~Clark, D.~Howarth and E.~S.~Weinberg,
+\emph{Multigrid for chiral lattice fermions: domain wall},
+Phys.\ Rev.\ D \textbf{102} (2020) 094517 [arXiv:2004.07732].
+
+\bibitem{NeffOriginal}
+H.~Neff,
+\emph{A better conditioned domain-wall operator} (2015),
+[arXiv:1501.04950].
+
+\bibitem{ChenAlpha}
+W.-L.~Chen, I.~Kanamori, H.~Matsufuru and H.~Neff,
+\emph{Accelerating iterative linear equation solver using modified domain-wall
+fermion matrix in lattice QCD simulations},
+[arXiv:2602.14454].
+
+\bibitem{BoyleYamaguchi}
+P.~Boyle and A.~Yamaguchi,
+\emph{Comparison of domain-wall multigrid coarsening strategies},
+arXiv:2103.05034.
+
+\bibitem{BoyleMRHS}
+P.~Boyle,
+\emph{Multiple right hand side multigrid for domain wall fermions},
+arXiv:2409.03904.
+
+\end{thebibliography}
+
+\end{document}

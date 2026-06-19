@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <!-- # this is a sample parameter file -->
+    <Test_HMC_Clover>
+        <!--   ## gauge_config_status = {Continue,Cold_start,Hot_start} -->
+        <gauge_config_status>Continue</gauge_config_status>
+        <!--   ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel,None} -->
+        <gauge_config_type_input>Text</gauge_config_type_input>
+        <config_filename_input>./conf_04040408.txt</config_filename_input>
+        <gauge_config_type_output>None</gauge_config_type_output>
+        <config_filename_output>./conf_output.dat</config_filename_output>
+        <!--   ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library -->
+        <random_number_type>Mseries</random_number_type>
+        <seed_for_random_number>1234567UL</seed_for_random_number>
+        <trajectory_number>200000</trajectory_number>
+        <trajectory_number_step>1</trajectory_number_step>
+        <save_config_interval>100</save_config_interval>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <expected_result>0.627668186553629</expected_result>
+    </Test_HMC_Clover>
+    <HMC_General>
+        <trajectory_length>0.1</trajectory_length>
+        <Metropolis_test>true</Metropolis_test>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </HMC_General>
+    <Action_G>
+        <action_type>Action_G_Rectangle</action_type>
+        <beta>2.3</beta>
+        <c_plaq>3.648</c_plaq>
+        <c_rect>-0.331</c_rect>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Action_G>
+    <Fopr_Nf2>
+        <fermion_type>Clover</fermion_type>
+        <!--   ## gamma_matrix_type = {Chiral,Dirac} -->
+        <gamma_matrix_type>Dirac</gamma_matrix_type>
+        <hopping_parameter>0.13</hopping_parameter>
+        <clover_coefficient>1.0</clover_coefficient>
+        <boundary_condition type="sequence">
+            <x>1</x>
+            <y>1</y>
+            <z>1</z>
+            <t>-1</t>
+        </boundary_condition>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr_Nf2>
+    <Fopr_Nf2_prec>
+        <fermion_type>Clover</fermion_type>
+        <!--   ## gamma_matrix_type = {Chiral,Dirac} -->
+        <gamma_matrix_type>Dirac</gamma_matrix_type>
+        <hopping_parameter>0.11</hopping_parameter>
+        <clover_coefficient>1.0</clover_coefficient>
+        <boundary_condition type="sequence">
+            <x>1</x>
+            <y>1</y>
+            <z>1</z>
+            <t>-1</t>
+        </boundary_condition>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr_Nf2_prec>
+    <Fopr_Nf1>
+        <fermion_type>Clover</fermion_type>
+        <!--   ## gamma_matrix_type = {Chiral,Dirac} -->
+        <gamma_matrix_type>Dirac</gamma_matrix_type>
+        <hopping_parameter>0.12</hopping_parameter>
+        <clover_coefficient>1.0</clover_coefficient>
+        <boundary_condition type="sequence">
+            <x>1</x>
+            <y>1</y>
+            <z>1</z>
+            <t>-1</t>
+        </boundary_condition>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr_Nf1>
+    <Projection>
+        <!--   ## projection_type = {Maximum_SU_N,Stout_SU3} -->
+        <projection_type>Stout_SU3</projection_type>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Projection>
+    <Smear>
+        <!--   ## smear_type = {APE,HYP} -->
+        <smear_type>APE</smear_type>
+        <rho_uniform>0.1</rho_uniform>
+        <!--   #smear_type    : HYP -->
+        <!--   #alpha1        : 0.95 -->
+        <!--   #alpha2        : 0.76 -->
+        <!--   #alpha3        : 0.38 -->
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Smear>
+    <Director_Smear>
+        <number_of_smearing>2</number_of_smearing>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Director_Smear>
+    <Fopr_Rational_MD>
+        <number_of_poles>16</number_of_poles>
+        <exponent_numerator>-1</exponent_numerator>
+        <exponent_denominator>2</exponent_denominator>
+        <lower_bound>1.0e-2</lower_bound>
+        <upper_bound>3.16227766</upper_bound>
+        <maximum_number_of_iteration>1000</maximum_number_of_iteration>
+        <convergence_criterion_squared>1.e-28</convergence_criterion_squared>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr_Rational_MD>
+    <Fopr_Rational_H>
+        <number_of_poles>16</number_of_poles>
+        <exponent_numerator>1</exponent_numerator>
+        <exponent_denominator>4</exponent_denominator>
+        <lower_bound>1.0e-2</lower_bound>
+        <upper_bound>3.16227766</upper_bound>
+        <maximum_number_of_iteration>1000</maximum_number_of_iteration>
+        <convergence_criterion_squared>1.e-28</convergence_criterion_squared>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Fopr_Rational_H>
+    <Solver_Nf2_MD>
+        <!--   ## solver_type = {CG,CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx} -->
+        <solver_type>BiCGStab_L_Cmplx</solver_type>
+        <maximum_number_of_iteration>100</maximum_number_of_iteration>
+        <maximum_number_of_restart>40</maximum_number_of_restart>
+        <convergence_criterion_squared>1.0e-28</convergence_criterion_squared>
+        <use_initial_guess>false</use_initial_guess>
+        <!--   ## additional parameters for BiCGStab series -->
+        <Omega_tolerance>0.60</Omega_tolerance>
+        <!--   ## additional parameters for each solver -->
+        <number_of_orthonormal_vectors>2</number_of_orthonormal_vectors>
+        <tolerance_for_DynamicSelection_of_L>0.1</tolerance_for_DynamicSelection_of_L>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Solver_Nf2_MD>
+    <Solver_Nf2_H>
+        <!--   ## solver_type = {CG,CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx} -->
+        <solver_type>BiCGStab_L_Cmplx</solver_type>
+        <maximum_number_of_iteration>100</maximum_number_of_iteration>
+        <maximum_number_of_restart>40</maximum_number_of_restart>
+        <convergence_criterion_squared>1.0e-28</convergence_criterion_squared>
+        <use_initial_guess>false</use_initial_guess>
+        <!--   ## additional parameters for BiCGStab series -->
+        <Omega_tolerance>0.60</Omega_tolerance>
+        <!--   ## additional parameters for each solver -->
+        <number_of_orthonormal_vectors>2</number_of_orthonormal_vectors>
+        <tolerance_for_DynamicSelection_of_L>0.1</tolerance_for_DynamicSelection_of_L>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Solver_Nf2_H>
+    <Solver_Nf2_MD_prec>
+        <!--   ## solver_type = {CG,CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx} -->
+        <solver_type>BiCGStab_L_Cmplx</solver_type>
+        <maximum_number_of_iteration>100</maximum_number_of_iteration>
+        <maximum_number_of_restart>40</maximum_number_of_restart>
+        <convergence_criterion_squared>1.0e-28</convergence_criterion_squared>
+        <use_initial_guess>false</use_initial_guess>
+        <!--   ## additional parameters for BiCGStab series -->
+        <Omega_tolerance>0.60</Omega_tolerance>
+        <!--   ## additional parameters for each solver -->
+        <number_of_orthonormal_vectors>2</number_of_orthonormal_vectors>
+        <tolerance_for_DynamicSelection_of_L>0.1</tolerance_for_DynamicSelection_of_L>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Solver_Nf2_MD_prec>
+    <Solver_Nf2_H_prec>
+        <!--   ## solver_type = {CG,CGNE,CGNR,BiCGStab_Cmplx,BiCGStab_L_Cmplx,BiCGStab_DS_L_Cmplx,BiCGStab_IDS_L_Cmplx,GMRES_m_Cmplx} -->
+        <solver_type>BiCGStab_L_Cmplx</solver_type>
+        <maximum_number_of_iteration>100</maximum_number_of_iteration>
+        <maximum_number_of_restart>40</maximum_number_of_restart>
+        <convergence_criterion_squared>1.0e-28</convergence_criterion_squared>
+        <use_initial_guess>false</use_initial_guess>
+        <!--   ## additional parameters for BiCGStab series -->
+        <Omega_tolerance>0.60</Omega_tolerance>
+        <!--   ## additional parameters for each solver -->
+        <number_of_orthonormal_vectors>2</number_of_orthonormal_vectors>
+        <tolerance_for_DynamicSelection_of_L>0.1</tolerance_for_DynamicSelection_of_L>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Solver_Nf2_H_prec>
+    <Builder_Integrator>
+        <!--   ## integrator = {Leapfrog,Omelyan} -->
+        <integrator>Leapfrog</integrator>
+        <number_of_levels>3</number_of_levels>
+        <level_of_actions type="sequence">
+            <x>0</x>
+            <y>1</y>
+            <z>1</z>
+            <t>2</t>
+        </level_of_actions>
+        <number_of_steps type="sequence">
+            <value id="1">5</value>
+            <value id="2">2</value>
+            <value id="3">3</value>
+        </number_of_steps>
+        <order_of_exp_iP>8</order_of_exp_iP>
+        <lambda_Omelyan>0.1931833275</lambda_Omelyan>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Builder_Integrator>
+</Parameters>

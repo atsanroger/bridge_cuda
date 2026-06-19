@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters>
+    <!-- # this is a sample parameter file -->
+    <Test_HMC_Quenched>
+        <!--   ## gauge_config_status = {Continue,Cold_start,Hot_start} -->
+        <gauge_config_status>Continue</gauge_config_status>
+        <!--   ## gauge_config_type = {Text,Binary,Binary_Parallel,Fortran_JLQCD,Fortran_ILDG,ILDG,ILDG_Parallel,None} -->
+        <gauge_config_type_input>Text</gauge_config_type_input>
+        <config_filename_input>./conf_04040408.txt</config_filename_input>
+        <gauge_config_type_output>None</gauge_config_type_output>
+        <config_filename_output>./conf_output.dat</config_filename_output>
+        <!--   ## random_number_type = {Mseries,MT19937,SFMT} NB. SFMT is an extra library -->
+        <random_number_type>Mseries</random_number_type>
+        <seed_for_random_number>1234567UL</seed_for_random_number>
+        <trajectory_number>200000</trajectory_number>
+        <trajectory_number_step>1</trajectory_number_step>
+        <save_config_interval>100</save_config_interval>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+        <expected_result>0.627477459735022</expected_result>
+    </Test_HMC_Quenched>
+    <HMC_General>
+        <trajectory_length>0.1</trajectory_length>
+        <Metropolis_test>true</Metropolis_test>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </HMC_General>
+    <Action_G>
+        <action_type>Action_G_Rectangle</action_type>
+        <beta>2.3</beta>
+        <c_plaq>3.648</c_plaq>
+        <c_rect>-0.331</c_rect>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Action_G>
+    <Builder_Integrator>
+        <!--   ## integrator = {Leapfrog,Omelyan} -->
+        <integrator>Leapfrog</integrator>
+        <number_of_levels>1</number_of_levels>
+        <level_of_actions type="sequence">
+            <value id="1">0</value>
+        </level_of_actions>
+        <number_of_steps type="sequence">
+            <value id="1">5</value>
+        </number_of_steps>
+        <order_of_exp_iP>8</order_of_exp_iP>
+        <lambda_Omelyan>0.1931833275</lambda_Omelyan>
+        <!--   ## verbose_level = {Crucial,General,Detailed,Paranoiac} -->
+        <verbose_level>General</verbose_level>
+    </Builder_Integrator>
+</Parameters>

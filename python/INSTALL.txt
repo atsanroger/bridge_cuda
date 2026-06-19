@@ -1,0 +1,71 @@
+PyBridge++
+----------
+
+How to build
+
+0. Prerequisites
+
+    - bridge++ source package
+        PyBridge++ is a part of release version of bridge++ (>1.6.0).
+
+    - pybind11
+        pybind11 is a C++ template library that provides python bindings
+	to existing C++ codes.
+
+        There are several ways to obtain working copy of pybind11.
+
+        - clone from the developer site on github
+	    git clone https://github.com/pybind/pybind11
+	  in the top directory, or set the path on the step 2 below
+	  appropriately
+
+        - use python package manager, e.g. pip.
+	    pip3 install pybind11
+
+    - python3
+        A standard installation of python is required.
+        
+    - mpi4py (optional)
+        mpi4py is a python binding of MPI standard that provides
+	message passing parallel execution on python.
+	
+	mpi4py will be installed by package manager, e.g. pip. it is
+	integrated in intel python distribution.
+
+1. Build Bridge++ library
+
+    First, you need to build Bridge++ library with a Makefile option
+    "use_python" enabled.
+    It adds PIC (position-independent code) compiler option (e.g.
+    -fPIC for GCC) that is required to make a shared library. (A python
+    module is built in a form of a shared library object.)
+
+    When you also use external libraries in Bridge++, such as lime, 
+    these libraries must also be build with PIC enabled. (usually by a
+    shared library option, e.g. --enable-shared to configure script)
+
+2. Build PyBridge
+
+    Next, switch to python directory (you may have already switched),
+    and run make.
+    If build runs successfully, the python module pybridge.{ext}.so
+    will be created in src subdirectory. ({ext} varies by platforms.)
+
+    There are several options in src/Makefile to modify build conditions.
+
+    - Set the include path to pybind11 library: explicitly specify the
+      install path, or detect by python package manager.
+
+    - If MPI is enabled but mpi4py will not be used, comment-out the
+      corresponding flags in Makefile.
+
+3. Run tests
+
+    Switch to tests directory, modify Makefile for run commands and
+    other settings, and run make.
+    The python scripts using PyBridge++ will be executed, and the outputs
+    will be written to log files, as well as displayed on screen.
+    Most of these tests are ported from Bridge++ tests. They will be
+    referred as examples of PyBridge++ scripts.
+
+

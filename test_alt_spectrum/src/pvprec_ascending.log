@@ -1,0 +1,198 @@
+Bridge++ 2.0.0
+
+input filename : main.yaml
+
+file = main.yaml
+
+Lattice parameters:
+  Lx = 16,  Ly = 16,  Lz = 16,  Lt = 16,
+  Nx = 16,  Ny = 16,  Nz = 16,  Nt = 16,
+  NPEx = 1,  NPEy  = 1,  NPEz  = 1,  NPEt  = 1,
+  Lvol = 65536,  Nvol = 65536,  NPE = 1,
+  Ndim = 4
+  Nc   = 3
+  Nd   = 4
+
+ThreadManager: initialization
+Warning at ThreadManager: Nthread(env) != Nthread(input)
+  Number of threads(env)   = 2
+  Number of threads(input) = 1
+  reset Nthread = Nthread(input).
+  Number of threads = 1
+Main: input parameters
+  lattice_size     = [16, 16, 16, 16]
+  grid_size        = [1, 1, 1, 1]
+  number of thread = 1
+  number of color  = 3
+  logfile          = stdout
+  ildg_logfile     = stdout
+  vlevel           = General
+
+Alt_Accel code is being setup.
+DeviceManager_CUDA: being initialized.
+  process_id = 0
+  number of devices = 1
+  device_id = 0  is used on process = 0
+------------------------------------------------
+Alt_Accel: Factory entries
+------------------------------------------------
+AFopr<double, ACCEL> >(void):
+AFopr<double, ACCEL>(Parameters&):
+	Clover
+	CloverTerm
+	Clover_dd
+	Domainwall
+	Domainwall_5din
+	Domainwall_5din_dd
+	Domainwall_5din_eo
+	Domainwall_PVprec
+	Domainwall_eo
+	Wilson
+	Wilson_dd
+AFopr<double, ACCEL>(Fopr*):
+	Domainwall
+AFopr<double, ACCEL>(Fopr*, Director*):
+AFopr<float, ACCEL> >(void):
+AFopr<float, ACCEL>(Parameters&):
+	Clover
+	CloverTerm
+	Clover_dd
+	Domainwall
+	Domainwall_5din
+	Domainwall_5din_dd
+	Domainwall_5din_eo
+	Domainwall_PVprec
+	Domainwall_eo
+	Wilson
+	Wilson_dd
+AFopr<float, ACCEL>(Fopr*):
+	Domainwall
+AFopr<float, ACCEL>(Fopr*, Director*):
+AEigensolver<AField<float, ACCEL> >, Afopr>(Fopr*):
+	IRArnoldi
+	IRLanczos
+------------------------------------------------
+Timer: timestamp: 2026/06/06 23:28:35 +0900
+
+--------------------------------------------------------------------
+test name: Eigenvalue_alt.eigenspectrum
+parameter file: test_alt_Eigenvalue_Arnoldi_Domainwall_PVprec.yaml
+run_mode: test
+
+file = test_alt_Eigenvalue_Arnoldi_Domainwall_PVprec.yaml
+  vlevel       = General
+
+fermion_type = Domainwall_PVprec
+AFopr_Domainwall_5din<AField<double,ACCEL> >: construction
+  do_comm[0] = 0
+  do_comm[1] = 0
+  do_comm[2] = 0
+  do_comm[3] = 0
+  AFopr_Domainwall_5din<AField<double,ACCEL> >: input parameters
+    mq   =   0.0100
+    M0   =   1.0000
+    Ns   =    8
+    boundary[0] =  1
+    boundary[1] =  1
+    boundary[2] =  1
+    boundary[3] = -1
+    coefficients:
+      b[ 0] =     1.5000000000  c[ 0] =     0.5000000000
+      b[ 1] =     1.5000000000  c[ 1] =     0.5000000000
+      b[ 2] =     1.5000000000  c[ 2] =     0.5000000000
+      b[ 3] =     1.5000000000  c[ 3] =     0.5000000000
+      b[ 4] =     1.5000000000  c[ 4] =     0.5000000000
+      b[ 5] =     1.5000000000  c[ 5] =     0.5000000000
+      b[ 6] =     1.5000000000  c[ 6] =     0.5000000000
+      b[ 7] =     1.5000000000  c[ 7] =     0.5000000000
+AFopr_Domainwall_5din<AField<double,ACCEL> >: construction finished.
+AFopr_Domainwall_5din<AField<double,ACCEL> >: construction
+  do_comm[0] = 0
+  do_comm[1] = 0
+  do_comm[2] = 0
+  do_comm[3] = 0
+  AFopr_Domainwall_5din<AField<double,ACCEL> >: input parameters
+    mq   =   1.0000
+    M0   =   1.0000
+    Ns   =    8
+    boundary[0] =  1
+    boundary[1] =  1
+    boundary[2] =  1
+    boundary[3] = -1
+    coefficients:
+      b[ 0] =     1.5000000000  c[ 0] =     0.5000000000
+      b[ 1] =     1.5000000000  c[ 1] =     0.5000000000
+      b[ 2] =     1.5000000000  c[ 2] =     0.5000000000
+      b[ 3] =     1.5000000000  c[ 3] =     0.5000000000
+      b[ 4] =     1.5000000000  c[ 4] =     0.5000000000
+      b[ 5] =     1.5000000000  c[ 5] =     0.5000000000
+      b[ 6] =     1.5000000000  c[ 6] =     0.5000000000
+      b[ 7] =     1.5000000000  c[ 7] =     0.5000000000
+AFopr_Domainwall_5din<AField<double,ACCEL> >: construction finished.
+AFopr_Domainwall_PVprec<AField<double,ACCEL> >: constructed, Pauli-Villars mass M_PV = 1.000000
+
+eigensolver_type = IRArnoldi
+fermion_mult_mode = D
+AEigensolver_IRArnoldi<AField<double,ACCEL> > set_parameters:
+  Nk           = 8
+  Np           = 40
+  Niter_eigen  = 300
+  Enorm_eigen  =   1.00000000e-06
+  Vthreshold   =   2.00000000e-02
+  Enorm_almost =   1.00000000e-12
+
+object setup finished
+Elapsed time: : total         4.89 sec, count    1, average         4.89 sec
+
+-------------------------------------------------
+iconf = 1
+
+Configuration setup:
+  gconf_status = Continue
+  gconf_read   = Text
+  readfile     = ./conf_quench_16x16x16x16.txt
+  plaq = 1.000000
+
+Implicitly Restarted Arnoldi algorithm start
+  Nk = 8  Np = 40
+  Nm = 48
+  size of TDa  = 48
+  size of vk   = 48
+  Enorm_eigen  = 1.000000e-06
+  Enorm_almost = 1.000000e-12
+
+ iter = 0
+  tqri: converged at iter = 25
+  eigenrelation of Ht: diff2 = 4.037954e-32
+                   TDa                    abs           diff2
+    0  (  0.34758054,  -0.26030138)    0.43424537    3.2344e-02
+    1  (  0.43723531,  -0.17492826)    0.47092952    3.4508e-02
+    2  (  0.22561264,  -0.18030788)    0.28881135    4.3918e-02
+    3  (  0.11970590,  -0.03458705)    0.12460243    4.1411e-02
+    4  (  0.11970847,   0.03458796)    0.12460515    4.1411e-02
+    5  (  0.43724097,   0.17492608)    0.47093397    3.4503e-02
+    6  (  0.34757677,   0.26030135)    0.43424233    3.2336e-02
+    7  (  0.22561400,   0.18030862)    0.28881288    4.3918e-02
+ #modes already converged:    0
+ #modes newly converged:      0
+ #modes almost converged:     0
+  tqri: converged at iter = 150
+  eigenrelation of Ht: diff2 = 2.291767e-31
+ beta(k) =     0.00000000000004
+ difference of Hessenberg = 2.790477e-10
+
+ iter = 1
+  tqri: converged at iter = 23
+  eigenrelation of Ht: diff2 = 9.965647e-34
+                   TDa                    abs           diff2
+    0  (  0.08106592,  -0.09166702)    0.12237045    1.6340e-02
+    1  (  0.04879692,  -0.06186724)    0.07879527    1.2452e-02
+    2  (  0.00370315,  -0.02720302)    0.02745392    3.2494e-03
+    3  (  0.04169085,  -0.02799867)    0.05022004    1.7054e-02
+    4  (  0.00371030,   0.02720367)    0.02745553    3.2507e-03
+    5  (  0.04172023,   0.02794514)    0.05021462    1.7073e-02
+    6  (  0.04878366,   0.06181070)    0.07874267    1.2468e-02
+    7  (  0.08100394,   0.09157508)    0.12226052    1.6349e-02
+ #modes already converged:    0
+ #modes newly converged:      0
+ #modes almost converged:     0
