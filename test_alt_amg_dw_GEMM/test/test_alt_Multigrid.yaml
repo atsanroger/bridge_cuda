@@ -88,6 +88,14 @@ MGSolver:
     number_of_orthonormal_vectors: 5
     smoother_number_of_iteration : 4
     smoother_convergence_criterion_squared: 1.0e-3
+    ## smoother choice: GMRES (default) = batched block-GMRES-on-A, stores a Krylov
+    ## basis (~63% of the s-scaling GPU memory). poly = frozen power-basis MR
+    ## polynomial p(A) of degree smoother_number_of_iteration, NO Krylov basis
+    ## (less memory, cheaper per V-cycle). The poly is weaker per pass; raise
+    ## poly_number_of_application (iterative-refinement passes, error operator
+    ## (I-p(A)A)^k) to recover convergence. Env POLY_SMOOTHER / POLY_APPLY override.
+    smoother_type : GMRES
+    poly_number_of_application : 2
     verbose_level : Crucial
 
 Fopr:

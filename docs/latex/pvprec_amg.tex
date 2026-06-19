@@ -307,6 +307,75 @@ tolerance $10^{-2}$.}
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{A memory-lean polynomial alternative.}
+The GMRES smoother is robust but it stores the full Arnoldi basis
+$V_{m+1}=[v_1,\dots,v_{m+1}]$ for \emph{every} right-hand side of the batched
+multi-RHS solve, which dominates the $s$-scaling part of the GPU footprint. An
+alternative that carries \emph{no} Krylov basis is a \emph{frozen} minimal-residual
+(MR) polynomial smoother $x\approx p(\Aop)\,b$, where $p$ is a fixed real
+polynomial of degree $d$ that minimises $\norm{b-\Aop\,p(\Aop)\,b}$ over the
+power basis $\{\Aop^k b_0\}_{k=1}^{d}$ of a representative vector $b_0$. Writing
+$K=[\Aop b_0,\Aop^2 b_0,\dots,\Aop^{d} b_0]$, the coefficient vector
+$c=(c_1,\dots,c_d)$ solves the $d\times d$ normal equations
+\begin{equation}
+  (K^{\!\top}K)\,c = K^{\!\top}b_0 ,
+  \label{eq:mr-normal}
+\end{equation}
+computed \emph{once} during setup. The Gram matrix $G=K^{\!\top}K$ is assembled
+on the GPU (a batch of inner products) and the tiny solve of
+\eqref{eq:mr-normal} is a $d\times d$ Cholesky factorisation on the host; the
+coefficients $c$ are then constants. At solve time each smoother application is a
+single Horner sweep
+\begin{equation}
+  p(\Aop)\,b=\Big(\!\sum_{k=1}^{d} c_k\,\Aop^{k-1}\Big)b
+           = c_1 b + \Aop\big(c_2 b + \Aop(\,\cdots + \Aop\,c_d b)\big),
+  \label{eq:horner}
+\end{equation}
+i.e. $d-1$ applications of $\Aop$ and a handful of \texttt{axpy}s, with no
+orthogonalisation, no least-squares solve, and only one work vector per RHS
+beyond $b$ and $\Aop b$. No eigenvalue estimate enters: the polynomial is fit to
+the residual directly, so the non-normality of $\Aop$ is handled by the data
+rather than by an assumed spectral interval, just as for GMRES.
+
+The price is conditioning. As $d$ grows the power-basis vectors $\Aop^k b_0$ tilt
+toward the dominant invariant subspace and become nearly linearly dependent; the
+normal equations square that ill-conditioning ($\operatorname{cond}(G)=
+\operatorname{cond}(K)^2$), so \eqref{eq:mr-normal} overflows in single precision
+beyond $d\!\approx\!6$ ($d=8$ already returns $c=\infty$). We therefore keep the
+fitted degree low ($d=4$) and recover smoother strength not by raising $d$ but by
+\emph{iterative refinement}: applying the same frozen $p$ as a stationary
+correction
+\begin{equation}
+  x \gets x + p(\Aop)\,(b-\Aop\,x),\qquad \text{repeated } \kappa \text{ times,}
+  \label{eq:mr-refine}
+\end{equation}
+whose error propagator is $\big(I-p(\Aop)\Aop\big)^{\kappa}$. This realises a
+degree-$\kappa d$ \emph{action} while every fit \eqref{eq:mr-normal} stays at the
+well-conditioned degree $d$. It is \emph{not} the naive composition
+$p(\Aop)^{\kappa}b$, which would approximate $\Aop^{-\kappa}b$ --- the wrong
+operator. With $d=4,\kappa=2$ the polynomial smoother passes the same 2pt
+physical-residual test as the GMRES smoother (Section~\ref{sec:scaling}), at lower
+GPU memory and lower cost per V-cycle.
+
+\begin{algorithm}[H]
+\caption{Frozen MR polynomial smoother $\mathrm{Poly}_{d,\kappa}(\Aop,b)$.
+Coefficients $c$ from \eqref{eq:mr-normal} are precomputed once; the production
+setting is $d=4$, $\kappa=2$. $\kappa=1$ is a single Horner pass.}
+\label{alg:poly}
+\begin{algorithmic}[1]
+\State $x \gets \mathrm{Horner}(c,\Aop,b)$ \Comment{$x=p(\Aop)b$ via \eqref{eq:horner}}
+\For{$j=2,\dots,\kappa$} \Comment{iterative refinement \eqref{eq:mr-refine}}
+  \State $r \gets b - \Aop\,x$
+  \State $x \gets x + \mathrm{Horner}(c,\Aop,r)$
+\EndFor
+\State \Return $x$
+\end{algorithmic}
+\end{algorithm}
+
+\noindent The two smoothers are selected at run time (\texttt{smoother\_type:
+GMRES} or \texttt{poly}, with \texttt{poly\_number\_of\_application:}\,$\kappa$);
+GMRES remains the default.
+
 \subsection{The V-cycle and the outer iteration}
 One application of the preconditioner $M^{-1}\approx\Aop^{-1}$ is a two-grid
 V-cycle:

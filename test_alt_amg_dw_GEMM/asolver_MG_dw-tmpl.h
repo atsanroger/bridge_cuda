@@ -123,6 +123,24 @@ void ASolver_MG_dw<AFIELD>::set_parameters_level1(const Parameters& params)
   m_smoother_niter     = params.get_int("smoother_number_of_iteration");
   m_smoother_stop_cond = params.get_double("smoother_convergence_criterion_squared");
 
+  // smoother selection (optional, default = GMRES for back-compat):
+  //   smoother_type : GMRES  -> batched block-GMRES-on-A (m_smoother_niter steps)
+  //   smoother_type : poly   -> frozen power-basis MR polynomial p(A), degree
+  //                             m_smoother_niter, applied poly_number_of_application
+  //                             times by iterative refinement (default 1).
+  // The env vars POLY_SMOOTHER / POLY_APPLY still override these if set.
+  m_smoother_use_poly = 0;
+  if (params.is_set("smoother_type")) {
+    std::string st;
+    params.fetch_string("smoother_type", st);
+    if (st == "poly" || st == "Poly" || st == "POLY") m_smoother_use_poly = 1;
+  }
+  m_poly_napply = 1;
+  if (params.is_set("poly_number_of_application")) {
+    params.fetch_int("poly_number_of_application", m_poly_napply);
+    if (m_poly_napply < 1) m_poly_napply = 1;
+  }
+
   // for coarse solver
   //   I assume that the above parameters harmless for the coarse grid solver
   m_params_asolver_coarse = params;
@@ -1534,32 +1552,62 @@ void ASolver_MG_dw<AFIELD>::apply_poly_smoother(std::vector<AFIELD_f>& x,
   const int Nex  = m_afopr_A_F->field_nex();
   const int d    = m_poly_deg;
 
+  // nsweeps = number of iterative-refinement passes of p(A) (yaml
+  // poly_number_of_application = m_poly_napply, env POLY_APPLY overrides).
+  // 1 -> x = p(A) b.  k>1 -> x <- x + p(A)(b - A x), repeated; error operator
+  // (I - p(A)A)^k, i.e. degree (k*d) ACTION while each fit stays at well-conditioned
+  // degree d.  NOT p(A)^k b (that approximates A^{-k} b, the wrong operator).
+  const char* napply_env = std::getenv("POLY_APPLY");
+  int nsweeps = napply_env ? std::atoi(napply_env) : m_poly_napply;
+  if (nsweeps < 1) nsweeps = 1;
+  const bool refine = (nsweeps > 1);
+
   if (m_poly_s != s) {                            // Horner scratch: alloc once per s
     m_poly_acc.resize(s); m_poly_tmp.resize(s);
     for (int c = 0; c < s; ++c) {
       m_poly_acc[c].reset(Nin, Nvol, Nex); m_poly_acc[c].set(real_f(0.0));
       m_poly_tmp[c].reset(Nin, Nvol, Nex); m_poly_tmp[c].set(real_f(0.0));
     }
+    if (refine) {                                 // residual/correction buffers only if refining
+      m_poly_res.resize(s); m_poly_dx.resize(s);
+      for (int c = 0; c < s; ++c) {
+        m_poly_res[c].reset(Nin, Nvol, Nex); m_poly_res[c].set(real_f(0.0));
+        m_poly_dx[c].reset(Nin, Nvol, Nex);  m_poly_dx[c].set(real_f(0.0));
+      }
+    }
     m_poly_s = s;
   }
   const long nflt = (long)Nin * const_cast<AF&>(b[0]).nvol_pad() * Nex;
-  std::vector<float*> bp(s), ap(s), tp(s), xp(s);
+  std::vector<float*> bp(s), ap(s), tp(s), xp(s), rp(s), dp(s);
   for (int c = 0; c < s; ++c) {
     bp[c] = const_cast<AF&>(b[c]).ptr(0);
     ap[c] = m_poly_acc[c].ptr(0);
     tp[c] = m_poly_tmp[c].ptr(0);
     xp[c] = x[c].ptr(0);
+    if (refine) { rp[c] = m_poly_res[c].ptr(0); dp[c] = m_poly_dx[c].ptr(0); }
   }
 
-  // Horner:  acc = c[d-1] b;  acc = A acc + c[k] b  for k = d-2 .. 0
-  mrhs_live::block_copy(ap.data(), bp.data(), s, nflt);             // acc = b
-  mrhs_live::block_scal(ap.data(), m_poly_c[d - 1], s, nflt);       // acc = c[d-1] b
-  for (int k = d - 2; k >= 0; --k) {
-    apply_A_block(m_poly_tmp, m_poly_acc);                          // tmp = A acc (GPU)
-    mrhs_live::block_copy(ap.data(), tp.data(), s, nflt);           // acc = A acc
-    mrhs_live::block_axpy(ap.data(), bp.data(), m_poly_c[k], s, nflt); // acc += c[k] b
+  // Horner:  out = p(A) in = sum_k c_k A^k in, using acc/tmp scratch (in/out must
+  // not alias acc/tmp).  acc = c[d-1] in;  acc = A acc + c[k] in  for k = d-2 .. 0.
+  auto horner = [&](std::vector<float*>& outp, std::vector<float*>& inp) {
+    mrhs_live::block_copy(ap.data(), inp.data(), s, nflt);             // acc = in
+    mrhs_live::block_scal(ap.data(), m_poly_c[d - 1], s, nflt);        // acc = c[d-1] in
+    for (int k = d - 2; k >= 0; --k) {
+      apply_A_block(m_poly_tmp, m_poly_acc);                           // tmp = A acc (GPU)
+      mrhs_live::block_copy(ap.data(), tp.data(), s, nflt);            // acc = A acc
+      mrhs_live::block_axpy(ap.data(), inp.data(), m_poly_c[k], s, nflt); // acc += c[k] in
+    }
+    mrhs_live::block_copy(outp.data(), ap.data(), s, nflt);            // out = acc
+  };
+
+  horner(xp, bp);                                                     // x = p(A) b
+  for (int sweep = 1; sweep < nsweeps; ++sweep) {                     // iterative refinement
+    apply_A_block(m_poly_tmp, x);                                     // tmp = A x
+    mrhs_live::block_copy(rp.data(), bp.data(), s, nflt);             // res = b
+    mrhs_live::block_axpy(rp.data(), tp.data(), -1.0f, s, nflt);      // res = b - A x
+    horner(dp, rp);                                                   // dx = p(A) res
+    mrhs_live::block_axpy(xp.data(), dp.data(), 1.0f, s, nflt);       // x += dx
   }
-  mrhs_live::block_copy(xp.data(), ap.data(), s, nflt);             // x = acc
 }
 
 
@@ -1571,9 +1619,10 @@ void ASolver_MG_dw<AFIELD>::block_smooth(std::vector<AFIELD_f>& x,
                                          const std::vector<AFIELD_f>& b)
 {
   using AF = AFIELD_f;
-  // POLY_SMOOTHER prototype (env POLY_SMOOTHER): frozen power-basis MR polynomial
-  // replaces the GMRES smoother -> drops its Krylov basis.  A/B knob.
-  static const bool poly = (std::getenv("POLY_SMOOTHER") != nullptr);
+  // Smoother selection: yaml smoother_type:poly (m_smoother_use_poly) OR env
+  // POLY_SMOOTHER -> frozen power-basis MR polynomial replaces the GMRES smoother
+  // (drops its Krylov basis).  env overrides yaml (forces poly on).
+  const bool poly = (std::getenv("POLY_SMOOTHER") != nullptr) || (m_smoother_use_poly != 0);
   if (poly) {
     if (!m_poly_ready) {
       build_poly_coeffs(b[0]);

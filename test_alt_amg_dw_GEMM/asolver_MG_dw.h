@@ -336,7 +336,10 @@ class ASolver_MG_dw : public ASolver<AFIELD>
   int                   m_poly_deg = 0;             //!< polynomial term count (= niter)
   bool                  m_poly_ready = false;       //!< coefficients fit yet?
   std::vector<AFIELD_f> m_poly_acc, m_poly_tmp;     //!< Horner block scratch (s each)
+  std::vector<AFIELD_f> m_poly_res, m_poly_dx;      //!< iter-refine scratch (alloc'd only if napply>1)
   int                   m_poly_s = -1;              //!< cached column count
+  int                   m_smoother_use_poly = 0;    //!< yaml smoother_type: 0=GMRES, 1=poly
+  int                   m_poly_napply = 1;          //!< yaml poly_number_of_application (iter-refine passes)
 
   unique_ptr<Timer> m_timer_gramschmidt;
   unique_ptr<Timer> m_timer_generate_coarse_op;
