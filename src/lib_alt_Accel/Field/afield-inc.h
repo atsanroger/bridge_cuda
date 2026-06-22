@@ -395,7 +395,7 @@ void convert(INDEX2& index2, AFIELD2& v2,
 
 //====================================================================
 template<>
-void convert(AIndex_lex<double,ACCEL>& index2,
+inline void convert(AIndex_lex<double,ACCEL>& index2,
              AField<double,ACCEL>& v2,
              const AIndex_lex<float,ACCEL>& index1,
              const AField<float,ACCEL>& v1)
@@ -424,7 +424,7 @@ void convert(AIndex_lex<double,ACCEL>& index2,
 
 //====================================================================
 template<>
-void convert(AIndex_lex<float,ACCEL>& index2,
+inline void convert(AIndex_lex<float,ACCEL>& index2,
              AField<float,ACCEL>& v2,
              const AIndex_lex<double,ACCEL>& index1,
              const AField<double,ACCEL>& v1)
@@ -502,7 +502,7 @@ void convert_h(INDEX2& index2, AFIELD2& v2,
 
 //====================================================================
 template<>
-void convert_h(AIndex_eo<double,ACCEL>& index2,
+inline void convert_h(AIndex_eo<double,ACCEL>& index2,
                AField<double,ACCEL>& v2,
                const AIndex_eo<float,ACCEL>& index1,
                const AField<float,ACCEL>& v1)
@@ -531,7 +531,7 @@ void convert_h(AIndex_eo<double,ACCEL>& index2,
 
 //====================================================================
 template<>
-void convert_h(AIndex_eo<float,ACCEL>& index2,
+inline void convert_h(AIndex_eo<float,ACCEL>& index2,
                AField<float,ACCEL>& v2,
                const AIndex_eo<double,ACCEL>& index1,
                const AField<double,ACCEL>& v1)
