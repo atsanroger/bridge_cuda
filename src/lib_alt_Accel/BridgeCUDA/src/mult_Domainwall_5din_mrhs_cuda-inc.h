@@ -1239,8 +1239,15 @@ __global__ void mult_dw5din_5dirdag_mrhs_bf16_dev(
 // The operand pointers (vp/wp -> v1/v2) are bf16_acc proxies, so the SAME shared
 // arithmetic includes (flag-inc + hopb_dirac-inc) compile unchanged.  Gauge (up)
 // stays real_t* (FP32).  Stores go through the proxy ref (demote to bf16).
+// GAUGE = real_t* (FP32 gauge, Step 2 default) or bf16_acc (bf16 gauge, Step 3,
+// env BF16_GAUGE).  The shared hopb_dirac include reads gauge only via u_up[]/
+// u_dn[], so both gauge types work unchanged (bf16_acc promotes on read).  On
+// small lattices bf16 gauge gives ~0 speedup (gauge is L2-resident, reused across
+// all s columns) and costs accuracy -> off by default; may help when the gauge
+// no longer fits L2 (large volume).
+template<typename GAUGE>
 __global__ void mult_dw5din_hopb_mrhs_bf16_dev(
-    __nv_bfloat16* const* __restrict__ vp_arr, real_t* __restrict__ up,
+    __nv_bfloat16* const* __restrict__ vp_arr, GAUGE up,
     __nv_bfloat16* const* __restrict__ wp_arr, int nrhs, int Ns,
     int bc_x, int bc_y, int bc_z, int bc_t,
     int Nx, int Ny, int Nz, int Nt,
@@ -1252,8 +1259,8 @@ __global__ void mult_dw5din_hopb_mrhs_bf16_dev(
   const int Nxyz = Nxy * Nz;
   const int Nst  = Nx * Ny * Nz * Nt;
   const int idx  = blockIdx.x * blockDim.x + threadIdx.x;
-  real_t* u_up = up;
-  real_t* u_dn = up;
+  GAUGE u_up = up;
+  GAUGE u_dn = up;
 
   if (idx < Nst_pad * Ns) {
 
@@ -1442,6 +1449,31 @@ __global__ void k_field_f2bf16(__nv_bfloat16* __restrict__ o, const real_t* __re
 { long i = (long)blockIdx.x * blockDim.x + threadIdx.x; if (i < n) o[i] = __float2bfloat16(in[i]); }
 __global__ void k_field_bf162f(real_t* __restrict__ o, const __nv_bfloat16* __restrict__ in, long n)
 { long i = (long)blockIdx.x * blockDim.x + threadIdx.x; if (i < n) o[i] = __bfloat162float(in[i]); }
+
+// BF16 gauge cache (Step 3: bf16 gauge in hopb).  The gauge is mass-independent
+// and FIXED for the whole solve, so convert FP32 -> bf16 ONCE per source device
+// pointer and reuse.  Keyed by src ptr; up to 2 gauges live (mq + PV).  ASSUMES
+// the gauge content at a given pointer does not change mid-process (true for a
+// single fixed-config 2pt run).
+static __nv_bfloat16* g_bfg_buf[2] = { nullptr, nullptr };
+static long           g_bfg_cap[2] = { 0, 0 };
+static const real_t*  g_bfg_src[2] = { nullptr, nullptr };
+static __nv_bfloat16* bf16_gauge(const real_t* u_dev, long nflt)
+{
+  int slot = -1;
+  for (int i = 0; i < 2; ++i) if (g_bfg_src[i] == u_dev) return g_bfg_buf[i];  // reuse
+  for (int i = 0; i < 2; ++i) if (g_bfg_src[i] == nullptr) { slot = i; break; }
+  if (slot < 0) slot = 0;
+  if (nflt > g_bfg_cap[slot]) {
+    if (g_bfg_buf[slot]) cudaFree(g_bfg_buf[slot]);
+    CHECK(cudaMalloc((void**)&g_bfg_buf[slot], sizeof(__nv_bfloat16) * nflt));
+    g_bfg_cap[slot] = nflt;
+  }
+  const int bs = 256; long gs = (nflt + bs - 1) / bs;
+  k_field_f2bf16<<<(unsigned)gs, bs>>>(g_bfg_buf[slot], u_dev, nflt);
+  g_bfg_src[slot] = u_dev;
+  return g_bfg_buf[slot];
+}
 
 // BF16-STORAGE finePrec (Step-1 harness): float in -> bf16 storage -> fused
 // bf16 Cinv -> float out.  Matches finePrec_mrhs up to the bf16 operand rounding
@@ -1774,8 +1806,15 @@ void fineA_block_bf16(
   __nv_bfloat16** YP  = bf16_scratch(7, s, per);
   __nv_bfloat16** OUT = W;                         // W is free after 5dir reads it
 
-  real_t* umq_dev = (real_t*)dev_ptr(u_mq);
-  real_t* upv_dev = (real_t*)dev_ptr(u_pv);
+  // Step 3 (gate env BF16_GAUGE, default OFF): gauge resident in bf16 too.
+  // OFF (default) = FP32 gauge = the Step 2 sweet spot. Gauge AField device layout
+  // = NDF(2*NC*NC) * nvol_pad * Ndim(4); nvol_pad == Nst_pad.
+  static const int bf16_gauge_on = getenv("BF16_GAUGE") ? 1 : 0;
+  real_t* umq_f = (real_t*)dev_ptr(u_mq);
+  real_t* upv_f = (real_t*)dev_ptr(u_pv);
+  long gauge_nflt = (long)(2 * NC * NC) * 4 * Nst_pad;
+  __nv_bfloat16* umq_b = bf16_gauge_on ? bf16_gauge(umq_f, gauge_nflt) : nullptr;
+  __nv_bfloat16* upv_b = bf16_gauge_on ? bf16_gauge(upv_f, gauge_nflt) : nullptr;
   real_t* e_mq_d  = (real_t*)dev_ptr(e_mq);
   real_t* f_mq_d  = (real_t*)dev_ptr(f_mq);
   real_t* dp_mq_d = (real_t*)dev_ptr(dpinv_mq);
@@ -1797,10 +1836,16 @@ void fineA_block_bf16(
   fine_time_begin();
   // ---- D_mq: SA = 5dir(W) [+ YP aux] ; SA += U-hopb(YP) ----
   mult_dw5din_5dir_mrhs_bf16_dev<<<gridNVC, blockSize>>>(SA, YP, W, s, mq, M0, Ns, alpha, Nst_pad);
-  mult_dw5din_hopb_mrhs_bf16_dev<<<gridH, blockSize>>>(
-      SA, umq_dev, YP, s, Ns, bc[0], bc[1], bc[2], bc[3],
-      Nsize[0], Nsize[1], Nsize[2], Nsize[3],
-      do_comm[0], do_comm[1], do_comm[2], do_comm[3], 1, Nst_pad);
+  if (bf16_gauge_on)
+    mult_dw5din_hopb_mrhs_bf16_dev<bf16_acc><<<gridH, blockSize>>>(
+        SA, bf16_acc{umq_b}, YP, s, Ns, bc[0], bc[1], bc[2], bc[3],
+        Nsize[0], Nsize[1], Nsize[2], Nsize[3],
+        do_comm[0], do_comm[1], do_comm[2], do_comm[3], 1, Nst_pad);
+  else
+    mult_dw5din_hopb_mrhs_bf16_dev<real_t*><<<gridH, blockSize>>>(
+        SA, umq_f, YP, s, Ns, bc[0], bc[1], bc[2], bc[3],
+        Nsize[0], Nsize[1], Nsize[2], Nsize[3],
+        do_comm[0], do_comm[1], do_comm[2], do_comm[3], 1, Nst_pad);
   fine_time_end(0);
 
   fine_time_begin();
@@ -1815,10 +1860,16 @@ void fineA_block_bf16(
 
   fine_time_begin();
   // ---- Ddag(PV): T2(=YP) = U-hopb(SG) ; SA = 5dirdag(SB, T2) ----
-  mult_dw5din_hopb_mrhs_bf16_dev<<<gridH, blockSize>>>(
-      YP, upv_dev, SG, s, Ns_pv, bc[0], bc[1], bc[2], bc[3],
-      Nsize[0], Nsize[1], Nsize[2], Nsize[3],
-      do_comm[0], do_comm[1], do_comm[2], do_comm[3], 0, Nst_pad);
+  if (bf16_gauge_on)
+    mult_dw5din_hopb_mrhs_bf16_dev<bf16_acc><<<gridH, blockSize>>>(
+        YP, bf16_acc{upv_b}, SG, s, Ns_pv, bc[0], bc[1], bc[2], bc[3],
+        Nsize[0], Nsize[1], Nsize[2], Nsize[3],
+        do_comm[0], do_comm[1], do_comm[2], do_comm[3], 0, Nst_pad);
+  else
+    mult_dw5din_hopb_mrhs_bf16_dev<real_t*><<<gridH, blockSize>>>(
+        YP, upv_f, SG, s, Ns_pv, bc[0], bc[1], bc[2], bc[3],
+        Nsize[0], Nsize[1], Nsize[2], Nsize[3],
+        do_comm[0], do_comm[1], do_comm[2], do_comm[3], 0, Nst_pad);
   mult_dw5din_5dirdag_mrhs_bf16_dev<<<gridNVC, blockSize>>>(
       SA, YP, SB, s, mq_pv, M0_pv, Ns_pv, alpha_pv, Nst_pad);
   fine_time_end(1);
