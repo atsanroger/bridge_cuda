@@ -92,6 +92,10 @@ void finePrec_mrhs_bf16(float* const* v_host, float* const* w_host, int nrhs, in
 void finePrecdag_mrhs(float* const* v_host, float* const* w_host, int nrhs, int Ns,
                       float* e, float* f, float* dpinv, float* dm, int* Nsize);
 
+// BF16-STORAGE variant of finePrecdag_mrhs (dag sibling of finePrec_mrhs_bf16).
+void finePrecdag_mrhs_bf16(float* const* v_host, float* const* w_host, int nrhs, int Ns,
+                           float* e, float* f, float* dpinv, float* dm, int* Nsize);
+
 // v[r] = Ddag w[r] = 5dirdag( w, hopb( gm5 w ) ): batched fine Ddag, on-device.
 // gm5_host (optional): precomputed gamma5*w; if given, skips the internal gm5 kernel.
 void fineDdag_mrhs(float* const* v_host, float* const* w_host, float* u_field_host,

@@ -152,6 +152,10 @@ void mrhs_fwd_finePrecdag(real_t* const* v, real_t* const* w, int nrhs, int Ns,
                           real_t* e, real_t* f, real_t* dpinv, real_t* dm, int* Nsize)
 { finePrecdag_mrhs(v, w, nrhs, Ns, e, f, dpinv, dm, Nsize); }
 
+void mrhs_fwd_finePrecdag_bf16(real_t* const* v, real_t* const* w, int nrhs, int Ns,
+                               real_t* e, real_t* f, real_t* dpinv, real_t* dm, int* Nsize)
+{ finePrecdag_mrhs_bf16(v, w, nrhs, Ns, e, f, dpinv, dm, Nsize); }
+
 void mrhs_fwd_fineDdag(real_t* const* v, real_t* const* w, real_t* u_field_host,
                        int nrhs, real_t mq, real_t M0, int Ns, real_t alpha,
                        int* Nsize, int* bc, int* do_comm, real_t* const* gm5)
@@ -254,6 +258,10 @@ void finePrec_mrhs_bf16(float* const* v_host, float* const* w_host, int nrhs, in
 void finePrecdag_mrhs(float* const* v_host, float* const* w_host, int nrhs, int Ns,
                       float* e, float* f, float* dpinv, float* dm, int* Nsize)
 { BridgeACC::mrhs_fwd_finePrecdag(v_host, w_host, nrhs, Ns, e, f, dpinv, dm, Nsize); }
+
+void finePrecdag_mrhs_bf16(float* const* v_host, float* const* w_host, int nrhs, int Ns,
+                           float* e, float* f, float* dpinv, float* dm, int* Nsize)
+{ BridgeACC::mrhs_fwd_finePrecdag_bf16(v_host, w_host, nrhs, Ns, e, f, dpinv, dm, Nsize); }
 
 void fineDdag_mrhs(float* const* v_host, float* const* w_host, float* u_field_host,
                    int nrhs, float mq, float M0, int Ns, float alpha,

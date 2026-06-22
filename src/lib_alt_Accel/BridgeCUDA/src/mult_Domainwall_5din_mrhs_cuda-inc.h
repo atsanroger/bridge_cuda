@@ -954,6 +954,97 @@ __global__ void mult_dw5din_Cdaginv_mrhs_dev(
   }
 }
 
+// --- C^{-dag} = Ldag^{-1} Udag^{-1}, fused, BF16-STORAGE variant (dag sibling
+// of mult_dw5din_Cinv_mrhs_bf16_dev).  Arithmetic is byte-for-byte the FP32
+// recurrence of mult_dw5din_Cdaginv_mrhs_dev above; only the operand vectors
+// (w in, v out) live in global memory as __nv_bfloat16.  Accumulation stays in
+// FP32 registers; the LU coefficients e/f/dpinv/dm stay FP32.  No gm5 output.
+template<int NS>
+__global__ void mult_dw5din_Cdaginv_mrhs_bf16_dev(
+    __nv_bfloat16* const* __restrict__ vp_arr, __nv_bfloat16* const* __restrict__ wp_arr,
+    int nrhs, int Nin5,
+    const real_t* __restrict__ e, const real_t* __restrict__ f,
+    const real_t* __restrict__ dpinv, const real_t* __restrict__ dm, int Nst_pad)
+{
+  const int ist = blockIdx.x * blockDim.x + threadIdx.x;
+  const int GridSize = blockDim.x * gridDim.x;
+  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize) {
+    int idx2 = idx / NWP, idx_in = idx % NWP, ivc = idx2 % NVC, idx_out = idx2 / NVC;
+    int site = idx_in + NWP * idx_out;
+    for (int r = 0; r < nrhs; ++r) {
+      __nv_bfloat16* __restrict__ vp = vp_arr[r];
+      const __nv_bfloat16* __restrict__ wp = wp_arr[r];
+      real_t s1[NS], s2[NS];
+      real_t s3[NS], s4[NS];
+      real_t vt1, vt2, vt3, vt4, yt1, yt2, yt3, yt4, xt1, xt2, xt3, xt4;
+      // ---- forward sweep Udag^{-1}: w -> s (local) ----
+      real_t a0 = dpinv[0];
+      vt1 = a0 * ld_bf16f(wp, IDX2(Nin5, (ID1 + ivc), site));
+      vt2 = a0 * ld_bf16f(wp, IDX2(Nin5, (ID2 + ivc), site));
+      vt3 = a0 * ld_bf16f(wp, IDX2(Nin5, (ID3 + ivc), site));
+      vt4 = a0 * ld_bf16f(wp, IDX2(Nin5, (ID4 + ivc), site));
+      s1[0] = vt1; s2[0] = vt2; s3[0] = vt3; s4[0] = vt4;
+      real_t f0 = f[0];
+      yt1 = f0 * vt1; yt2 = f0 * vt2; yt3 = f0 * vt3; yt4 = f0 * vt4;
+#pragma unroll
+      for (int is = 1; is < NS - 1; ++is) {
+        xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+        vt1 = ld_bf16f(wp, IDX2(Nin5, (ID1 + ivc + NVCD * is), site));
+        vt2 = ld_bf16f(wp, IDX2(Nin5, (ID2 + ivc + NVCD * is), site));
+        vt3 = ld_bf16f(wp, IDX2(Nin5, (ID3 + ivc + NVCD * is), site));
+        vt4 = ld_bf16f(wp, IDX2(Nin5, (ID4 + ivc + NVCD * is), site));
+        real_t a = real_t(0.5) * dm[is - 1];
+        vt1 += a * (xt1 - xt3); vt2 += a * (xt2 - xt4);
+        vt3 += a * (xt3 - xt1); vt4 += a * (xt4 - xt2);
+        real_t aa = dpinv[is];
+        vt1 *= aa; vt2 *= aa; vt3 *= aa; vt4 *= aa;
+        s1[is] = vt1; s2[is] = vt2; s3[is] = vt3; s4[is] = vt4;
+        real_t fis = f[is];
+        yt1 += fis * vt1; yt2 += fis * vt2; yt3 += fis * vt3; yt4 += fis * vt4;
+      }
+      {
+        int is = NS - 1;
+        xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+        vt1 = ld_bf16f(wp, IDX2(Nin5, (ID1 + ivc + NVCD * is), site));
+        vt2 = ld_bf16f(wp, IDX2(Nin5, (ID2 + ivc + NVCD * is), site));
+        vt3 = ld_bf16f(wp, IDX2(Nin5, (ID3 + ivc + NVCD * is), site));
+        vt4 = ld_bf16f(wp, IDX2(Nin5, (ID4 + ivc + NVCD * is), site));
+        real_t a = real_t(0.5) * dm[NS - 2];
+        vt1 += a * (xt1 - xt3); vt2 += a * (xt2 - xt4);
+        vt3 += a * (xt3 - xt1); vt4 += a * (xt4 - xt2);
+        vt1 += -0.5 * (yt1 + yt3); vt2 += -0.5 * (yt2 + yt4);
+        vt3 += -0.5 * (yt3 + yt1); vt4 += -0.5 * (yt4 + yt2);
+        real_t aa = dpinv[NS - 1];
+        vt1 *= aa; vt2 *= aa; vt3 *= aa; vt4 *= aa;
+        s1[is] = vt1; s2[is] = vt2; s3[is] = vt3; s4[is] = vt4;
+      }
+      // ---- backward sweep Ldag^{-1}: s (local) -> v ----
+      int is0 = NS - 1;
+      vt1 = s1[is0]; vt2 = s2[is0]; vt3 = s3[is0]; vt4 = s4[is0];
+      st_bf16f(vp, IDX2(Nin5, (ID1 + ivc + NVCD * is0), site), vt1);
+      st_bf16f(vp, IDX2(Nin5, (ID2 + ivc + NVCD * is0), site), vt2);
+      st_bf16f(vp, IDX2(Nin5, (ID3 + ivc + NVCD * is0), site), vt3);
+      st_bf16f(vp, IDX2(Nin5, (ID4 + ivc + NVCD * is0), site), vt4);
+      yt1 = 0.5 * (vt1 - vt3); yt2 = 0.5 * (vt2 - vt4);
+      yt3 = 0.5 * (vt3 - vt1); yt4 = 0.5 * (vt4 - vt2);
+#pragma unroll
+      for (int is = NS - 2; is >= 0; --is) {
+        xt1 = vt1; xt2 = vt2; xt3 = vt3; xt4 = vt4;
+        vt1 = s1[is]; vt2 = s2[is]; vt3 = s3[is]; vt4 = s4[is];
+        real_t a = real_t(0.5) * dm[is + 1] * dpinv[is];
+        vt1 += a * (xt1 + xt3); vt2 += a * (xt2 + xt4);
+        vt3 += a * (xt3 + xt1); vt4 += a * (xt4 + xt2);
+        real_t eis = e[is];
+        vt1 += -eis * yt1; vt2 += -eis * yt2; vt3 += -eis * yt3; vt4 += -eis * yt4;
+        st_bf16f(vp, IDX2(Nin5, (ID1 + ivc + NVCD * is), site), vt1);
+        st_bf16f(vp, IDX2(Nin5, (ID2 + ivc + NVCD * is), site), vt2);
+        st_bf16f(vp, IDX2(Nin5, (ID3 + ivc + NVCD * is), site), vt3);
+        st_bf16f(vp, IDX2(Nin5, (ID4 + ivc + NVCD * is), site), vt4);
+      }
+    }
+  }
+}
+
 // scratch for the 2-stage LU solves (one Nin5*Nst_pad field per rhs)
 static real_t* g_dw_lu_buf = nullptr;
 static long    g_dw_lu_cap = 0;
@@ -1139,6 +1230,45 @@ void finePrecdag_mrhs(real_t* const* v_host, real_t* const* w_host, int nrhs, in
   afield_dd_kernel_sync();
   fine_time_end(3);
   fp16_probe("finePrecdag.out", v_host[0], Nin5, Nst_pad);
+}
+
+// BF16-STORAGE Precdag (dag sibling of finePrec_mrhs_bf16): float in -> bf16
+// storage -> fused bf16 C^{-dag} -> float out.  Reuses bf16 scratch slots 0/1
+// (the forward finePrec_bf16 has fully synced + converted out by the time the
+// fineDdag/finePrecdag stage of apply_A_block runs).  No gm5.  FUSED_NS_LIST
+// only (matches the FP32 fused dag path).
+void finePrecdag_mrhs_bf16(real_t* const* v_host, real_t* const* w_host, int nrhs, int Ns,
+                           real_t* e_host, real_t* f_host, real_t* dpinv_host, real_t* dm_host,
+                           int* Nsize)
+{
+  int Nst = Nsize[0]*Nsize[1]*Nsize[2]*Nsize[3];
+  int Nst_pad = ceil_nwp(Nst);
+  int Nin5 = NVCD * Ns;
+  long per = (long)Nin5 * Nst_pad;
+  __nv_bfloat16** wbf = bf16_scratch(0, nrhs, per);
+  __nv_bfloat16** vbf = bf16_scratch(1, nrhs, per);
+  real_t* e_dev = (real_t*)dev_ptr(e_host);
+  real_t* f_dev = (real_t*)dev_ptr(f_host);
+  real_t* dpinv_dev = (real_t*)dev_ptr(dpinv_host);
+  real_t* dm_dev    = (real_t*)dev_ptr(dm_host);
+  const int bs = 256;
+  int cg = (int)((per + bs - 1) / bs);
+  for (int r = 0; r < nrhs; ++r)   // w: float -> bf16
+    k_field_f2bf16<<<cg, bs>>>(g_bf_buf[0] + (long)r * per, (const real_t*)dev_ptr(w_host[r]), per);
+  int blockSize = VECTOR_LENGTH;
+  int gridSize  = (Nst_pad * NVC + blockSize - 1) / blockSize;
+  fine_time_begin();
+  switch (Ns) {
+#define CDAGINV_BF16_CASE(N) case N: mult_dw5din_Cdaginv_mrhs_bf16_dev<N><<<gridSize, blockSize>>>(vbf, wbf, nrhs, Nin5, e_dev, f_dev, dpinv_dev, dm_dev, Nst_pad); break
+    FUSED_NS_LIST(CDAGINV_BF16_CASE);
+#undef CDAGINV_BF16_CASE
+    default:
+      printf("finePrecdag_mrhs_bf16: Ns=%d not in FUSED_NS_LIST\n", Ns); exit(1);
+  }
+  fine_time_end(3);
+  for (int r = 0; r < nrhs; ++r)   // v: bf16 -> float
+    k_field_bf162f<<<cg, bs>>>((real_t*)dev_ptr(v_host[r]), g_bf_buf[1] + (long)r * per, per);
+  afield_dd_kernel_sync();
 }
 
 //====================================================================

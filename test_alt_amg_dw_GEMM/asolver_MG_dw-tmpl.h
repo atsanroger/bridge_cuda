@@ -1451,7 +1451,7 @@ void ASolver_MG_dw<AFIELD>::apply_A_block(std::vector<AFIELD_f>& out,
                         s, dwmq->get_mq(), dwmq->get_M0(), dwmq->get_Ns(),
                         dwmq->get_alpha(), Nsize, bc, docomm);
   // forward C^{-1}: BF16-storage kernel when the smoother enables it, else FP32.
-  // (finePrecdag below has no bf16 kernel yet -> stays FP32; next increment.)
+  // (the dag C^{-dag} below has a matching bf16 kernel -> full bf16 fine-A Cinv.)
   if (m_bf16_fineprec) {
     mrhs_live::finePrec_mrhs_bf16(sBp, sAp, s, dwmq->get_Ns(),
                                   dwmq->get_e_ptr(), dwmq->get_f_ptr(),
@@ -1464,9 +1464,16 @@ void ASolver_MG_dw<AFIELD>::apply_A_block(std::vector<AFIELD_f>& out,
   mrhs_live::fineDdag_mrhs(sAp, sBp, dwpv->get_U_ptr(),
                            s, dwpv->get_mq(), dwpv->get_M0(), dwpv->get_Ns(),
                            dwpv->get_alpha(), Nsize, bc, docomm, sGp);
-  mrhs_live::finePrecdag_mrhs(outp, sAp, s, dwpv->get_Ns(),
-                              dwpv->get_e_ptr(), dwpv->get_f_ptr(),
-                              dwpv->get_dpinv_ptr(), dwpv->get_dm_ptr(), Nsize);
+  // dag C^{-dag}: bf16-storage kernel when the smoother enables it, else FP32.
+  if (m_bf16_fineprec) {
+    mrhs_live::finePrecdag_mrhs_bf16(outp, sAp, s, dwpv->get_Ns(),
+                                     dwpv->get_e_ptr(), dwpv->get_f_ptr(),
+                                     dwpv->get_dpinv_ptr(), dwpv->get_dm_ptr(), Nsize);
+  } else {
+    mrhs_live::finePrecdag_mrhs(outp, sAp, s, dwpv->get_Ns(),
+                                dwpv->get_e_ptr(), dwpv->get_f_ptr(),
+                                dwpv->get_dpinv_ptr(), dwpv->get_dm_ptr(), Nsize);
+  }
 }
 
 
