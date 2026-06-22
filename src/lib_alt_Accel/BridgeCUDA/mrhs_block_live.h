@@ -79,6 +79,15 @@ void finePrec_mrhs(float* const* v_host, float* const* w_host, int nrhs, int Ns,
                    float* e, float* f, float* dpinv, float* dm, int* Nsize,
                    float* const* gm5_host = nullptr);
 
+// BF16-STORAGE variant of finePrec_mrhs: identical interface and FP32-register
+// math, but the operand vectors round-trip through bf16 storage (float in/out at
+// the boundary; bf16-resident inside the fused Cinv kernel).  Memory-bound, so
+// halving operand bytes is the ~2x lever; ~4e-3 rel error sits inside the
+// smoother budget.  Use only in the smoother fine-A path (gate-controlled).
+void finePrec_mrhs_bf16(float* const* v_host, float* const* w_host, int nrhs, int Ns,
+                        float* e, float* f, float* dpinv, float* dm, int* Nsize,
+                        float* const* gm5_host = nullptr);
+
 // v[r] = (C^{-1})^dag w[r] = Ldag^{-1} Udag^{-1} w[r] (Precdag).
 void finePrecdag_mrhs(float* const* v_host, float* const* w_host, int nrhs, int Ns,
                       float* e, float* f, float* dpinv, float* dm, int* Nsize);

@@ -1450,9 +1450,17 @@ void ASolver_MG_dw<AFIELD>::apply_A_block(std::vector<AFIELD_f>& out,
   mrhs_live::fineD_mrhs(sAp, inp, dwmq->get_U_ptr(),
                         s, dwmq->get_mq(), dwmq->get_M0(), dwmq->get_Ns(),
                         dwmq->get_alpha(), Nsize, bc, docomm);
-  mrhs_live::finePrec_mrhs(sBp, sAp, s, dwmq->get_Ns(),
-                           dwmq->get_e_ptr(), dwmq->get_f_ptr(),
-                           dwmq->get_dpinv_ptr(), dwmq->get_dm_ptr(), Nsize, sGp);
+  // forward C^{-1}: BF16-storage kernel when the smoother enables it, else FP32.
+  // (finePrecdag below has no bf16 kernel yet -> stays FP32; next increment.)
+  if (m_bf16_fineprec) {
+    mrhs_live::finePrec_mrhs_bf16(sBp, sAp, s, dwmq->get_Ns(),
+                                  dwmq->get_e_ptr(), dwmq->get_f_ptr(),
+                                  dwmq->get_dpinv_ptr(), dwmq->get_dm_ptr(), Nsize, sGp);
+  } else {
+    mrhs_live::finePrec_mrhs(sBp, sAp, s, dwmq->get_Ns(),
+                             dwmq->get_e_ptr(), dwmq->get_f_ptr(),
+                             dwmq->get_dpinv_ptr(), dwmq->get_dm_ptr(), Nsize, sGp);
+  }
   mrhs_live::fineDdag_mrhs(sAp, sBp, dwpv->get_U_ptr(),
                            s, dwpv->get_mq(), dwpv->get_M0(), dwpv->get_Ns(),
                            dwpv->get_alpha(), Nsize, bc, docomm, sGp);
@@ -1479,12 +1487,19 @@ void ASolver_MG_dw<AFIELD>::build_poly_coeffs(const AFIELD_f& bprobe)
   const int d    = m_smoother_niter;
 
   AF b0;  b0.reset(Nin, Nvol, Nex);  copy(b0, bprobe);
-  AF cur; cur.reset(Nin, Nvol, Nex);  copy(cur, b0);
   std::vector<AF> K(d);
+  // Fit through apply_A_block (the SAME path apply_poly_smoother uses for the
+  // matvecs), so the polynomial is fit to whatever operator the apply selects --
+  // in particular the BF16 fine-A when m_bf16_fineprec is set.  Guarantees the
+  // frozen coefficients match the operator they are later applied with.
+  std::vector<AF> Ain(1), Aout(1);
+  Ain[0].reset(Nin, Nvol, Nex);  copy(Ain[0], b0);
+  Aout[0].reset(Nin, Nvol, Nex);
   for (int k = 0; k < d; ++k) {
     K[k].reset(Nin, Nvol, Nex);
-    m_afopr_A_F->mult(K[k], cur);                 // K[k] = A cur = A^{k+1} b0 (single col)
-    copy(cur, K[k]);
+    apply_A_block(Aout, Ain);                     // K[k] = A Ain = A^{k+1} b0 (single col)
+    copy(K[k], Aout[0]);
+    copy(Ain[0], Aout[0]);
   }
 
   // real normal equations (dot() returns the real Euclidean inner product)
@@ -1581,12 +1596,22 @@ void ASolver_MG_dw<AFIELD>::block_smooth(std::vector<AFIELD_f>& x,
   // replaces the GMRES smoother -> drops its Krylov basis.  A/B knob.
   bool poly = (m_smoother_type == "poly" || std::getenv("POLY_SMOOTHER") != nullptr);
   if (poly) {
+    // BF16 smoother fine-A (gate: env BF16_SMOOTHER): the forward C^{-1} inside
+    // apply_A_block runs the bf16-storage kernel for BOTH the coefficient fit and
+    // the apply, so the frozen polynomial is consistent with the operator it is
+    // applied with.  Scoped here (restored after) -> outer A / V-cycle stay FP32.
+    const bool prev_bf16 = m_bf16_fineprec;
+    m_bf16_fineprec = (std::getenv("BF16_SMOOTHER") != nullptr);
     if (!m_poly_ready) {
+      if (m_bf16_fineprec)
+        vout.general("%s: BF16_SMOOTHER on -- poly smoother fine-A C^{-1} uses bf16 kernel\n",
+                     class_name.c_str());
       build_poly_coeffs(b[0]);
       vout.general("%s: POLY_SMOOTHER on -- GMRES smoother Krylov basis dropped\n",
                    class_name.c_str());
     }
     apply_poly_smoother(x, b);
+    m_bf16_fineprec = prev_bf16;
     return;
   }
   const int Nin  = m_afopr_A_F->field_nin();

@@ -300,6 +300,13 @@ class ASolver_MG_dw : public ASolver<AFIELD>
   int m_poly_s = 0;
   std::vector<AFIELD_f> m_poly_acc, m_poly_tmp;
 
+  //! When true, apply_A_block routes the forward C^{-1} (finePrec) through the
+  //! BF16-storage Cinv kernel.  Scoped to the smoother apply only (set around the
+  //! smoother in block_smooth, restored after) so the outer A / V-cycle residual
+  //! stay FP32.  Fit-and-apply consistency: build_poly_coeffs also goes through
+  //! apply_A_block, so the polynomial is fit to whatever this flag selects.
+  bool m_bf16_fineprec = false;
+
   //! outer inner-solver for solve_block_propagator (batched block-FGMRES on A_F,
   //! prec = batched V-cycle).  Persistent (built once, reused across propagator
   //! chunks) so its block-Krylov basis is NOT re-malloc'd every chunk and its
