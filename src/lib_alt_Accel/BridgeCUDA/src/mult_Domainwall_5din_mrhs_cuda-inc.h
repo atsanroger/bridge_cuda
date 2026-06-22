@@ -767,6 +767,24 @@ __device__ __forceinline__ float ld_bf16f(const __nv_bfloat16* __restrict__ p, l
 __device__ __forceinline__ void  st_bf16f(__nv_bfloat16* __restrict__ p, long i, float v)
 { p[i] = __float2bfloat16(v); }
 
+// BF16 operand accessor proxy (Step 2 bf16-resident chain).  A drop-in for the
+// raw real_t* operand pointer in the 5dir/hopb/5dirdag kernels and the shared
+// hopb arithmetic includes: p[i] returns a ref that reads as float (promote on
+// load) and assigns from float (demote on store), so the SAME kernel-body text
+// and the SAME shared includes (mult_Domainwall_cuda_{flag,hopb_dirac}-inc.h)
+// compile unchanged with bf16 storage.  Gauge stays real_t* (FP32).  The proven
+// FP32 kernels are left untouched -- these proxies are used only in bf16 twins.
+struct bf16_acc {
+  __nv_bfloat16* p;
+  struct ref {
+    __nv_bfloat16* q; long i;
+    __device__ __forceinline__ operator real_t() const { return __bfloat162float(q[i]); }
+    __device__ __forceinline__ ref& operator=(real_t v) { q[i] = __float2bfloat16(v); return *this; }
+    __device__ __forceinline__ ref& operator=(const ref& o) { q[i] = o.q[o.i]; return *this; }
+  };
+  __device__ __forceinline__ ref operator[](long i) const { return ref{p, i}; }
+};
+
 template<int NS>
 __global__ void mult_dw5din_Cinv_mrhs_bf16_dev(
     __nv_bfloat16* const* __restrict__ vp_arr, __nv_bfloat16* const* __restrict__ wp_arr,
@@ -1045,6 +1063,271 @@ __global__ void mult_dw5din_Cdaginv_mrhs_bf16_dev(
   }
 }
 
+// --- 5dir, BF16-STORAGE twin of mult_dw5din_5dir_mrhs_dev (Step 2 bf16-resident).
+// Body is identical; operand pointers are bf16_acc proxies (FP32-register math).
+__global__ void mult_dw5din_5dir_mrhs_bf16_dev(
+    __nv_bfloat16* const* __restrict__ vp_arr,
+    __nv_bfloat16* const* __restrict__ yp_arr,
+    __nv_bfloat16* const* __restrict__ wp_arr,
+    int nrhs, real_t mq, real_t M0, int Ns, real_t alpha, int Nst_pad)
+{
+  const real_t* b_arr = mrhs_cb;
+  const real_t* c_arr = mrhs_cc;
+  const int Nin5     = NVCD * Ns;
+  const int ist      = blockIdx.x * blockDim.x + threadIdx.x;
+  const int GridSize = blockDim.x * gridDim.x;
+  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize) {
+    int idx2_wp = idx / NWP;
+    int idx_in  = idx % NWP;
+    int ivc     = idx2_wp % NVC;
+    int idx_out = idx2_wp / NVC;
+    int site    = idx_in + NWP * idx_out;
+    for (int r = 0; r < nrhs; ++r) {
+      bf16_acc vp{vp_arr[r]};
+      bf16_acc yp{yp_arr[r]};
+      bf16_acc wp{wp_arr[r]};
+      for (int is = 0; is < Ns; ++is) {
+        real_t B_is = b_arr[is] * (4.0 - M0) + 1.0;
+        real_t C_is = c_arr[is] * (4.0 - M0) - 1.0;
+        real_t vt1, vt2, vt3, vt4;
+        real_t wt1, wt2, wt3, wt4;
+        int is_up = (is + 1) % Ns;
+        real_t Fup = 0.5 * alpha;
+        if (is == Ns - 1) Fup = -0.5 * mq;
+        wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is_up), site)];
+        wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is_up), site)];
+        wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is_up), site)];
+        wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is_up), site)];
+        vt1 = Fup * (wt1 - wt3);
+        vt2 = Fup * (wt2 - wt4);
+        vt3 = Fup * (wt3 - wt1);
+        vt4 = Fup * (wt4 - wt2);
+        int is_dn = (is - 1 + Ns) % Ns;
+        real_t Fdn = 0.5 * alpha;
+        if (is == 0) Fdn = -0.5 * mq;
+        wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is_dn), site)];
+        wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is_dn), site)];
+        wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is_dn), site)];
+        wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is_dn), site)];
+        vt1 += Fdn * (wt1 + wt3);
+        vt2 += Fdn * (wt2 + wt4);
+        vt3 += Fdn * (wt3 + wt1);
+        vt4 += Fdn * (wt4 + wt2);
+        wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+        wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+        wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+        wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+        real_t st1, st2, st3, st4;
+        if (is == 0) {
+          real_t f1 = 0.5 * (1.0 + alpha);
+          real_t f2 = 0.5 * (-1.0 + alpha);
+          st1 = f1 * wt1 + f2 * wt3; st2 = f1 * wt2 + f2 * wt4;
+          st3 = f1 * wt3 + f2 * wt1; st4 = f1 * wt4 + f2 * wt2;
+        } else if (is == Ns - 1) {
+          real_t f1 = 0.5 * (1.0 + alpha);
+          real_t f2 = 0.5 * (1.0 - alpha);
+          st1 = f1 * wt1 + f2 * wt3; st2 = f1 * wt2 + f2 * wt4;
+          st3 = f1 * wt3 + f2 * wt1; st4 = f1 * wt4 + f2 * wt2;
+        } else {
+          st1 = alpha * wt1; st2 = alpha * wt2; st3 = alpha * wt3; st4 = alpha * wt4;
+        }
+        real_t b_is = b_arr[is];
+        real_t c_is = c_arr[is];
+        vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = B_is * st1 + C_is * vt1;
+        vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = B_is * st2 + C_is * vt2;
+        vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = B_is * st3 + C_is * vt3;
+        vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = B_is * st4 + C_is * vt4;
+        yp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = -0.5 * (b_is * st1 + c_is * vt1);
+        yp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = -0.5 * (b_is * st2 + c_is * vt2);
+        yp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = -0.5 * (b_is * st3 + c_is * vt3);
+        yp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = -0.5 * (b_is * st4 + c_is * vt4);
+      }
+    }
+  }
+}
+
+// --- 5dirdag, BF16-STORAGE twin of mult_dw5din_5dirdag_mrhs_dev (bf16-resident).
+__global__ void mult_dw5din_5dirdag_mrhs_bf16_dev(
+    __nv_bfloat16* const* __restrict__ vp_arr, __nv_bfloat16* const* __restrict__ yp_arr,
+    __nv_bfloat16* const* __restrict__ wp_arr,
+    int nrhs, real_t mq, real_t M0, int Ns, real_t alpha, int Nst_pad)
+{
+  const real_t* b_arr = mrhs_cb;
+  const real_t* c_arr = mrhs_cc;
+  const int Nin5 = NVCD * Ns;
+  const int ist = blockIdx.x * blockDim.x + threadIdx.x;
+  const int GridSize = blockDim.x * gridDim.x;
+  for (int idx = ist; idx < Nst_pad * NVC; idx += GridSize) {
+    int idx2 = idx / NWP, idx_in = idx % NWP, ivc = idx2 % NVC, idx_out = idx2 / NVC;
+    int site = idx_in + NWP * idx_out;
+    for (int r = 0; r < nrhs; ++r) {
+      bf16_acc vp{vp_arr[r]};
+      bf16_acc yp{yp_arr[r]};
+      bf16_acc wp{wp_arr[r]};
+      for (int is = 0; is < Ns; ++is) {
+        real_t B1 = b_arr[is] * (4.0 - M0) + 1.0;
+        real_t a1 = -0.5 * b_arr[is];
+        real_t wt1, wt2, wt3, wt4, yt1, yt2, yt3, yt4;
+        wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+        wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+        wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+        wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+        yt1 = yp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)];
+        yt2 = yp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)];
+        yt3 = yp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)];
+        yt4 = yp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)];
+        real_t s1 = B1 * wt1 + a1 * yt3;
+        real_t s2 = B1 * wt2 + a1 * yt4;
+        real_t s3 = B1 * wt3 + a1 * yt1;
+        real_t s4 = B1 * wt4 + a1 * yt2;
+        real_t vt1, vt2, vt3, vt4;
+        if (is == 0) {
+          real_t f1 = 0.5 * (1.0 + alpha), f2 = 0.5 * (-1.0 + alpha);
+          vt1 = f1 * s1 + f2 * s3; vt2 = f1 * s2 + f2 * s4;
+          vt3 = f1 * s3 + f2 * s1; vt4 = f1 * s4 + f2 * s2;
+        } else if (is == Ns - 1) {
+          real_t f1 = 0.5 * (1.0 + alpha), f2 = 0.5 * (1.0 - alpha);
+          vt1 = f1 * s1 + f2 * s3; vt2 = f1 * s2 + f2 * s4;
+          vt3 = f1 * s3 + f2 * s1; vt4 = f1 * s4 + f2 * s2;
+        } else {
+          vt1 = alpha * s1; vt2 = alpha * s2; vt3 = alpha * s3; vt4 = alpha * s4;
+        }
+        int is_up = (is + 1) % Ns;
+        real_t C1 = c_arr[is_up] * (4.0 - M0) - 1.0;
+        real_t aup = -0.5 * c_arr[is_up];
+        wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is_up), site)];
+        wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is_up), site)];
+        wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is_up), site)];
+        wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is_up), site)];
+        yt1 = yp[IDX2(Nin5, (ID1 + ivc + NVCD * is_up), site)];
+        yt2 = yp[IDX2(Nin5, (ID2 + ivc + NVCD * is_up), site)];
+        yt3 = yp[IDX2(Nin5, (ID3 + ivc + NVCD * is_up), site)];
+        yt4 = yp[IDX2(Nin5, (ID4 + ivc + NVCD * is_up), site)];
+        real_t xu1 = C1 * wt1 + aup * yt3, xu2 = C1 * wt2 + aup * yt4;
+        real_t xu3 = C1 * wt3 + aup * yt1, xu4 = C1 * wt4 + aup * yt2;
+        real_t Fup = 0.5 * alpha;
+        if (is == Ns - 1) Fup = -0.5 * mq;
+        vt1 += Fup * (xu1 + xu3); vt2 += Fup * (xu2 + xu4);
+        vt3 += Fup * (xu3 + xu1); vt4 += Fup * (xu4 + xu2);
+        int is_dn = (is - 1 + Ns) % Ns;
+        real_t C2 = c_arr[is_dn] * (4.0 - M0) - 1.0;
+        real_t adn = -0.5 * c_arr[is_dn];
+        wt1 = wp[IDX2(Nin5, (ID1 + ivc + NVCD * is_dn), site)];
+        wt2 = wp[IDX2(Nin5, (ID2 + ivc + NVCD * is_dn), site)];
+        wt3 = wp[IDX2(Nin5, (ID3 + ivc + NVCD * is_dn), site)];
+        wt4 = wp[IDX2(Nin5, (ID4 + ivc + NVCD * is_dn), site)];
+        yt1 = yp[IDX2(Nin5, (ID1 + ivc + NVCD * is_dn), site)];
+        yt2 = yp[IDX2(Nin5, (ID2 + ivc + NVCD * is_dn), site)];
+        yt3 = yp[IDX2(Nin5, (ID3 + ivc + NVCD * is_dn), site)];
+        yt4 = yp[IDX2(Nin5, (ID4 + ivc + NVCD * is_dn), site)];
+        real_t xd1 = C2 * wt1 + adn * yt3, xd2 = C2 * wt2 + adn * yt4;
+        real_t xd3 = C2 * wt3 + adn * yt1, xd4 = C2 * wt4 + adn * yt2;
+        real_t Fdn = 0.5 * alpha;
+        if (is == 0) Fdn = -0.5 * mq;
+        vt1 += Fdn * (xd1 - xd3); vt2 += Fdn * (xd2 - xd4);
+        vt3 += Fdn * (xd3 - xd1); vt4 += Fdn * (xd4 - xd2);
+        vp[IDX2(Nin5, (ID1 + ivc + NVCD * is), site)] = vt1;
+        vp[IDX2(Nin5, (ID2 + ivc + NVCD * is), site)] = vt2;
+        vp[IDX2(Nin5, (ID3 + ivc + NVCD * is), site)] = vt3;
+        vp[IDX2(Nin5, (ID4 + ivc + NVCD * is), site)] = vt4;
+      }
+    }
+  }
+}
+
+// --- hopb, BF16-STORAGE twin of mult_dw5din_hopb_mrhs_dev (bf16-resident).
+// The operand pointers (vp/wp -> v1/v2) are bf16_acc proxies, so the SAME shared
+// arithmetic includes (flag-inc + hopb_dirac-inc) compile unchanged.  Gauge (up)
+// stays real_t* (FP32).  Stores go through the proxy ref (demote to bf16).
+__global__ void mult_dw5din_hopb_mrhs_bf16_dev(
+    __nv_bfloat16* const* __restrict__ vp_arr, real_t* __restrict__ up,
+    __nv_bfloat16* const* __restrict__ wp_arr, int nrhs, int Ns,
+    int bc_x, int bc_y, int bc_z, int bc_t,
+    int Nx, int Ny, int Nz, int Nt,
+    int do_comm_x, int do_comm_y, int do_comm_z, int do_comm_t,
+    int flag, int Nst_pad)
+{
+  const int Nin5 = NVCD * Ns;
+  const int Nxy  = Nx   * Ny;
+  const int Nxyz = Nxy * Nz;
+  const int Nst  = Nx * Ny * Nz * Nt;
+  const int idx  = blockIdx.x * blockDim.x + threadIdx.x;
+  real_t* u_up = up;
+  real_t* u_dn = up;
+
+  if (idx < Nst_pad * Ns) {
+
+    int idx2_wp = idx / NWP;
+    int idx_in  = idx % NWP;
+    int is      = idx2_wp % Ns;
+    int idx_out = idx2_wp / Ns;
+    int site    = idx_in + NWP * idx_out;
+
+    int ix   = site % Nx;
+    int iyzt = site / Nx;
+    int ixy  = site % Nxy;
+    int iy   = iyzt % Ny;
+    int izt  = site / Nxy;
+    int iz   = izt  % Nz;
+    int it   = izt  / Nz;
+    int ixyz = site % Nxyz;
+    int idir;
+
+    for (int r = 0; r < nrhs; ++r) {
+
+      real_t u_0, u_1, u_2, u_3, u_4, u_5;
+      real_t u_6, u_7, u_8, u_9, u10, u11;
+      real_t u12, u13, u14, u15, u16, u17;
+      real_t vt1_0, vt1_1, vt1_2, vt1_3, vt1_4, vt1_5;
+      real_t vt2_0, vt2_1, vt2_2, vt2_3, vt2_4, vt2_5;
+      real_t wt1r, wt1i, wt2r, wt2i;
+
+      real_t v2_01, v2_11, v2_21, v2_31, v2_41, v2_51;
+      real_t v2_02, v2_12, v2_22, v2_32, v2_42, v2_52;
+      real_t v2_03, v2_13, v2_23, v2_33, v2_43, v2_53;
+      real_t v2_04, v2_14, v2_24, v2_34, v2_44, v2_54;
+
+      bf16_acc vp{vp_arr[r]};
+      bf16_acc wp{wp_arr[r]};
+
+      #include "inc/mult_Domainwall_cuda_flag-inc.h"
+
+      bf16_acc v1 = wp;
+      bf16_acc v2 = vp;
+
+      #include "inc/mult_Domainwall_cuda_hopb_dirac-inc.h"
+
+      v2[IDX2_SP_5D_R(0,0,is,Ns,site)] = v2_01;
+      v2[IDX2_SP_5D_I(0,0,is,Ns,site)] = v2_11;
+      v2[IDX2_SP_5D_R(1,0,is,Ns,site)] = v2_21;
+      v2[IDX2_SP_5D_I(1,0,is,Ns,site)] = v2_31;
+      v2[IDX2_SP_5D_R(2,0,is,Ns,site)] = v2_41;
+      v2[IDX2_SP_5D_I(2,0,is,Ns,site)] = v2_51;
+
+      v2[IDX2_SP_5D_R(0,1,is,Ns,site)] = v2_02;
+      v2[IDX2_SP_5D_I(0,1,is,Ns,site)] = v2_12;
+      v2[IDX2_SP_5D_R(1,1,is,Ns,site)] = v2_22;
+      v2[IDX2_SP_5D_I(1,1,is,Ns,site)] = v2_32;
+      v2[IDX2_SP_5D_R(2,1,is,Ns,site)] = v2_42;
+      v2[IDX2_SP_5D_I(2,1,is,Ns,site)] = v2_52;
+
+      v2[IDX2_SP_5D_R(0,2,is,Ns,site)] = v2_03;
+      v2[IDX2_SP_5D_I(0,2,is,Ns,site)] = v2_13;
+      v2[IDX2_SP_5D_R(1,2,is,Ns,site)] = v2_23;
+      v2[IDX2_SP_5D_I(1,2,is,Ns,site)] = v2_33;
+      v2[IDX2_SP_5D_R(2,2,is,Ns,site)] = v2_43;
+      v2[IDX2_SP_5D_I(2,2,is,Ns,site)] = v2_53;
+
+      v2[IDX2_SP_5D_R(0,3,is,Ns,site)] = v2_04;
+      v2[IDX2_SP_5D_I(0,3,is,Ns,site)] = v2_14;
+      v2[IDX2_SP_5D_R(1,3,is,Ns,site)] = v2_24;
+      v2[IDX2_SP_5D_I(1,3,is,Ns,site)] = v2_34;
+      v2[IDX2_SP_5D_R(2,3,is,Ns,site)] = v2_44;
+      v2[IDX2_SP_5D_I(2,3,is,Ns,site)] = v2_54;
+    }
+  }
+}
+
 // scratch for the 2-stage LU solves (one Nin5*Nst_pad field per rhs)
 static real_t* g_dw_lu_buf = nullptr;
 static long    g_dw_lu_cap = 0;
@@ -1129,10 +1412,13 @@ void finePrec_mrhs(real_t* const* v_host, real_t* const* w_host, int nrhs, int N
 // ---- BF16-storage scratch + convert kernels (Step-1 A/B harness) -----------
 // Mirrors lu_scratch: one cached device bf16 buffer + per-rhs pointer array per
 // role (0=w, 1=v, 2=gm5).
-static __nv_bfloat16*  g_bf_buf[3]  = { nullptr, nullptr, nullptr };
-static long            g_bf_cap[3]  = { 0, 0, 0 };
-static __nv_bfloat16** g_bf_ptrs[3] = { nullptr, nullptr, nullptr };
-static int             g_bf_pcap[3] = { 0, 0, 0 };
+// slots 0/1/2 = the Step-1 convert-harness (w/v/gm5); slots 3..7 = the Step-2
+// bf16-resident chain buffers (W, SA, SB, SG, YP/T2).
+#define BF16_NSLOT 8
+static __nv_bfloat16*  g_bf_buf[BF16_NSLOT]  = { nullptr };
+static long            g_bf_cap[BF16_NSLOT]  = { 0 };
+static __nv_bfloat16** g_bf_ptrs[BF16_NSLOT] = { nullptr };
+static int             g_bf_pcap[BF16_NSLOT] = { 0 };
 static __nv_bfloat16** bf16_scratch(int slot, int nrhs, long per)
 {
   long need = (long)nrhs * per;
@@ -1455,6 +1741,101 @@ void fineDdag_mrhs(real_t* const* v_host, real_t* const* w_host, real_t* u_field
   afield_dd_kernel_sync();
   fine_time_end(1);
   fp16_probe("fineDdag.out", v_host[0], Nin5, Nst_pad);
+}
+
+//====================================================================
+// Step 2: BF16-RESIDENT fine-A block apply.
+//   out = A in = C_PV^{-dag} D_PV^{dag} C^{-1} D_mq in
+// with EVERY operand vector resident in bf16 across the whole chain.  Only two
+// FP32<->bf16 converts happen, at the boundary (in->W, OUT->out); all the
+// intermediates (SA, SB, SG, YP/T2) stay bf16 between kernels -> this is the
+// actual ~2x bandwidth win (Step 1's per-kernel convert-in/out ADDED traffic).
+// Gauge stays FP32.  gm5(SB) comes from the Cinv fold (SG), so no gm5 kernel.
+//   _mq = physical-mass operator (D_mq + C^{-1});  _pv = Pauli-Villars (Ddag + C^{-dag}).
+//   slot map: 3=W(=OUT) 4=SA 5=SB 6=SG 7=YP(=T2).  Assumes Ns == Ns_pv (DWF PV).
+//====================================================================
+void fineA_block_bf16(
+    real_t* const* out_host, real_t* const* in_host, int s,
+    real_t* u_mq, real_t mq, real_t M0, int Ns, real_t alpha,
+    real_t* e_mq, real_t* f_mq, real_t* dpinv_mq, real_t* dm_mq,
+    real_t* u_pv, real_t mq_pv, real_t M0_pv, int Ns_pv, real_t alpha_pv,
+    real_t* e_pv, real_t* f_pv, real_t* dpinv_pv, real_t* dm_pv,
+    int* Nsize, int* bc, int* do_comm)
+{
+  int Nst     = Nsize[0]*Nsize[1]*Nsize[2]*Nsize[3];
+  int Nst_pad = ceil_nwp(Nst);
+  int Nin5    = NVCD * Ns;
+  long per    = (long)Nin5 * Nst_pad;
+
+  __nv_bfloat16** W   = bf16_scratch(3, s, per);
+  __nv_bfloat16** SA  = bf16_scratch(4, s, per);
+  __nv_bfloat16** SB  = bf16_scratch(5, s, per);
+  __nv_bfloat16** SG  = bf16_scratch(6, s, per);
+  __nv_bfloat16** YP  = bf16_scratch(7, s, per);
+  __nv_bfloat16** OUT = W;                         // W is free after 5dir reads it
+
+  real_t* umq_dev = (real_t*)dev_ptr(u_mq);
+  real_t* upv_dev = (real_t*)dev_ptr(u_pv);
+  real_t* e_mq_d  = (real_t*)dev_ptr(e_mq);
+  real_t* f_mq_d  = (real_t*)dev_ptr(f_mq);
+  real_t* dp_mq_d = (real_t*)dev_ptr(dpinv_mq);
+  real_t* dm_mq_d = (real_t*)dev_ptr(dm_mq);
+  real_t* e_pv_d  = (real_t*)dev_ptr(e_pv);
+  real_t* f_pv_d  = (real_t*)dev_ptr(f_pv);
+  real_t* dp_pv_d = (real_t*)dev_ptr(dpinv_pv);
+  real_t* dm_pv_d = (real_t*)dev_ptr(dm_pv);
+
+  const int bs = 256;
+  int cg = (int)((per + bs - 1) / bs);
+  for (int r = 0; r < s; ++r)                       // in -> W (bf16)
+    k_field_f2bf16<<<cg, bs>>>(g_bf_buf[3] + (long)r * per, (const real_t*)dev_ptr(in_host[r]), per);
+
+  int blockSize = VECTOR_LENGTH;
+  int gridNVC = (Nst_pad * NVC + blockSize - 1) / blockSize;
+  int gridH   = (Nst_pad * Ns  + blockSize - 1) / blockSize;
+
+  fine_time_begin();
+  // ---- D_mq: SA = 5dir(W) [+ YP aux] ; SA += U-hopb(YP) ----
+  mult_dw5din_5dir_mrhs_bf16_dev<<<gridNVC, blockSize>>>(SA, YP, W, s, mq, M0, Ns, alpha, Nst_pad);
+  mult_dw5din_hopb_mrhs_bf16_dev<<<gridH, blockSize>>>(
+      SA, umq_dev, YP, s, Ns, bc[0], bc[1], bc[2], bc[3],
+      Nsize[0], Nsize[1], Nsize[2], Nsize[3],
+      do_comm[0], do_comm[1], do_comm[2], do_comm[3], 1, Nst_pad);
+  fine_time_end(0);
+
+  fine_time_begin();
+  // ---- C^{-1}(mq): SB = Cinv(SA), SG = gm5(SB) (fold) ----
+  switch (Ns) {
+#define CINV_BF16_CASE(N) case N: mult_dw5din_Cinv_mrhs_bf16_dev<N><<<gridNVC, blockSize>>>(SB, SA, SG, s, Nin5, e_mq_d, f_mq_d, dp_mq_d, dm_mq_d, Nst_pad); break
+    FUSED_NS_LIST(CINV_BF16_CASE);
+#undef CINV_BF16_CASE
+    default: printf("fineA_block_bf16: Ns=%d not in FUSED_NS_LIST\n", Ns); exit(1);
+  }
+  fine_time_end(2);
+
+  fine_time_begin();
+  // ---- Ddag(PV): T2(=YP) = U-hopb(SG) ; SA = 5dirdag(SB, T2) ----
+  mult_dw5din_hopb_mrhs_bf16_dev<<<gridH, blockSize>>>(
+      YP, upv_dev, SG, s, Ns_pv, bc[0], bc[1], bc[2], bc[3],
+      Nsize[0], Nsize[1], Nsize[2], Nsize[3],
+      do_comm[0], do_comm[1], do_comm[2], do_comm[3], 0, Nst_pad);
+  mult_dw5din_5dirdag_mrhs_bf16_dev<<<gridNVC, blockSize>>>(
+      SA, YP, SB, s, mq_pv, M0_pv, Ns_pv, alpha_pv, Nst_pad);
+  fine_time_end(1);
+
+  fine_time_begin();
+  // ---- C^{-dag}(PV): OUT = Cdaginv(SA) ----
+  switch (Ns_pv) {
+#define CDAGINV_BF16_CASE(N) case N: mult_dw5din_Cdaginv_mrhs_bf16_dev<N><<<gridNVC, blockSize>>>(OUT, SA, s, Nin5, e_pv_d, f_pv_d, dp_pv_d, dm_pv_d, Nst_pad); break
+    FUSED_NS_LIST(CDAGINV_BF16_CASE);
+#undef CDAGINV_BF16_CASE
+    default: printf("fineA_block_bf16: Ns_pv=%d not in FUSED_NS_LIST\n", Ns_pv); exit(1);
+  }
+  fine_time_end(3);
+
+  for (int r = 0; r < s; ++r)                       // OUT -> out (fp32)
+    k_field_bf162f<<<cg, bs>>>((real_t*)dev_ptr(out_host[r]), g_bf_buf[3] + (long)r * per, per);
+  afield_dd_kernel_sync();
 }
 
 //====================================================================

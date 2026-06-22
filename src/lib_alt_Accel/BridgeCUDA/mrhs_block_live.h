@@ -96,6 +96,17 @@ void finePrecdag_mrhs(float* const* v_host, float* const* w_host, int nrhs, int 
 void finePrecdag_mrhs_bf16(float* const* v_host, float* const* w_host, int nrhs, int Ns,
                            float* e, float* f, float* dpinv, float* dm, int* Nsize);
 
+// Step 2: BF16-RESIDENT whole fine-A block apply.  out = A in with every operand
+// vector kept in bf16 across the D->C^-1->Ddag->C^-dag chain (only 2 boundary
+// converts).  _mq = physical-mass operator, _pv = Pauli-Villars operator.
+void fineA_block_bf16(
+    float* const* out, float* const* in, int s,
+    float* u_mq, float mq, float M0, int Ns, float alpha,
+    float* e_mq, float* f_mq, float* dpinv_mq, float* dm_mq,
+    float* u_pv, float mq_pv, float M0_pv, int Ns_pv, float alpha_pv,
+    float* e_pv, float* f_pv, float* dpinv_pv, float* dm_pv,
+    int* Nsize, int* bc, int* do_comm);
+
 // v[r] = Ddag w[r] = 5dirdag( w, hopb( gm5 w ) ): batched fine Ddag, on-device.
 // gm5_host (optional): precomputed gamma5*w; if given, skips the internal gm5 kernel.
 void fineDdag_mrhs(float* const* v_host, float* const* w_host, float* u_field_host,

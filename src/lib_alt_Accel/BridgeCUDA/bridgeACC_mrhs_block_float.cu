@@ -161,6 +161,17 @@ void mrhs_fwd_fineDdag(real_t* const* v, real_t* const* w, real_t* u_field_host,
                        int* Nsize, int* bc, int* do_comm, real_t* const* gm5)
 { fineDdag_mrhs(v, w, u_field_host, nrhs, mq, M0, Ns, alpha, Nsize, bc, do_comm, gm5); }
 
+void mrhs_fwd_fineA_block_bf16(
+    real_t* const* out, real_t* const* in, int s,
+    real_t* u_mq, real_t mq, real_t M0, int Ns, real_t alpha,
+    real_t* e_mq, real_t* f_mq, real_t* dpinv_mq, real_t* dm_mq,
+    real_t* u_pv, real_t mq_pv, real_t M0_pv, int Ns_pv, real_t alpha_pv,
+    real_t* e_pv, real_t* f_pv, real_t* dpinv_pv, real_t* dm_pv,
+    int* Nsize, int* bc, int* do_comm)
+{ fineA_block_bf16(out, in, s, u_mq, mq, M0, Ns, alpha, e_mq, f_mq, dpinv_mq, dm_mq,
+                   u_pv, mq_pv, M0_pv, Ns_pv, alpha_pv, e_pv, f_pv, dpinv_pv, dm_pv,
+                   Nsize, bc, do_comm); }
+
 // device-memory helpers (dev_ptr is in this namespace)
 float* mrhs_fwd_alloc(long n)
 { float* p = nullptr; CHECK(cudaMalloc((void**)&p, sizeof(float)*n)); return p; }
@@ -268,6 +279,18 @@ void fineDdag_mrhs(float* const* v_host, float* const* w_host, float* u_field_ho
                    int* Nsize, int* bc, int* do_comm, float* const* gm5_host)
 { BridgeACC::mrhs_fwd_fineDdag(v_host, w_host, u_field_host, nrhs, mq, M0, Ns, alpha,
                                Nsize, bc, do_comm, gm5_host); }
+
+void fineA_block_bf16(
+    float* const* out, float* const* in, int s,
+    float* u_mq, float mq, float M0, int Ns, float alpha,
+    float* e_mq, float* f_mq, float* dpinv_mq, float* dm_mq,
+    float* u_pv, float mq_pv, float M0_pv, int Ns_pv, float alpha_pv,
+    float* e_pv, float* f_pv, float* dpinv_pv, float* dm_pv,
+    int* Nsize, int* bc, int* do_comm)
+{ BridgeACC::mrhs_fwd_fineA_block_bf16(out, in, s, u_mq, mq, M0, Ns, alpha,
+                                       e_mq, f_mq, dpinv_mq, dm_mq,
+                                       u_pv, mq_pv, M0_pv, Ns_pv, alpha_pv,
+                                       e_pv, f_pv, dpinv_pv, dm_pv, Nsize, bc, do_comm); }
 
 float* dev_alloc(long nfloat) { return BridgeACC::mrhs_fwd_alloc(nfloat); }
 void   dev_free(float* p) { BridgeACC::mrhs_fwd_free(p); }
