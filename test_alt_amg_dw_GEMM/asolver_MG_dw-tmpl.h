@@ -122,6 +122,12 @@ void ASolver_MG_dw<AFIELD>::set_parameters_level1(const Parameters& params)
   // for smoother
   m_smoother_niter     = params.get_int("smoother_number_of_iteration");
   m_smoother_stop_cond = params.get_double("smoother_convergence_criterion_squared");
+  m_smoother_type      = "gmres";
+  if (params.is_set("smoother_type")) {
+    std::string s = params.get_string("smoother_type");
+    m_smoother_type = "";
+    for (char c : s) m_smoother_type += (c >= 'A' && c <= 'Z') ? (c - 'A' + 'a') : c;
+  }
 
   // for coarse solver
   //   I assume that the above parameters harmless for the coarse grid solver
@@ -1457,6 +1463,113 @@ void ASolver_MG_dw<AFIELD>::apply_A_block(std::vector<AFIELD_f>& out,
 
 
 //====================================================================
+// POLY_SMOOTHER prototype: fit the frozen power-basis MR polynomial coefficients
+// ONCE.  We want p(A) ~= A^{-1} (degree d-1) so that x = sum_{k=0}^{d-1} c_k A^k b.
+// Minimise ||b0 - A x|| = ||b0 - sum_k c_k K_k|| with K_k = A^{k+1} b0; the real
+// normal equations G c = g (G[j][k]=<K_j,K_k>, g[k]=<b0,K_k>) are a tiny d x d SPD
+// solve on the host (d = m_smoother_niter ~ 4).  The coefficients are fit to the
+// ACTUAL operator action -> correct for the non-normal A (no spectrum/eigenvalues).
+template<typename AFIELD>
+void ASolver_MG_dw<AFIELD>::build_poly_coeffs(const AFIELD_f& bprobe)
+{
+  using AF = AFIELD_f;
+  const int Nin  = m_afopr_A_F->field_nin();
+  const int Nvol = m_afopr_A_F->field_nvol();
+  const int Nex  = m_afopr_A_F->field_nex();
+  const int d    = m_smoother_niter;
+
+  AF b0;  b0.reset(Nin, Nvol, Nex);  copy(b0, bprobe);
+  AF cur; cur.reset(Nin, Nvol, Nex);  copy(cur, b0);
+  std::vector<AF> K(d);
+  for (int k = 0; k < d; ++k) {
+    K[k].reset(Nin, Nvol, Nex);
+    m_afopr_A_F->mult(K[k], cur);                 // K[k] = A cur = A^{k+1} b0 (single col)
+    copy(cur, K[k]);
+  }
+
+  // real normal equations (dot() returns the real Euclidean inner product)
+  std::vector<double> G(d * d), g(d);
+  for (int j = 0; j < d; ++j) {
+    g[j] = (double)dot(K[j], b0);
+    for (int k = j; k < d; ++k) {
+      double v = (double)dot(K[j], K[k]);
+      G[j * d + k] = v;  G[k * d + j] = v;
+    }
+  }
+  // host Cholesky solve  G c = g  (d x d SPD)
+  std::vector<double> L(d * d, 0.0), y(d), c(d);
+  for (int j = 0; j < d; ++j) {
+    double s = G[j * d + j];
+    for (int p = 0; p < j; ++p) s -= L[j * d + p] * L[j * d + p];
+    if (s < 1e-300) s = 1e-300;
+    L[j * d + j] = std::sqrt(s);
+    for (int i = j + 1; i < d; ++i) {
+      double t = G[i * d + j];
+      for (int p = 0; p < j; ++p) t -= L[i * d + p] * L[j * d + p];
+      L[i * d + j] = t / L[j * d + j];
+    }
+  }
+  for (int i = 0; i < d; ++i) { double t = g[i]; for (int p = 0; p < i; ++p) t -= L[i*d+p]*y[p]; y[i] = t / L[i*d+i]; }
+  for (int i = d-1; i >= 0; --i) { double t = y[i]; for (int p = i+1; p < d; ++p) t -= L[p*d+i]*c[p]; c[i] = t / L[i*d+i]; }
+
+  m_poly_c.resize(d);
+  for (int k = 0; k < d; ++k) m_poly_c[k] = (float)c[k];
+  m_poly_deg   = d;
+  m_poly_ready = true;
+  vout.general("%s: POLY_SMOOTHER coeffs fit (deg=%d):", class_name.c_str(), d);
+  for (int k = 0; k < d; ++k) vout.general(" c[%d]=%.4e", k, m_poly_c[k]);
+  vout.general("\n");
+}
+
+
+//====================================================================
+// POLY_SMOOTHER prototype: apply x = p(A) b = sum_{k=0}^{d-1} c_k A^k b to all s
+// columns via Horner.  EVERY op is on-device: apply_A_block (MRHS Domainwall chain)
+// for the matvecs, mrhs_live::block_copy/scal/axpy (the batched BLAS-1 kernels) for
+// the vector updates.  Coefficients are real scalar kernel args; nothing round-
+// trips to the host.  Scratch = acc,tmp (s each); no Krylov basis.
+template<typename AFIELD>
+void ASolver_MG_dw<AFIELD>::apply_poly_smoother(std::vector<AFIELD_f>& x,
+                                                const std::vector<AFIELD_f>& b)
+{
+  using AF     = AFIELD_f;
+  using real_f = typename AFIELD_f::real_t;
+  const int s    = (int)b.size();
+  const int Nin  = m_afopr_A_F->field_nin();
+  const int Nvol = m_afopr_A_F->field_nvol();
+  const int Nex  = m_afopr_A_F->field_nex();
+  const int d    = m_poly_deg;
+
+  if (m_poly_s != s) {                            // Horner scratch: alloc once per s
+    m_poly_acc.resize(s); m_poly_tmp.resize(s);
+    for (int c = 0; c < s; ++c) {
+      m_poly_acc[c].reset(Nin, Nvol, Nex); m_poly_acc[c].set(real_f(0.0));
+      m_poly_tmp[c].reset(Nin, Nvol, Nex); m_poly_tmp[c].set(real_f(0.0));
+    }
+    m_poly_s = s;
+  }
+  const long nflt = (long)Nin * const_cast<AF&>(b[0]).nvol_pad() * Nex;
+  std::vector<float*> bp(s), ap(s), tp(s), xp(s);
+  for (int c = 0; c < s; ++c) {
+    bp[c] = const_cast<AF&>(b[c]).ptr(0);
+    ap[c] = m_poly_acc[c].ptr(0);
+    tp[c] = m_poly_tmp[c].ptr(0);
+    xp[c] = x[c].ptr(0);
+  }
+
+  // Horner:  acc = c[d-1] b;  acc = A acc + c[k] b  for k = d-2 .. 0
+  mrhs_live::block_copy(ap.data(), bp.data(), s, nflt);             // acc = b
+  mrhs_live::block_scal(ap.data(), m_poly_c[d - 1], s, nflt);       // acc = c[d-1] b
+  for (int k = d - 2; k >= 0; --k) {
+    apply_A_block(m_poly_tmp, m_poly_acc);                          // tmp = A acc (GPU)
+    mrhs_live::block_copy(ap.data(), tp.data(), s, nflt);           // acc = A acc
+    mrhs_live::block_axpy(ap.data(), bp.data(), m_poly_c[k], s, nflt); // acc += c[k] b
+  }
+  mrhs_live::block_copy(xp.data(), ap.data(), s, nflt);             // x = acc
+}
+
+
+//====================================================================
 // Batched fine smoother: m_smoother_niter block-GMRES-on-A steps (batched MRHS
 // A, no preconditioner), zero start, all s columns at once.  x <- S(b).
 template<typename AFIELD>
@@ -1464,6 +1577,18 @@ void ASolver_MG_dw<AFIELD>::block_smooth(std::vector<AFIELD_f>& x,
                                          const std::vector<AFIELD_f>& b)
 {
   using AF = AFIELD_f;
+  // POLY_SMOOTHER prototype (env POLY_SMOOTHER): frozen power-basis MR polynomial
+  // replaces the GMRES smoother -> drops its Krylov basis.  A/B knob.
+  bool poly = (m_smoother_type == "poly" || std::getenv("POLY_SMOOTHER") != nullptr);
+  if (poly) {
+    if (!m_poly_ready) {
+      build_poly_coeffs(b[0]);
+      vout.general("%s: POLY_SMOOTHER on -- GMRES smoother Krylov basis dropped\n",
+                   class_name.c_str());
+    }
+    apply_poly_smoother(x, b);
+    return;
+  }
   const int Nin  = m_afopr_A_F->field_nin();
   const int Nvol = m_afopr_A_F->field_nvol();
   const int Nex  = m_afopr_A_F->field_nex();
@@ -1724,26 +1849,31 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
                class_name.c_str(), use_double_refine ? "double (m_afopr_fineD)"
                                                       : "float (m_afopr_A_F)");
 
+  // MEMORY: only B,X (block solve), psi (accumulated output) and rphys (carried
+  // across refine iterations) must be size-s.  bprime/delta/Dx were size-s but are
+  // each used ONLY within a single c-iteration (never read across columns) -> one
+  // shared double scratch (dtmp).  The float-path converts need two distinct float
+  // scratch fields (ftmp1 = mult input, ftmp2 = its output); rphys_f reuses ftmp1.
+  // Collapsing these 6 s-arrays to 1 double + 2 float fields saves ~3(s-1) double +
+  // ~3(s-1) float fine 5d vectors (~1.6 GB at s=12) that otherwise OOM the card.
   std::vector<AF>     B(s), X(s);
-  std::vector<AFIELD> bprime(s), delta(s), rphys(s), Dx(s);
-  std::vector<AF>     rphys_f(s), psi_f(s), Dx_f(s);   // float scratch (float path)
+  std::vector<AFIELD> rphys(s);
+  AFIELD              dtmp;                 // shared double scratch (bprime/delta/Dx)
+  AF                  ftmp1, ftmp2;         // shared float scratch (float refine path)
   std::vector<double> eta2(s);
+  dtmp.reset(Nin, Nvol, Nex);
+  if (!use_double_refine) {
+    ftmp1.reset(Nin, Nvol, Nex);
+    ftmp2.reset(Nin, Nvol, Nex);
+  }
   for (int c = 0; c < s; ++c) {
     B[c].reset(Nin, Nvol, Nex);
     X[c].reset(Nin, Nvol, Nex);
-    bprime[c].reset(Nin, Nvol, Nex);
-    delta[c].reset(Nin, Nvol, Nex);
     rphys[c].reset(Nin, Nvol, Nex);
-    Dx[c].reset(Nin, Nvol, Nex);
     psi[c].reset(Nin, Nvol, Nex);
     psi[c].set(real_d(0.0));
     copy(rphys[c], eta[c]);                 // psi = 0 -> r_phys = eta
     eta2[c] = eta[c].norm2();
-    if (!use_double_refine) {
-      rphys_f[c].reset(Nin, Nvol, Nex);
-      psi_f[c].reset(Nin, Nvol, Nex);
-      Dx_f[c].reset(Nin, Nvol, Nex);
-    }
   }
   nref.assign(s, 0);
   phys_res.assign(s, 1.0);
@@ -1756,11 +1886,11 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
   for (int it = 0; it < max_refine; ++it) {
     for (int c = 0; c < s; ++c) {
       if (use_double_refine) {
-        m_afopr_fineD->mult(bprime[c], rphys[c], "leftprec"); // b' = P_L r_phys (double)
-        copy(B[c], bprime[c]);                                // float <- double
+        m_afopr_fineD->mult(dtmp, rphys[c], "leftprec");      // b' = P_L r_phys (double)
+        copy(B[c], dtmp);                                     // float <- double
       } else {
-        copy(rphys_f[c], rphys[c]);                           // float <- double
-        m_afopr_A_F->mult(B[c], rphys_f[c], "leftprec");      // b' = P_L r_phys (float)
+        copy(ftmp1, rphys[c]);                                // float <- double
+        m_afopr_A_F->mult(B[c], ftmp1, "leftprec");           // b' = P_L r_phys (float)
       }
     }
     std::vector<double> relres; int vcy = 0;
@@ -1769,17 +1899,17 @@ void ASolver_MG_dw<AFIELD>::solve_block_propagator(
 
     double worst2 = 0.0;
     for (int c = 0; c < s; ++c) {
-      copy(delta[c], X[c]);                                  // double <- float
-      axpy(psi[c], real_d(1.0), delta[c]);                   // psi += delta
+      copy(dtmp, X[c]);                                     // double <- float (delta)
+      axpy(psi[c], real_d(1.0), dtmp);                      // psi += delta
       if (use_double_refine) {
-        m_afopr_fineD->mult(Dx[c], psi[c], "physicalD");      // D psi (double)
+        m_afopr_fineD->mult(dtmp, psi[c], "physicalD");      // D psi (double)
       } else {
-        copy(psi_f[c], psi[c]);                               // float <- double
-        m_afopr_A_F->mult(Dx_f[c], psi_f[c], "physicalD");    // D psi (float)
-        copy(Dx[c], Dx_f[c]);                                 // double <- float
+        copy(ftmp1, psi[c]);                                 // float <- double
+        m_afopr_A_F->mult(ftmp2, ftmp1, "physicalD");        // D psi (float)
+        copy(dtmp, ftmp2);                                   // double <- float
       }
       copy(rphys[c], eta[c]);
-      axpy(rphys[c], real_d(-1.0), Dx[c]);                   // r_phys = eta - D psi
+      axpy(rphys[c], real_d(-1.0), dtmp);                   // r_phys = eta - D psi
       res2[c] = rphys[c].norm2() / eta2[c];
       ++nref[c];
       // NaN-safe: nan>worst2 is false, so guard against a NaN slipping through.

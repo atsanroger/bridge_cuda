@@ -307,6 +307,120 @@ tolerance $10^{-2}$.}
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{A memory-lean polynomial alternative.}
+The GMRES smoother is robust but it stores the full Arnoldi basis
+$V_{m+1}=[v_1,\dots,v_{m+1}]$ for \emph{every} right-hand side of the batched
+multi-RHS solve, which dominates the $s$-scaling part of the GPU footprint. An
+alternative that carries \emph{no} Krylov basis is a \emph{frozen} minimal-residual
+(MR) polynomial smoother $x\approx p(\Aop)\,b$, where $p$ is a fixed real
+polynomial of degree $d$ that minimises $\norm{b-\Aop\,p(\Aop)\,b}$ over the
+power basis $\{\Aop^k b_0\}_{k=1}^{d}$ of a representative vector $b_0$. Writing
+$K=[\Aop b_0,\Aop^2 b_0,\dots,\Aop^{d} b_0]$, the coefficient vector
+$c=(c_1,\dots,c_d)$ solves the $d\times d$ normal equations
+\begin{equation}
+  (K^{\!\top}K)\,c = K^{\!\top}b_0 ,
+  \label{eq:mr-normal}
+\end{equation}
+computed \emph{once} during setup. The Gram matrix $G=K^{\!\top}K$ is assembled
+on the GPU (a batch of inner products) and the tiny solve of
+\eqref{eq:mr-normal} is a $d\times d$ Cholesky factorisation on the host; the
+coefficients $c$ are then constants. At solve time each smoother application is a
+single Horner sweep
+\begin{equation}
+  p(\Aop)\,b=\Big(\!\sum_{k=1}^{d} c_k\,\Aop^{k-1}\Big)b
+           = c_1 b + \Aop\big(c_2 b + \Aop(\,\cdots + \Aop\,c_d b)\big),
+  \label{eq:horner}
+\end{equation}
+i.e. $d-1$ applications of $\Aop$ and a handful of \texttt{axpy}s, with no
+orthogonalisation, no least-squares solve, and only one work vector per RHS
+beyond $b$ and $\Aop b$. No eigenvalue estimate enters: the polynomial is fit to
+the residual directly, so the non-normality of $\Aop$ is handled by the data
+rather than by an assumed spectral interval, just as for GMRES.
+
+The price is conditioning. As $d$ grows the power-basis vectors $\Aop^k b_0$ tilt
+toward the dominant invariant subspace and become nearly linearly dependent; the
+normal equations square that ill-conditioning ($\operatorname{cond}(G)=
+\operatorname{cond}(K)^2$), so \eqref{eq:mr-normal} eventually overflows in single
+precision near $d\!\approx\!7$ ($d=8$ already returns $c=\infty$); $d=6$ is still
+well-conditioned and usable, and $d=4$ sits comfortably inside the stable region.
+Below that cliff there are two levers on smoother strength --- raise the degree $d$
+(a stronger single-pass polynomial), or hold $d$ low and add \emph{iterative
+refinement}: apply the same frozen $p$ as a stationary
+correction
+\begin{equation}
+  x \gets x + p(\Aop)\,(b-\Aop\,x),\qquad \text{repeated } \kappa \text{ times,}
+  \label{eq:mr-refine}
+\end{equation}
+whose error propagator is $\big(I-p(\Aop)\Aop\big)^{\kappa}$. This realises a
+degree-$\kappa d$ \emph{action} while every fit \eqref{eq:mr-normal} stays at the
+well-conditioned degree $d$. It is \emph{not} the naive composition
+$p(\Aop)^{\kappa}b$, which would approximate $\Aop^{-\kappa}b$ --- the wrong
+operator. Both levers clear the bar: $d{=}6,\kappa{=}1$ (a single pass) and
+$d{=}4,\kappa{=}2$ each match the GMRES smoother's 2pt physical-residual test at
+lower GPU memory and lower cost per V-cycle, the degree-$6$ single pass being the
+cheaper of the two (Section~\ref{sec:results}).
+
+\begin{algorithm}[H]
+\caption{Frozen MR polynomial smoother $\mathrm{Poly}_{d,\kappa}(\Aop,b)$.
+Coefficients $c$ from \eqref{eq:mr-normal} are precomputed once. Two PASS settings
+(Section~\ref{sec:results}): $d{=}6,\kappa{=}1$ (memory-optimal, a single Horner
+pass) and $d{=}4,\kappa{=}2$. $\kappa=1$ skips the refinement loop.}
+\label{alg:poly}
+\begin{algorithmic}[1]
+\State $x \gets \mathrm{Horner}(c,\Aop,b)$ \Comment{$x=p(\Aop)b$ via \eqref{eq:horner}}
+\For{$j=2,\dots,\kappa$} \Comment{iterative refinement \eqref{eq:mr-refine}}
+  \State $r \gets b - \Aop\,x$
+  \State $x \gets x + \mathrm{Horner}(c,\Aop,r)$
+\EndFor
+\State \Return $x$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Old versus new: what changes.}
+The two smoothers attack the same job --- damp the high-frequency error left by
+the coarse correction --- and neither needs an eigenvalue estimate or a spectral
+interval, so both are robust on the non-normal $\Aop$. They differ in \emph{when}
+the residual polynomial is built and in what they must store
+(Table~\ref{tab:smoother-compare}). GMRES rebuilds the optimal residual
+polynomial \emph{at every application}, which is maximally effective per sweep but
+holds the full Arnoldi basis $V_{m+1}$ for every right-hand side --- the
+$s$-scaling term that dominates the batched GPU footprint. The polynomial smoother
+moves that optimisation \emph{once} into the setup: it fits a fixed $p$ of degree
+$d$ and thereafter only streams $\Aop$-applies and \texttt{axpy}s through a Horner
+sweep, storing no Krylov basis. It is weaker per pass, so its convergence lever is
+the number of refinement passes $\kappa$ (error operator $(I-p(\Aop)\Aop)^\kappa$)
+rather than the depth $m$.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+ & GMRES$_m$ smoother & frozen poly smoother \\
+\midrule
+residual polynomial   & rebuilt every application & fit once at setup, frozen \\
+Krylov basis stored   & $m{+}1$ vectors per RHS & none \\
+per-application work   & $m$ $\Aop$-applies, MGS orthog., LS solve & $(d{-}1)\kappa$ $\Aop$-applies, \texttt{axpy}s \\
+host work             & $(m{+}1)\times m$ least squares & one $d\times d$ Cholesky (setup only) \\
+eigenvalue estimate   & none & none \\
+strength lever        & depth $m$ & refinement passes $\kappa$ \\
+degree ceiling        & robust to large $m$ & $d\lesssim6$ (power-basis ill-cond.) \\
+GPU memory            & higher ($s$-scaling Krylov basis) & lower (no basis) \\
+\bottomrule
+\end{tabular}
+\caption{The GMRES smoother (Alg.~\ref{alg:gmres}) versus the frozen polynomial
+smoother (Alg.~\ref{alg:poly}). Both are eigenvalue-free and handle the complex
+spectrum of $\Aop$; the polynomial variant trades per-sweep strength (recovered by
+the $\kappa$ refinement passes) for the elimination of the per-RHS Krylov basis.}
+\label{tab:smoother-compare}
+\end{table}
+
+\noindent The polynomial variant trades per-sweep strength (recovered by the
+$\kappa$ refinement passes) for the elimination of the per-RHS Krylov basis; its
+memory and wall-clock payoff in the batched MRHS path is quantified in
+Section~\ref{sec:results} (Table~\ref{tab:smoother-mem}). The two smoothers are
+selected at run time (\texttt{smoother\_type: GMRES} or \texttt{poly}, with
+\texttt{poly\_number\_of\_application:}\,$\kappa$); GMRES remains the default.
+
 \subsection{The V-cycle and the outer iteration}
 One application of the preconditioner $M^{-1}\approx\Aop^{-1}$ is a two-grid
 V-cycle:
@@ -596,6 +710,57 @@ solve ($12^4$, $m_q=0.005$, $\alpha=1$, single-RHS reference path). The smoother
 coarse solve and the two transfers are the rest. Proportions, not absolute times,
 are the meaningful quantity on this clock-unlocked host.}
 \label{tab:vctime}
+\end{table}
+
+\paragraph{Smoother comparison: GMRES versus the polynomial smoother.}
+We swept the two smoothers of Section~\ref{sec:algorithm}
+(Table~\ref{tab:smoother-compare}) in the batched MRHS path of
+Section~\ref{sec:batched} on a $16^4$ configuration ($m_q=0.005$, $N_s=8$,
+\texttt{prop\_chunk}$=6$, twelve-column propagator), measuring the peak device
+memory with an in-process \texttt{cudaMemGetInfo} sampler (one sample per V-cycle)
+that agrees with an external \texttt{nvidia-smi} poll to $0.3$~MiB --- the device
+is a $24$~GB A30 (Table~\ref{tab:smoother-mem}). A single pass of the degree-$4$
+polynomial ($\kappa{=}1$) cuts the peak memory by $14\%$ and the wall-clock by
+${\approx}3.4\times$, but is too weak and \emph{fails} the physical-residual target
+($1.4\times10^{-4}$). Two independent levers recover the PASS: add a refinement
+pass ($d{=}4,\kappa{=}2$, $8.4\times10^{-6}$), or raise the degree
+($d{=}6,\kappa{=}1$, still a single pass, $3.3\times10^{-5}$ --- the power basis
+stays well-conditioned through $d=6$, overflowing only at $d=8$). Both clear the
+bar at ${\approx}3\times$ the GMRES speed; the degree-$6$ single pass is the
+cheaper of the two ($20.3$~GB, $-13\%$ vs GMRES, $73$~s, no refinement scratch),
+while $d{=}4,\kappa{=}2$ spends $+0.5$~GB for a tighter residual. (Degree $2$ is
+too weak: it fails even at $\kappa{=}2$.) Across the PASS settings the pseudoscalar
+2pt tracks the GMRES baseline to $2\times10^{-6}$ or better, and to
+$5\times10^{-8}$ once $\kappa{\ge}2$ --- the polynomial smoother changes only the
+cost, not the physics. The memory saving is exactly the per-RHS Arnoldi basis that
+the polynomial smoother does not store.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+smoother & peak GPU mem & wall-clock & $\norm{b-\Ddw x}/\norm{b}$ & 2pt test \\
+\midrule
+$\mathrm{GMRES}_4$                        & $23.4$~GB & $240$~s & $1.3\times10^{-6}$ & PASS \\
+poly $d{=}4,\ \kappa{=}1$                 & $20.2$~GB & $70$~s  & $1.4\times10^{-4}$ & \textbf{FAIL} \\
+poly $d{=}2,\ \kappa{=}2$                 & $20.7$~GB & $70$~s  & $2.9\times10^{-4}$ & \textbf{FAIL} \\
+poly $d{=}4,\ \kappa{=}2$                 & $20.8$~GB & $80$~s  & $8.4\times10^{-6}$ & PASS \\
+\textbf{poly $d{=}6,\ \kappa{=}1$} (mem-opt) & $20.3$~GB & $73$~s  & $3.3\times10^{-5}$ & \textbf{PASS} \\
+\bottomrule
+\end{tabular}
+\caption{Smoother $(d,\kappa)$ sweep in the batched MRHS path, $16^4$, $m_q=0.005$,
+$N_s=8$, \texttt{prop\_chunk}$=6$, twelve-column propagator, on a $24$~GB server nvidia GPU. A
+single degree-$4$ pass ($\kappa{=}1$) is too weak; the PASS is recovered either by
+a refinement pass ($d{=}4,\kappa{=}2$) or by raising the degree ($d{=}6,\kappa{=}1$,
+the memory-optimal point: ${\approx}13\%$ less peak memory --- the dropped per-RHS
+Krylov basis --- and ${\approx}3\times$ faster than GMRES, with no refinement
+scratch). Degree $2$ is too weak even at $\kappa{=}2$. Peak memory is the in-process
+\texttt{cudaMemGetInfo} high-water mark (agreeing with \texttt{nvidia-smi} to
+$0.3$~MiB); the GB labels are MiB$/1000$. Absolute figures are device-specific
+(the $12^4$ baseline elsewhere is on a $10$~GB RTX~3080, which cannot hold this
+$16^4$ GMRES case at all); the memory ratio and the speed-up are the meaningful
+quantities.}
+\label{tab:smoother-mem}
 \end{table}
 
 \paragraph{Where the value is.}

@@ -95,6 +95,7 @@ class ASolver_MG_dw : public ASolver<AFIELD>
   //  static constexpr int m_min_res_iter = 6;
   int m_smoother_niter;
   real_t m_smoother_stop_cond;
+  std::string m_smoother_type;
 
   Parameters m_params_asolver_coarse;  //!< parameters for coarse grid solver
   Parameters m_params_asolver_outer;   //!< parameters for outer solver
@@ -289,6 +290,15 @@ class ASolver_MG_dw : public ASolver<AFIELD>
 
   //! cached block-GMRES smoother (persistent Krylov buffers across V-cycles).
   std::unique_ptr<BlockFGMRES_dw<AFIELD_f> > m_block_smoother;
+
+  //! Polynomial smoother fields
+  void build_poly_coeffs(const AFIELD_f& bprobe);
+  void apply_poly_smoother(std::vector<AFIELD_f>& x, const std::vector<AFIELD_f>& b);
+  bool m_poly_ready = false;
+  int m_poly_deg = 0;
+  std::vector<float> m_poly_c;
+  int m_poly_s = 0;
+  std::vector<AFIELD_f> m_poly_acc, m_poly_tmp;
 
   //! outer inner-solver for solve_block_propagator (batched block-FGMRES on A_F,
   //! prec = batched V-cycle).  Persistent (built once, reused across propagator
